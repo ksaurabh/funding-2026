@@ -81,11 +81,17 @@ survives it.
 
 ### Narrowing and picking rows
 
-A filter bar sits above the table. **Answers** filters by how far each row has
-got — *Not started*, *Partial*, *Complete*, *Has errors* — and every dropdown
-column adds a group of its values, with counts and a `(blank)` bucket. Several
-chips in one group widen the match; chips in different groups narrow it. The
-search box filters on any column's text.
+A collapsible filter bar sits above the table, one column per row. **Answers**
+filters by how far each row has got — *Not started*, *Partial*, *Complete*,
+*Has errors* — and each dropdown column you have put on the bar adds a row of
+its values, with counts and a `(blank)` bucket. Several chips in one row widen
+the match; chips in different rows narrow it. The search box filters on any
+column's text.
+
+You choose which dropdown columns are worth filtering by: **× ** on a row
+takes it off the bar (and stops it narrowing the list), **+ Add filter** puts
+one back. The choice is saved with the list. Collapsed, the bar still names
+what is currently narrowing the list, and remembers being collapsed.
 
 Rows also have **tick boxes**. Tick any set of rows — shift-click to take a
 span, the header box takes everything currently on screen — and the run

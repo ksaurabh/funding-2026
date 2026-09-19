@@ -462,6 +462,7 @@ app.put('/api/lists/:listId/schema', (req, res) => {
         type,
         // Choices are kept even while read-only, so toggling back is lossless.
         values: type === 'enum' ? cleanValues(f?.values) : [],
+        filter: f?.filter !== false,
         custom,
         show: f?.show !== false,
       };

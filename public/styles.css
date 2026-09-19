@@ -198,16 +198,53 @@ tbody tr.selected { background: var(--accent-soft); }
 
 /* ------------------------------------------- editable columns and filters */
 .filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 14px;
-  padding: 8px 16px;
+  padding: 6px 16px 8px;
   border-bottom: 1px solid var(--line);
   background: var(--panel);
 }
-.filter-group { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
-.filter-label { font-size: 12px; color: var(--muted); font-weight: 600; margin-right: 2px; }
+.filters-head { display: flex; align-items: center; gap: 10px; }
+.filters-toggle {
+  border: 0;
+  background: none;
+  padding: 3px 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  min-width: 0;
+}
+.filters-toggle:hover { background: none; color: var(--accent); }
+.filters-toggle.active { color: var(--accent); }
+.filters-toggle span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chevron {
+  width: 0;
+  height: 0;
+  border: 4px solid transparent;
+  border-top-color: currentColor;
+  margin-top: 3px;
+  transition: transform .12s ease;
+  flex: none;
+}
+.filters-toggle.closed .chevron { transform: rotate(-90deg); }
+
+/* one row per column: label on the left, its values wrapping on the right */
+.filter-groups { display: flex; flex-direction: column; gap: 5px; margin-top: 6px; }
+.filter-group { display: grid; grid-template-columns: 150px minmax(0, 1fr); align-items: start; gap: 10px; }
+.filter-group .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.filter-label {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 600;
+  padding-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .filter-group { grid-template-columns: 1fr; gap: 3px; }
+}
 .chip {
   font: inherit;
   font-size: 12px;
@@ -461,3 +498,19 @@ td.tick input, th.tick input { cursor: pointer; margin: 0; display: block; }
 tbody tr.ticked { background: #f2f6fb; }
 tbody tr.ticked:hover { background: #e9f0f9; }
 tbody tr.ticked.selected { background: var(--accent-soft); }
+
+.add-filter { width: auto; font-size: 12px; padding: 2px 6px; color: var(--muted); }
+.filter-label { display: flex; align-items: center; gap: 4px; }
+.filter-label-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drop-filter {
+  border: 0;
+  background: none;
+  padding: 0 3px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--line);
+  cursor: pointer;
+  flex: none;
+}
+.filter-group:hover .drop-filter { color: var(--muted); }
+.drop-filter:hover { background: none; color: var(--err); }

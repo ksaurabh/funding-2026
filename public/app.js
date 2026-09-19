@@ -199,9 +199,9 @@ async function loadInvestors() {
   state.investors = await api(`/api/lists/${state.listId}/investors`);
   state.list = state.investors.list;
   state.schema = state.investors.schema || { fields: {} };
-  // Drop filters for columns that are no longer dropdowns.
+  // A column that is no longer on the filter bar must stop narrowing the list.
   for (const col of Object.keys(state.valueFilters)) {
-    if (!enumColumns().includes(col)) delete state.valueFilters[col];
+    if (!filterColumns().includes(col)) delete state.valueFilters[col];
   }
   renderFilters();
   renderTable();
@@ -217,6 +217,20 @@ const fieldFor = (col) => fields()[col];
 // In the list's own column order, not the object's.
 const columnsWhere = (pred) => (state.investors.columns || []).filter((c) => fields()[c] && pred(fields()[c]));
 const enumColumns = () => columnsWhere((f) => f.editable && f.type === 'enum');
+// Dropdown columns you have chosen to keep on the filter bar.
+const filterColumns = () => columnsWhere((f) => f.editable && f.type === 'enum' && f.filter !== false);
+
+/** Change one column's settings from outside the Columns dialog. */
+async function patchField(column, patch) {
+  const next = {};
+  for (const [name, f] of Object.entries(fields())) next[name] = name === column ? { ...f, ...patch } : f;
+  state.schema = await api(`/api/lists/${state.listId}/schema`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields: next }),
+  });
+  await loadInvestors();
+}
 const editableColumns = () => columnsWhere((f) => f.editable);
 const shownColumns = () => columnsWhere((f) => f.show);
 const cellValue = (row, col) => String(row[col] ?? '').trim();
@@ -269,52 +283,87 @@ function visibleRows() {
   });
 }
 
+function filtersOpen() {
+  try {
+    return localStorage.getItem('filtersCollapsed') !== '1';
+  } catch {
+    return true;
+  }
+}
+
+function setFiltersOpen(open) {
+  try {
+    localStorage.setItem('filtersCollapsed', open ? '0' : '1');
+  } catch {
+    /* private window; the section just reopens next time */
+  }
+  $('#filter-groups').classList.toggle('hidden', !open);
+  $('#filters-toggle').setAttribute('aria-expanded', String(open));
+  $('#filters-toggle').classList.toggle('closed', !open);
+}
+
+$('#filters-toggle').addEventListener('click', () => setFiltersOpen(!filtersOpen()));
+
+/** One row per column: a label, then that column's chips. */
+function filterGroup(label, chips, onRemove) {
+  const head = el('span', { className: 'filter-label' }, [
+    el('span', { className: 'filter-label-text', textContent: label, title: label }),
+  ]);
+  if (onRemove) {
+    const x = el('button', { className: 'drop-filter', textContent: '×', title: `Remove the ${label} filter` });
+    x.addEventListener('click', onRemove);
+    head.append(x);
+  }
+  return el('div', { className: 'filter-group' }, [head, el('div', { className: 'chips' }, chips)]);
+}
+
 function renderFilters() {
   const bar = $('#filters');
-  const cols = enumColumns();
+  const cols = filterColumns();
+  const available = enumColumns().filter((c) => !cols.includes(c));
   const n = state.investors.stepCount;
-  bar.classList.toggle('hidden', !cols.length && !n);
-  if (!cols.length && !n) return;
+  bar.classList.toggle('hidden', !cols.length && !available.length && !n);
+  if (!cols.length && !available.length && !n) return;
 
-  const active = state.statusFilter.size > 0 || Object.values(state.valueFilters).some((v) => v.size);
+  const groups = [];
 
-  // Progress through the playbook, as its own group of chips.
-  const statusGroup = n
-    ? el('div', { className: 'filter-group' }, [
-        el('span', { className: 'filter-label', textContent: 'Answers' }),
-        ...STATUSES.map((st) => {
+  // Progress through the playbook.
+  if (n) {
+    groups.push(
+      filterGroup(
+        'Answers',
+        STATUSES.map((st) => {
           const count = state.investors.rows.filter((r) => st.test(r, n)).length;
           const chip = el('button', {
             className: 'chip' + (state.statusFilter.has(st.key) ? ' on' : ''),
             textContent: `${st.label} ${count}`,
           });
           chip.addEventListener('click', () => {
-            state.statusFilter.has(st.key)
-              ? state.statusFilter.delete(st.key)
-              : state.statusFilter.add(st.key);
+            state.statusFilter.has(st.key) ? state.statusFilter.delete(st.key) : state.statusFilter.add(st.key);
             renderFilters();
             renderTable();
           });
           return chip;
-        }),
-      ])
-    : null;
+        })
+      )
+    );
+  }
 
-  const groups = [
-    statusGroup,
-    ...cols.map((col) => {
-      const counts = new Map();
-      for (const r of state.investors.rows) {
-        const v = cellValue(r, col);
-        counts.set(v, (counts.get(v) || 0) + 1);
-      }
-      const chosen = state.valueFilters[col] || new Set();
-      const values = [...new Set([...(fieldFor(col)?.values || []), ...counts.keys()])].filter((v) => v !== '');
-      if (counts.get('')) values.push('');
+  // One row per dropdown column.
+  for (const col of cols) {
+    const counts = new Map();
+    for (const r of state.investors.rows) {
+      const v = cellValue(r, col);
+      counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    const chosen = state.valueFilters[col] || new Set();
+    const values = [...new Set([...(fieldFor(col)?.values || []), ...counts.keys()])].filter((v) => v !== '');
+    if (counts.get('')) values.push('');
 
-      return el('div', { className: 'filter-group' }, [
-        el('span', { className: 'filter-label', textContent: col }),
-        ...values.map((v) => {
+    groups.push(
+      filterGroup(
+        col || '(unnamed column)',
+        values.map((v) => {
           const chip = el('button', {
             className: 'chip' + (chosen.has(v) ? ' on' : ''),
             textContent: `${v === '' ? '(blank)' : v} ${counts.get(v) || 0}`,
@@ -327,182 +376,54 @@ function renderFilters() {
           });
           return chip;
         }),
-      ]);
-    }),
-    active
-      ? (() => {
-          const b = el('button', { className: 'chip clear', textContent: 'Clear filters' });
-          b.addEventListener('click', () => {
-            state.valueFilters = {};
-            state.statusFilter = new Set();
-            renderFilters();
-            renderTable();
-          });
-          return b;
-        })()
-      : null,
-  ];
-
-  // replaceChildren stringifies null, so drop the empty slots first.
-  bar.replaceChildren(...groups.filter(Boolean));
-}
-
-function renderTable() {
-  const { stepCount = 0 } = state.investors;
-  const shown = shownColumns();
-  const rowsForHead = visibleRows();
-  const allTicked = rowsForHead.length > 0 && rowsForHead.every((r) => state.selection.has(r.__id));
-  const someTicked = !allTicked && rowsForHead.some((r) => state.selection.has(r.__id));
-  const selectAll = el('input', { type: 'checkbox', checked: allTicked, title: 'Select all shown rows' });
-  selectAll.indeterminate = someTicked;
-  selectAll.addEventListener('change', () => {
-    for (const r of rowsForHead) {
-      if (selectAll.checked) state.selection.add(r.__id);
-      else state.selection.delete(r.__id);
-    }
-    renderTable();
-  });
-
-  $('#investor-table thead').replaceChildren(
-    el('tr', {}, [
-      el('th', { className: 'tick' }, selectAll),
-      ...shown.map((c) => el('th', { textContent: c })),
-      el('th', { textContent: 'Answers' }),
-    ])
-  );
-
-  const rows = visibleRows();
-  const picked = state.selection.size;
-  $('#count').textContent =
-    `${rows.length} of ${state.investors.rows.length} rows` + (picked ? ` · ${picked} selected` : '');
-  $('#clear-selection').classList.toggle('hidden', !picked);
-  renderRunButtons(rows);
-
-  $('#investor-table tbody').replaceChildren(
-    ...rows.map((r) => {
-      const active = state.job.listId === state.listId && state.job.current.has(r.__id);
-      const queued = state.job.listId === state.listId && state.job.pending.has(r.__id);
-
-      const status = active
-        ? el('span', { className: 'badge running', title: 'Running now' }, [
-            el('i', { className: 'spinner' }),
-            document.createTextNode(stepCount ? `${r.__done}/${stepCount}` : 'running'),
-          ])
-        : el('span', {
-            className:
-              'badge ' +
-              (queued ? 'queued' : r.__errors ? 'err' : stepCount && r.__done >= stepCount ? 'full' : ''),
-            title: queued ? 'Queued in this run' : '',
-            textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
-          });
-      const tick = el('input', { type: 'checkbox', checked: state.selection.has(r.__id) });
-      tick.addEventListener('click', (e) => {
-        e.stopPropagation(); // ticking a row should not open its detail pane
-        if (e.shiftKey && state.anchor) rangeSelect(state.anchor, r.__id, tick.checked);
-        else if (tick.checked) state.selection.add(r.__id);
-        else state.selection.delete(r.__id);
-        state.anchor = r.__id;
-        renderTable();
-      });
-
-      const tr = el('tr', {
-        className:
-          (r.__id === state.selected ? 'selected ' : '') +
-          (state.selection.has(r.__id) ? 'ticked ' : '') +
-          (active ? 'active' : queued ? 'queued' : ''),
-      }, [
-        el('td', { className: 'tick' }, tick),
-        ...shown.map((c) => {
-          const f = fieldFor(c);
-          return f?.editable
-            ? el('td', { className: 'cell-edit' }, editableCell(r, c, f))
-            : el('td', { textContent: r[c] ?? '', title: r[c] ?? '' });
-        }),
-        el('td', {}, status),
-      ]);
-      tr.addEventListener('click', () => selectInvestor(r.__id));
-      return tr;
-    })
-  );
-}
-
-/** An editable table cell: a dropdown for enum columns, an input for text. */
-function editableCell(row, column, field) {
-  const current = cellValue(row, column);
-
-  if (field.type === 'text') {
-    const input = el('input', {
-      type: 'text',
-      className: 'cell-input',
-      value: current,
-      title: current,
-      placeholder: '—',
-    });
-    input.addEventListener('click', (e) => e.stopPropagation());
-    const commit = async () => {
-      const value = input.value.trim();
-      if (value === current) return;
-      try {
-        await saveCell(row.__id, column, value);
-        row[column] = value;
-      } catch (err) {
-        alert(err.message);
-        input.value = current;
-      }
-    };
-    input.addEventListener('blur', commit);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') input.blur();
-      if (e.key === 'Escape') {
-        input.value = current;
-        input.blur();
-      }
-    });
-    return input;
+        () => {
+          delete state.valueFilters[col];
+          patchField(col, { filter: false });
+        }
+      )
+    );
   }
 
-  const choices = [...new Set([...field.values, ...(current ? [current] : [])])];
-  const sel = el('select', { className: 'cell-select' }, [
-    el('option', { value: '', textContent: '—', selected: !current }),
-    ...choices.map((v) => el('option', { value: v, textContent: v, selected: v === current })),
-    el('option', { value: '\u0000new', textContent: '+ New value…' }),
-  ]);
-  sel.addEventListener('click', (e) => e.stopPropagation()); // don't open the detail pane
-  sel.addEventListener('change', async () => {
-    let value = sel.value;
-    if (value === '\u0000new') {
-      value = (prompt(`New value for "${column}"`) || '').trim();
-      if (!value) {
-        sel.value = current;
-        return;
-      }
-    }
-    try {
-      await saveCell(row.__id, column, value);
-      row[column] = value;
-      renderFilters();
-      renderTable();
-    } catch (err) {
-      alert(err.message);
-      sel.value = current;
-    }
-  });
-  return sel;
-}
+  // Bring a dropdown column back onto the bar.
+  const picker = $('#add-filter');
+  picker.classList.toggle('hidden', !available.length);
+  picker.replaceChildren(
+    el('option', { value: '', textContent: '+ Add filter' }),
+    ...available.map((c) => el('option', { value: c, textContent: c || '(unnamed column)' }))
+  );
 
-/** Shift-click: apply the clicked state across the visible span. */
-function rangeSelect(fromId, toId, checked) {
-  const rows = visibleRows();
-  const a = rows.findIndex((r) => r.__id === fromId);
-  const b = rows.findIndex((r) => r.__id === toId);
-  if (a < 0 || b < 0) return;
-  for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
-    if (checked) state.selection.add(rows[i].__id);
-    else state.selection.delete(rows[i].__id);
+  $('#filter-groups').replaceChildren(...groups);
+
+  // The head stays useful while collapsed: it names what is narrowing the list.
+  const activeBits = [];
+  if (state.statusFilter.size) {
+    activeBits.push(
+      'Answers: ' + STATUSES.filter((s) => state.statusFilter.has(s.key)).map((s) => s.label).join(', ')
+    );
   }
+  for (const [col, set] of Object.entries(state.valueFilters)) {
+    if (set.size) activeBits.push(`${col || '(unnamed)'}: ${[...set].map((v) => v || '(blank)').join(', ')}`);
+  }
+  $('#filters-summary').textContent = activeBits.length ? `Filters — ${activeBits.join(' · ')}` : 'Filters';
+  $('#filters-summary').parentElement.classList.toggle('active', activeBits.length > 0);
+  $('#clear-filters').classList.toggle('hidden', !activeBits.length);
+
+  setFiltersOpen(filtersOpen());
 }
 
-/** Label the run buttons with the set they will run on. */
+$('#add-filter').addEventListener('change', (e) => {
+  const col = e.target.value;
+  e.target.value = '';
+  if (col) patchField(col, { filter: true });
+});
+
+$('#clear-filters').addEventListener('click', () => {
+  state.valueFilters = {};
+  state.statusFilter = new Set();
+  renderFilters();
+  renderTable();
+});
+
 function renderRunButtons(rows) {
   const filtered = isFiltered();
   const target = runTarget(rows);
