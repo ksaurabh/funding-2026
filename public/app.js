@@ -16,6 +16,10 @@ const post = (url, body) =>
   api(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
 
 /** $0.0043 and $12.40 should both read sensibly. */
+/** Clock time in the viewer's own zone — the stored stamps are UTC. */
+const clock = (iso) =>
+  new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+
 const money = (n) =>
   n >= 1 ? `$${n.toFixed(2)}` : n >= 0.01 ? `$${n.toFixed(3)}` : n > 0 ? `$${n.toFixed(4)}` : '$0.00';
 
@@ -1378,7 +1382,11 @@ async function poll() {
     if (s.log) {
       const log = $('#log');
       const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-      log.replaceChildren(...s.log.map((l) => el('div', { textContent: `${l.t.slice(11, 19)}  ${l.msg}` })));
+      log.replaceChildren(
+        ...s.log.map((l) =>
+          el('div', { textContent: `${clock(l.t)}  ${l.msg}`, title: new Date(l.t).toLocaleString() })
+        )
+      );
       if (atBottom) log.scrollTop = log.scrollHeight;
     }
 
