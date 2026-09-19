@@ -71,28 +71,60 @@ export function listFile(id, kind) {
 
 export const playbookFile = (id) => path.posix.join('playbooks', safeId(id));
 
-// A list's editable columns. Each field is either a CSV column made editable
-// (custom: false) or a column added here (custom: true, values live in edits).
-//   { name, type: 'text' | 'enum', values: string[], custom: boolean }
-export const DEFAULT_SCHEMA = { fields: [] };
+// A list's column settings, keyed by column name:
+//   { type: 'text' | 'enum', values: string[], custom: boolean, show: boolean }
+//
+// Every column is plain editable text unless it says otherwise, so a list with
+// no saved settings still behaves sensibly. `custom` marks a column added here
+// rather than imported; `show` picks what the table displays.
+export const DEFAULT_SCHEMA = { fields: {} };
 
-export function readSchema(listId) {
-  const raw = read(listFile(listId, 'schema'), DEFAULT_SCHEMA);
-  // Migrate the first shape this feature shipped with: { enums: {col: [...]} }.
-  if (!raw.fields && raw.enums) {
-    return {
-      fields: Object.entries(raw.enums).map(([name, values]) => ({
-        name,
-        type: 'enum',
-        values,
-        custom: false,
-      })),
-    };
-  }
-  return { fields: raw.fields || [] };
+const DEFAULT_SHOWN = 4;
+
+export function defaultField(custom = false, show = true) {
+  return { type: 'text', values: [], custom, show };
 }
 
-export const findField = (schema, name) => schema.fields.find((f) => f.name === name);
+/**
+ * Column settings for a list, with defaults filled in for every imported
+ * column. Reading never writes, so untouched lists keep an empty schema file.
+ */
+export function readSchema(listId, columns) {
+  const raw = read(listFile(listId, 'schema'), DEFAULT_SCHEMA);
+  const cols = columns || read(listFile(listId, 'investors'), { columns: [] }).columns;
+
+  let saved = raw.fields || {};
+  // Migrate the two earlier shapes: { enums: {col: values} } and a fields array.
+  if (Array.isArray(saved)) {
+    saved = Object.fromEntries(
+      saved.map((f) => [f.name, { type: f.type || 'enum', values: f.values || [], custom: !!f.custom, show: true }])
+    );
+  } else if (!raw.fields && raw.enums) {
+    saved = Object.fromEntries(
+      Object.entries(raw.enums).map(([name, values]) => [name, { type: 'enum', values, custom: false, show: true }])
+    );
+  }
+
+  const fields = {};
+  cols.forEach((name, i) => {
+    const f = saved[name] || {};
+    fields[name] = {
+      type: f.type === 'enum' ? 'enum' : 'text',
+      values: f.values || [],
+      custom: false,
+      // Imported columns past the first few stay out of the table until asked for.
+      show: f.show === undefined ? i < DEFAULT_SHOWN : !!f.show,
+    };
+  });
+  // Columns added here, in the order they were added.
+  for (const [name, f] of Object.entries(saved)) {
+    if (fields[name] || !f.custom) continue;
+    fields[name] = { type: f.type === 'enum' ? 'enum' : 'text', values: f.values || [], custom: true, show: f.show !== false };
+  }
+  return { fields };
+}
+
+export const findField = (schema, name) => schema.fields[name];
 
 /**
  * Rows as imported, with cell values layered on top. investors.json stays
@@ -101,11 +133,12 @@ export const findField = (schema, name) => schema.fields.find((f) => f.name === 
  */
 export function readRowsMerged(listId) {
   const investors = read(listFile(listId, 'investors'), { columns: [], rows: [] });
-  const schema = readSchema(listId);
+  const schema = readSchema(listId, investors.columns);
   const edits = read(listFile(listId, 'edits'), {});
 
-  const added = schema.fields.filter((f) => f.custom && !investors.columns.includes(f.name));
-  const addedNames = added.map((f) => f.name);
+  const addedNames = Object.entries(schema.fields)
+    .filter(([name, f]) => f.custom && !investors.columns.includes(name))
+    .map(([name]) => name);
   const allColumns = [...investors.columns, ...addedNames];
   const allowed = new Set(allColumns);
 

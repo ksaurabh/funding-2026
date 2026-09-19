@@ -53,22 +53,29 @@ in the environment the first boot picks it up automatically.
 
 ### Columns (per list)
 
-**Editable columns…** on a list's toolbar turns the CSV into something you can
-work in, not just read:
+**Columns…** on a list's toolbar controls how the list behaves as a table.
+Every column — imported or added — is **editable free text by default**; click
+a cell and type. Per column you can:
 
-- **A column from the CSV** can be made into a **dropdown**. Its choices start
-  as the distinct values already in that column, and you can add or remove
-  choices. (Columns with more than 200 distinct values are too free-text to
-  offer as a dropdown.)
-- **You can add new columns**, either **free text** or a **dropdown** with the
-  values you list.
+- **Rename** it. The imported rows, your cell values and the column settings
+  all move with it, and playbook steps belonging only to this list have their
+  `{{Old Name}}` tokens and fill targets updated. A playbook shared with
+  another list is left alone and reported, rather than rewritten behind your
+  back.
+- Switch it to a **dropdown**. The choices are seeded from the values already
+  in that column, and you can add or remove them; picking a value that isn't
+  in the list yet adds it. (Columns with more than 200 distinct values are too
+  free-text for this.)
+- **Show or hide** it in the table. The first four imported columns show by
+  default; everything else is available but out of the way.
+- **Add** a column of your own, free text or dropdown, and remove it again.
 
-Edited cells are stored separately from the imported rows, so `investors.json`
+Cell values are stored separately from the imported rows, so `investors.json`
 stays exactly as imported and a re-import keeps your values for every row that
-survives it. Picking a value that isn't in a dropdown yet adds it to the list.
+survives it.
 
-Every dropdown column also becomes a **filter** above the table: click values to
-narrow the list, with counts and a `(blank)` bucket. Several values in one
+Every dropdown column also becomes a **filter** above the table: click values
+to narrow the list, with counts and a `(blank)` bucket. Several values in one
 column widen the match; values in different columns narrow it.
 
 ### Playbooks

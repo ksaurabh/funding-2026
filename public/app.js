@@ -27,7 +27,7 @@ const state = {
   listId: null,
   list: null,
   investors: { columns: [], csvColumns: [], rows: [], stepCount: 0 },
-  schema: { fields: [] },
+  schema: { fields: {} },
   valueFilters: {}, // { column: Set(selected values) }; '' means blank
   playbook: null,
   selected: null,
@@ -190,7 +190,7 @@ $('#import-new').addEventListener('change', async (e) => {
 async function loadInvestors() {
   state.investors = await api(`/api/lists/${state.listId}/investors`);
   state.list = state.investors.list;
-  state.schema = state.investors.schema || { fields: [] };
+  state.schema = state.investors.schema || { fields: {} };
   // Drop filters for columns that are no longer dropdowns.
   for (const col of Object.keys(state.valueFilters)) {
     if (!enumColumns().includes(col)) delete state.valueFilters[col];
@@ -199,9 +199,12 @@ async function loadInvestors() {
   renderTable();
 }
 
-const fields = () => state.schema.fields || [];
-const fieldFor = (col) => fields().find((f) => f.name === col);
-const enumColumns = () => fields().filter((f) => f.type === 'enum').map((f) => f.name);
+const fields = () => state.schema.fields || {};
+const fieldFor = (col) => fields()[col];
+// In the list's own column order, not the object's.
+const columnsWhere = (pred) => (state.investors.columns || []).filter((c) => fields()[c] && pred(fields()[c]));
+const enumColumns = () => columnsWhere((f) => f.type === 'enum');
+const shownColumns = () => columnsWhere((f) => f.show);
 const cellValue = (row, col) => String(row[col] ?? '').trim();
 
 async function saveCell(rowId, column, value) {
@@ -286,9 +289,8 @@ function renderFilters() {
 }
 
 function renderTable() {
-  const { csvColumns = [], stepCount = 0 } = state.investors;
-  // Always show the editable columns, even if they sit past the first few.
-  const shown = [...new Set([...csvColumns.slice(0, 4), ...fields().map((f) => f.name)])];
+  const { stepCount = 0 } = state.investors;
+  const shown = shownColumns();
   $('#investor-table thead').replaceChildren(
     el('tr', {}, [...shown.map((c) => el('th', { textContent: c })), el('th', { textContent: 'Answers' })])
   );
@@ -304,12 +306,7 @@ function renderTable() {
         textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
       });
       const tr = el('tr', { className: r.__id === state.selected ? 'selected' : '' }, [
-        ...shown.map((c) => {
-          const f = fieldFor(c);
-          return f
-            ? el('td', { className: 'cell-edit' }, editableCell(r, f))
-            : el('td', { textContent: r[c] ?? '', title: r[c] ?? '' });
-        }),
+        ...shown.map((c) => el('td', { className: 'cell-edit' }, editableCell(r, c, fieldFor(c)))),
         el('td', {}, status),
       ]);
       tr.addEventListener('click', () => selectInvestor(r.__id));
@@ -319,8 +316,8 @@ function renderTable() {
 }
 
 /** An editable table cell: a dropdown for enum columns, an input for text. */
-function editableCell(row, field) {
-  const current = cellValue(row, field.name);
+function editableCell(row, column, field) {
+  const current = cellValue(row, column);
 
   if (field.type === 'text') {
     const input = el('input', {
@@ -335,8 +332,8 @@ function editableCell(row, field) {
       const value = input.value.trim();
       if (value === current) return;
       try {
-        await saveCell(row.__id, field.name, value);
-        row[field.name] = value;
+        await saveCell(row.__id, column, value);
+        row[column] = value;
       } catch (err) {
         alert(err.message);
         input.value = current;
@@ -363,15 +360,15 @@ function editableCell(row, field) {
   sel.addEventListener('change', async () => {
     let value = sel.value;
     if (value === '\u0000new') {
-      value = (prompt(`New value for "${field.name}"`) || '').trim();
+      value = (prompt(`New value for "${column}"`) || '').trim();
       if (!value) {
         sel.value = current;
         return;
       }
     }
     try {
-      await saveCell(row.__id, field.name, value);
-      row[field.name] = value;
+      await saveCell(row.__id, column, value);
+      row[column] = value;
       renderFilters();
       renderTable();
     } catch (err) {
@@ -524,15 +521,15 @@ async function saveSchema(fields) {
   await renderColumnConfig();
 }
 
-/** The chips + "add a value" row shared by every dropdown column. */
-function valueEditor(field, all) {
+/** The chips + "add a value" row for a dropdown column. */
+function valueEditor(name, field, all) {
+  const withValues = (values) => saveSchema({ ...all, [name]: { ...field, values } });
+
   const chips = el('div', { className: 'tokens' }, [
     ...field.values.map((v) => {
       const chip = el('button', { className: 'chip removable', textContent: v });
       chip.append(el('i', { textContent: '×' }));
-      chip.addEventListener('click', () =>
-        saveSchema(all.map((f) => (f.name === field.name ? { ...f, values: f.values.filter((n) => n !== v) } : f)))
-      );
+      chip.addEventListener('click', () => withValues(field.values.filter((n) => n !== v)));
       return chip;
     }),
     field.values.length ? null : el('span', { className: 'muted small', textContent: 'No choices yet.' }),
@@ -543,7 +540,7 @@ function valueEditor(field, all) {
     const v = input.value.trim();
     if (!v) return;
     input.value = '';
-    saveSchema(all.map((f) => (f.name === field.name ? { ...f, values: [...f.values, v] } : f)));
+    withValues([...field.values, v]);
   };
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -560,50 +557,69 @@ async function renderColumnConfig() {
   state.schema = { fields: info.fields };
   const all = info.fields;
 
-  // --- columns that came from the CSV -------------------------------------
-  const csv = info.candidates.map((c) => {
-    const field = all.find((f) => f.name === c.name);
-    const toggle = el('input', { type: 'checkbox', checked: !!field, disabled: !field && c.tooMany });
-    toggle.addEventListener('change', () =>
-      saveSchema(
-        toggle.checked
-          ? [...all, { name: c.name, type: 'enum', values: c.distinct, custom: false }]
-          : all.filter((f) => f.name !== c.name)
-      )
-    );
+  const rows = info.columns.map((c) => {
+    const field = all[c.name] || { type: 'text', values: [], custom: !c.imported, show: true };
+    const update = (patch) => saveSchema({ ...all, [c.name]: { ...field, ...patch } });
 
-    const head = el('label', { className: 'col-head' }, [
-      toggle,
-      el('span', { textContent: c.name || '(unnamed column)' }),
-      el('span', {
-        className: 'muted small',
-        textContent: c.tooMany
-          ? 'too many distinct values for a dropdown'
-          : `${c.distinct.length} value${c.distinct.length === 1 ? '' : 's'}` + (c.blanks ? `, ${c.blanks} blank` : ''),
+    const show = el('input', { type: 'checkbox', checked: field.show });
+    show.addEventListener('change', () => update({ show: show.checked }));
+
+    const type = el('select', { className: 'type-pick' }, [
+      el('option', { value: 'text', textContent: 'Free text', selected: field.type === 'text' }),
+      el('option', {
+        value: 'enum',
+        textContent: c.tooMany && field.type !== 'enum' ? 'Dropdown (too many values)' : 'Dropdown',
+        selected: field.type === 'enum',
+        disabled: c.tooMany && field.type !== 'enum',
       }),
     ]);
+    // Switching to a dropdown seeds the choices from what is already in the column.
+    type.addEventListener('change', () =>
+      update({ type: type.value, values: type.value === 'enum' && !field.values.length ? c.distinct : field.values })
+    );
 
-    if (!field) return el('div', { className: 'col-row' }, head);
-    return el('div', { className: 'col-row open' }, [head, ...valueEditor(field, all)]);
-  });
-
-  // --- columns added here --------------------------------------------------
-  const added = all
-    .filter((f) => f.custom)
-    .map((f) => {
-      const head = el('div', { className: 'col-head' }, [
-        el('span', { textContent: f.name }),
-        el('span', { className: 'badge', textContent: f.type === 'enum' ? 'dropdown' : 'free text' }),
-        el('span', { className: 'muted small' }, [
-          button('Remove', 'danger', () => {
-            if (!confirm(`Remove the column "${f.name}" and every value in it?`)) return;
-            saveSchema(all.filter((x) => x.name !== f.name));
-          }),
-        ]),
-      ]);
-      return el('div', { className: 'col-row open' }, f.type === 'enum' ? [head, ...valueEditor(f, all)] : [head]);
+    const rename = button('Rename', '', async () => {
+      const to = prompt(`Rename "${c.name}" to`, c.name);
+      if (!to || to === c.name) return;
+      let result;
+      try {
+        result = await post(`/api/lists/${state.listId}/columns/rename`, { from: c.name, to });
+      } catch (err) {
+        return alert(err.message);
+      }
+      if (result.warnings?.length) alert(result.warnings.join('\n\n'));
+      await renderColumnConfig();
     });
 
+    const head = el('div', { className: 'col-head' }, [
+      el('label', { className: 'inline' }, [show, document.createTextNode('Show')]),
+      el('span', { className: 'col-name', textContent: c.name || '(unnamed column)' }),
+      el('span', {
+        className: 'muted small',
+        textContent: c.imported
+          ? `${c.distinct.length}${c.tooMany ? '+' : ''} distinct` + (c.blanks ? `, ${c.blanks} blank` : '')
+          : 'added here',
+      }),
+      type,
+      rename,
+      c.imported
+        ? null
+        : button('Remove', 'danger', () => {
+            if (!confirm(`Remove the column "${c.name}" and every value in it?`)) return;
+            const next = { ...all };
+            delete next[c.name];
+            saveSchema(next);
+          }),
+    ]);
+
+    return el(
+      'div',
+      { className: 'col-row' + (field.type === 'enum' ? ' open' : '') },
+      field.type === 'enum' ? [head, ...valueEditor(c.name, field, all)] : [head]
+    );
+  });
+
+  // --- add a column --------------------------------------------------------
   const newName = el('input', { type: 'text', placeholder: 'Column name' });
   const newType = el('select', {}, [
     el('option', { value: 'text', textContent: 'Free text' }),
@@ -616,33 +632,29 @@ async function renderColumnConfig() {
   const addColumn = () => {
     const name = newName.value.trim();
     if (!name) return;
-    if (all.some((f) => f.name === name) || info.candidates.some((c) => c.name === name)) {
-      return alert('This list already has a column with that name.');
-    }
-    saveSchema([
+    if (all[name]) return alert('This list already has a column with that name.');
+    saveSchema({
       ...all,
-      {
-        name,
+      [name]: {
         type: newType.value,
         values: newType.value === 'enum' ? newValues.value.split(',') : [],
         custom: true,
+        show: true,
       },
-    ]);
+    });
   };
   newName.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), addColumn()));
 
   $('#column-config').replaceChildren(
-    el('h4', { className: 'section', textContent: 'Columns from the CSV' }),
-    el('p', { className: 'muted small', textContent: 'Tick one to turn it into a dropdown you can edit row by row.' }),
-    ...csv,
-    el('h4', { className: 'section', textContent: 'Columns you added' }),
-    ...(added.length ? added : [el('p', { className: 'muted small', textContent: 'None yet.' })]),
+    ...rows,
+    el('h4', { className: 'section', textContent: 'Add a column' }),
     el('div', { className: 'add-column' }, [newName, newType, newValues, button('Add column', 'primary', addColumn)]),
     el('p', {
       className: 'muted small',
       textContent:
-        'A playbook step can fill one of these in automatically \u2014 pick the column on the step. ' +
-        'Removing a choice only takes it out of the dropdown; rows already set to it keep their value.',
+        'Every column is editable free text unless you make it a dropdown. A playbook step can fill any of them in ' +
+        'automatically — pick the column on the step. Removing a choice only takes it out of the dropdown; rows ' +
+        'already set to it keep their value.',
     })
   );
 }
@@ -757,11 +769,11 @@ let activePrompt = null;
 function writeToSelect(step) {
   const sel = el('select', { className: 'writeto' }, [
     el('option', { value: '', textContent: '— none —', selected: !step.writeTo }),
-    ...fields().map((f) =>
+    ...(state.investors.columns || []).map((name) =>
       el('option', {
-        value: f.name,
-        textContent: `${f.name} (${f.type === 'enum' ? 'dropdown' : 'text'})`,
-        selected: f.name === step.writeTo,
+        value: name,
+        textContent: `${name} (${fieldFor(name)?.type === 'enum' ? 'dropdown' : 'text'})`,
+        selected: name === step.writeTo,
       })
     ),
   ]);

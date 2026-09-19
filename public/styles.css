@@ -364,3 +364,12 @@ h4.section:first-child { margin-top: 4px; }
 }
 .body.md th { background: var(--bg); position: static; font-size: 12px; }
 .body.md s { color: var(--muted); }
+
+/* one row per column in the Columns dialog */
+.col-row { padding: 6px 0; }
+.col-head { flex-wrap: wrap; gap: 8px; }
+.col-name { font-weight: 500; flex: 1; min-width: 120px; overflow: hidden; text-overflow: ellipsis; }
+.col-head .muted { margin-left: 0; }
+.type-pick { width: auto; font-size: 12px; padding: 3px 6px; }
+.col-head button { font-size: 12px; padding: 3px 8px; }
+.col-head .inline { gap: 4px; }

@@ -231,15 +231,16 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
         record.writeError = `Column "${step.writeTo}" no longer exists.`;
         log(`⚠ ${label} · ${step.name}: ${record.writeError}`);
       } else if (field) {
+        const column = step.writeTo; // the field map is keyed by name
         try {
           let value;
           if (field.type === 'enum') {
-            if (!field.values.length) throw new Error(`Column "${field.name}" has no allowed values.`);
+            if (!field.values.length) throw new Error(`Column "${column}" has no allowed values.`);
             const picked = await chooseValue(client, {
               system: playbook.system,
               messages: thread,
               settings,
-              column: field.name,
+              column,
               values: field.values,
               signal,
             });
@@ -248,15 +249,15 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
           } else {
             value = result.text;
           }
-          writeCell(listId, row.__id, field.name, value);
-          row[field.name] = value;
-          record.wroteTo = { column: field.name, value };
-          log(`⤷ ${label} · ${field.name} = ${value.length > 60 ? value.slice(0, 60) + '…' : value}`);
+          writeCell(listId, row.__id, column, value);
+          row[column] = value;
+          record.wroteTo = { column, value };
+          log(`⤷ ${label} · ${column} = ${value.length > 60 ? value.slice(0, 60) + '…' : value}`);
         } catch (err) {
           if (signal.aborted) throw new Error('Cancelled');
           record.writeError = err.message;
           job.stepErrors++;
-          log(`✗ ${label} · ${field.name}: ${err.message}`);
+          log(`✗ ${label} · ${column}: ${err.message}`);
         }
       }
     } catch (err) {

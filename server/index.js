@@ -9,6 +9,7 @@ import {
   exists,
   readRowsMerged,
   readSchema,
+  defaultField,
   findField,
   writeCell,
   removeList,
@@ -213,9 +214,14 @@ app.post('/api/lists/:id/reimport', (req, res) => {
 
     // Drop config for CSV columns the new file no longer has; columns added
     // here survive a re-import, as do their values.
-    const schema = readSchema(list.id);
-    const kept = schema.fields.filter((f) => f.custom || investors.columns.includes(f.name));
-    if (kept.length !== schema.fields.length) write(listFile(list.id, 'schema'), { fields: kept });
+    // Settings for imported columns the new file lacks are dropped; columns
+    // added here survive a re-import, as do their values.
+    const schema = readSchema(list.id, investors.columns);
+    const kept = Object.fromEntries(
+      Object.entries(schema.fields).filter(([name, f]) => f.custom || investors.columns.includes(name))
+    );
+    write(listFile(list.id, 'schema'), { fields: kept });
+    pruneEdits(list.id, new Set(Object.keys(kept)));
 
     const lists = getLists();
     Object.assign(
@@ -378,9 +384,9 @@ app.post('/api/lists/:listId/playbook/preview', (req, res) => {
 });
 
 // ------------------------------------------------------------------- schema
-// Editable columns come in two flavours: a CSV column turned editable, and a
-// column added here (its values live only in edits.json). Both are either free
-// text or a dropdown of allowed values.
+// Every column is editable free text by default. A column can be switched to
+// a dropdown of allowed values, renamed, hidden from the table, or added here
+// outright (in which case its values live only in edits.json).
 
 const MAX_CHOICES = 200;
 const TYPES = new Set(['text', 'enum']);
@@ -408,13 +414,14 @@ function cleanValues(values) {
 app.get('/api/lists/:listId/schema', (req, res) => {
   try {
     const list = findList(req.params.listId);
-    const { columns, rows, schema } = readRowsMerged(list.id);
+    const { allColumns, columns, rows, schema } = readRowsMerged(list.id);
     res.json({
       fields: schema.fields,
-      candidates: columns.map((name) => {
+      columns: allColumns.map((name) => {
         const distinct = distinctValues(rows, name);
         return {
           name,
+          imported: columns.includes(name),
           distinct: distinct || [],
           tooMany: distinct === null,
           blanks: rows.filter((r) => !String(r[name] ?? '').trim()).length,
@@ -430,40 +437,26 @@ app.put('/api/lists/:listId/schema', (req, res) => {
   try {
     const list = findList(req.params.listId);
     const { columns } = read(listFile(list.id, 'investors'), { columns: [] });
-    const csvColumns = new Set(columns);
+    const imported = new Set(columns);
 
-    const fields = [];
-    for (const f of req.body?.fields || []) {
-      const name = String(f?.name ?? '').trim();
-      if (!name || fields.some((x) => x.name === name)) continue;
-      const custom = !csvColumns.has(name);
-      const type = TYPES.has(f.type) ? f.type : 'text';
-      fields.push({
-        name,
-        // A CSV column is only worth making editable as a dropdown; free-text
-        // editing of imported data is what a re-import is for.
-        type: custom ? type : 'enum',
-        values: type === 'enum' || !custom ? cleanValues(f.values) : [],
+    const fields = {};
+    for (const [rawName, f] of Object.entries(req.body?.fields || {})) {
+      const name = String(rawName).trim();
+      if (!name) continue;
+      const custom = !imported.has(name);
+      const type = TYPES.has(f?.type) ? f.type : 'text';
+      fields[name] = {
+        type,
+        values: type === 'enum' ? cleanValues(f?.values) : [],
         custom,
-      });
+        show: f?.show !== false,
+      };
     }
-    if (fields.length > 60) throw new Error('Too many editable columns.');
+    if (Object.keys(fields).length > 80) throw new Error('Too many columns.');
 
-    // Forget cell values for columns that no longer exist.
-    const live = new Set([...csvColumns, ...fields.map((f) => f.name)]);
-    const editKey = listFile(list.id, 'edits');
-    const edits = read(editKey, {});
-    let pruned = false;
-    for (const [rowId, patch] of Object.entries(edits)) {
-      for (const col of Object.keys(patch)) {
-        if (!live.has(col)) {
-          delete patch[col];
-          pruned = true;
-        }
-      }
-      if (!Object.keys(patch).length) delete edits[rowId];
-    }
-    if (pruned) write(editKey, edits);
+    // Forget cell values for added columns that are gone.
+    const live = new Set([...imported, ...Object.keys(fields)]);
+    pruneEdits(list.id, live);
 
     res.json(write(listFile(list.id, 'schema'), { fields }));
   } catch (err) {
@@ -471,18 +464,118 @@ app.put('/api/lists/:listId/schema', (req, res) => {
   }
 });
 
+function pruneEdits(listId, live) {
+  const editKey = listFile(listId, 'edits');
+  const edits = read(editKey, {});
+  let changed = false;
+  for (const [rowId, patch] of Object.entries(edits)) {
+    for (const col of Object.keys(patch)) {
+      if (!live.has(col)) {
+        delete patch[col];
+        changed = true;
+      }
+    }
+    if (!Object.keys(patch).length) {
+      delete edits[rowId];
+      changed = true;
+    }
+  }
+  if (changed) write(editKey, edits);
+}
+
+// Rename a column, in the imported rows, the cell values and the settings.
+// Playbooks used only by this list have their prompts and targets updated too;
+// shared ones are reported back instead of being rewritten behind your back.
+app.post('/api/lists/:listId/columns/rename', (req, res) => {
+  try {
+    const list = findList(req.params.listId);
+    const from = String(req.body?.from ?? '');
+    const to = String(req.body?.to ?? '').trim();
+    if (!to) return res.status(400).json({ error: 'The new name cannot be empty.' });
+    if (to === from) return res.json({ ok: true, warnings: [] });
+
+    const investorKey = listFile(list.id, 'investors');
+    const investors = read(investorKey, { columns: [], rows: [] });
+    const schema = readSchema(list.id, investors.columns);
+    if (!schema.fields[from]) return res.status(404).json({ error: 'No such column.' });
+    if (schema.fields[to]) return res.status(400).json({ error: 'This list already has a column with that name.' });
+
+    // Imported rows: rebuild each row so the column keeps its position.
+    if (investors.columns.includes(from)) {
+      investors.columns = investors.columns.map((c) => (c === from ? to : c));
+      investors.rows = investors.rows.map((r) =>
+        Object.fromEntries(Object.entries(r).map(([k, v]) => [k === from ? to : k, v]))
+      );
+      write(investorKey, investors);
+      const lists = getLists();
+      Object.assign(lists.find((l) => l.id === list.id), { columns: investors.columns });
+      write('lists', lists);
+    }
+
+    const editKey = listFile(list.id, 'edits');
+    const edits = read(editKey, {});
+    for (const patch of Object.values(edits)) {
+      if (from in patch) {
+        patch[to] = patch[from];
+        delete patch[from];
+      }
+    }
+    write(editKey, edits);
+
+    const fields = {};
+    for (const [name, f] of Object.entries(schema.fields)) fields[name === from ? to : name] = f;
+    write(listFile(list.id, 'schema'), { fields });
+
+    res.json({ ok: true, warnings: renamePlaybookRefs(list, from, to) });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+/** Point this list's own playbooks at the new name; flag shared ones. */
+function renamePlaybookRefs(list, from, to) {
+  const norm = (v) => String(v).trim().toLowerCase().replace(/\s+/g, ' ');
+  const token = new RegExp(`\\{\\{\\s*${from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\}\\}`, 'gi');
+  const lists = getLists();
+  const warnings = [];
+
+  for (const p of getPlaybooks()) {
+    const pb = read(playbookFile(p.id), null);
+    if (!pb) continue;
+    const uses = pb.steps.some((s) => norm(s.writeTo) === norm(from) || token.test(s.prompt));
+    token.lastIndex = 0;
+    if (!uses) continue;
+
+    const others = lists.filter((l) => l.playbookId === p.id && l.id !== list.id);
+    if (others.length) {
+      warnings.push(
+        `"${pb.name}" still refers to "${from}" — it is shared with ${others
+          .map((l) => `"${l.name}"`)
+          .join(', ')}, so it was left alone.`
+      );
+      continue;
+    }
+    pb.steps = pb.steps.map((s) => ({
+      ...s,
+      writeTo: norm(s.writeTo) === norm(from) ? to : s.writeTo,
+      prompt: s.prompt.replace(token, `{{${to}}}`),
+    }));
+    write(playbookFile(p.id), pb);
+  }
+  return warnings;
+}
+
 // Set one cell of one row. A dropdown value that is not yet in the column's
 // choice list is added to it, so the list grows as you use it.
 app.patch('/api/lists/:listId/investors/:id', (req, res) => {
   try {
     const list = findList(req.params.listId);
     const { columns, rows } = read(listFile(list.id, 'investors'), { columns: [], rows: [] });
-    const schema = readSchema(list.id);
+    const schema = readSchema(list.id, columns);
     const column = req.body?.column;
     const field = findField(schema, column);
 
-    if (!field && !columns.includes(column)) return res.status(400).json({ error: 'Unknown column.' });
-    if (!field) return res.status(400).json({ error: 'That column is not editable.' });
+    if (!field) return res.status(400).json({ error: 'Unknown column.' });
     if (!rows.some((r) => r.__id === req.params.id)) {
       return res.status(404).json({ error: 'Row not found.' });
     }
