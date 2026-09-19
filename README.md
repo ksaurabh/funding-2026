@@ -79,9 +79,18 @@ Cell values are stored separately from the imported rows, so `investors.json`
 stays exactly as imported and a re-import keeps your values for every row that
 survives it.
 
-Every dropdown column also becomes a **filter** above the table: click values
-to narrow the list, with counts and a `(blank)` bucket. Several values in one
-column widen the match; values in different columns narrow it.
+### Narrowing and picking rows
+
+A filter bar sits above the table. **Answers** filters by how far each row has
+got — *Not started*, *Partial*, *Complete*, *Has errors* — and every dropdown
+column adds a group of its values, with counts and a `(blank)` bucket. Several
+chips in one group widen the match; chips in different groups narrow it. The
+search box filters on any column's text.
+
+Rows also have **tick boxes**. Tick any set of rows — shift-click to take a
+span, the header box takes everything currently on screen — and the run
+buttons switch to that set. A selection survives changing the filter, since
+you picked those rows deliberately; **Clear selection** drops it.
 
 ### Playbooks
 
@@ -158,12 +167,13 @@ for that one row, or re-run a single step.
 
 The two run buttons always say what they will actually do:
 
-- **Run all 529** — every row, when nothing is filtered.
-- **Run 37 filtered** — exactly the rows the search box and dropdown filters
-  have left on screen. The set is fixed when you click, so rows still run even
-  if the playbook changes a value they were filtered on.
-- **Run unanswered (n)** — only rows missing answers, narrowed to the filtered
-  set when a filter is on. Useful after adding a step, or after a partial run.
+- **Run all 529** — every row, when nothing is ticked or filtered.
+- **Run 12 selected** — the ticked rows, wherever they sit in the list.
+- **Run 37 filtered** — the rows the filters have left on screen, when nothing
+  is ticked. Either way the set is fixed when you click, so rows still run if
+  the playbook changes a value they were filtered on.
+- **Run unanswered (n)** — only rows missing answers, narrowed to whichever of
+  those sets is in play. Useful after adding a step, or after a partial run.
 
 Both confirm first, projecting the bill from this list's own average per row.
 A run streams progress into the log strip at the bottom and can be cancelled

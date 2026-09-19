@@ -454,3 +454,10 @@ tbody tr.queued td:last-child { opacity: .85; }
   gap: 6px;
   color: var(--accent);
 }
+
+/* --------------------------------------------------------- row selection */
+th.tick, td.tick { width: 28px; padding: 4px 0 4px 10px; }
+td.tick input, th.tick input { cursor: pointer; margin: 0; display: block; }
+tbody tr.ticked { background: #f2f6fb; }
+tbody tr.ticked:hover { background: #e9f0f9; }
+tbody tr.ticked.selected { background: var(--accent-soft); }

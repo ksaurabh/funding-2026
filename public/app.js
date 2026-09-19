@@ -31,6 +31,9 @@ const state = {
   investors: { columns: [], csvColumns: [], rows: [], stepCount: 0 },
   schema: { fields: {} },
   valueFilters: {}, // { column: Set(selected values) }; '' means blank
+  statusFilter: new Set(), // 'none' | 'partial' | 'complete' | 'errors'
+  selection: new Set(), // row ids ticked in the table
+  anchor: null, // last row clicked, for shift-click ranges
   playbook: null,
   selected: null,
   filter: '',
@@ -54,6 +57,9 @@ async function route() {
     state.selected = null;
     state.filter = '';
     state.valueFilters = {};
+    state.statusFilter = new Set();
+    state.selection = new Set();
+    state.anchor = null;
     $('#search').value = '';
     $('#detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select a row to see its answers.' }));
     try {
@@ -235,11 +241,28 @@ function matchesValueFilters(row) {
 }
 
 const isFiltered = () =>
-  !!state.filter.trim() || Object.values(state.valueFilters).some((v) => v.size);
+  !!state.filter.trim() ||
+  state.statusFilter.size > 0 ||
+  Object.values(state.valueFilters).some((v) => v.size);
+
+/** How far through the playbook a row is. A row can be both partial and errored. */
+const STATUSES = [
+  { key: 'none', label: 'Not started', test: (r, n) => r.__done === 0 && !r.__errors },
+  { key: 'partial', label: 'Partial', test: (r, n) => r.__done > 0 && r.__done < n },
+  { key: 'complete', label: 'Complete', test: (r, n) => n > 0 && r.__done >= n },
+  { key: 'errors', label: 'Has errors', test: (r) => r.__errors > 0 },
+];
+
+function matchesStatus(row) {
+  if (!state.statusFilter.size) return true;
+  const n = state.investors.stepCount;
+  return STATUSES.some((s) => state.statusFilter.has(s.key) && s.test(row, n));
+}
 
 function visibleRows() {
   const q = state.filter.trim().toLowerCase();
   return state.investors.rows.filter((r) => {
+    if (!matchesStatus(r)) return false;
     if (!matchesValueFilters(r)) return false;
     if (!q) return true;
     return state.investors.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(q));
@@ -249,12 +272,36 @@ function visibleRows() {
 function renderFilters() {
   const bar = $('#filters');
   const cols = enumColumns();
-  bar.classList.toggle('hidden', !cols.length);
-  if (!cols.length) return;
+  const n = state.investors.stepCount;
+  bar.classList.toggle('hidden', !cols.length && !n);
+  if (!cols.length && !n) return;
 
-  const active = Object.values(state.valueFilters).some((v) => v.size);
+  const active = state.statusFilter.size > 0 || Object.values(state.valueFilters).some((v) => v.size);
 
-  bar.replaceChildren(
+  // Progress through the playbook, as its own group of chips.
+  const statusGroup = n
+    ? el('div', { className: 'filter-group' }, [
+        el('span', { className: 'filter-label', textContent: 'Answers' }),
+        ...STATUSES.map((st) => {
+          const count = state.investors.rows.filter((r) => st.test(r, n)).length;
+          const chip = el('button', {
+            className: 'chip' + (state.statusFilter.has(st.key) ? ' on' : ''),
+            textContent: `${st.label} ${count}`,
+          });
+          chip.addEventListener('click', () => {
+            state.statusFilter.has(st.key)
+              ? state.statusFilter.delete(st.key)
+              : state.statusFilter.add(st.key);
+            renderFilters();
+            renderTable();
+          });
+          return chip;
+        }),
+      ])
+    : null;
+
+  const groups = [
+    statusGroup,
     ...cols.map((col) => {
       const counts = new Map();
       for (const r of state.investors.rows) {
@@ -287,24 +334,48 @@ function renderFilters() {
           const b = el('button', { className: 'chip clear', textContent: 'Clear filters' });
           b.addEventListener('click', () => {
             state.valueFilters = {};
+            state.statusFilter = new Set();
             renderFilters();
             renderTable();
           });
           return b;
         })()
-      : null
-  );
+      : null,
+  ];
+
+  // replaceChildren stringifies null, so drop the empty slots first.
+  bar.replaceChildren(...groups.filter(Boolean));
 }
 
 function renderTable() {
   const { stepCount = 0 } = state.investors;
   const shown = shownColumns();
+  const rowsForHead = visibleRows();
+  const allTicked = rowsForHead.length > 0 && rowsForHead.every((r) => state.selection.has(r.__id));
+  const someTicked = !allTicked && rowsForHead.some((r) => state.selection.has(r.__id));
+  const selectAll = el('input', { type: 'checkbox', checked: allTicked, title: 'Select all shown rows' });
+  selectAll.indeterminate = someTicked;
+  selectAll.addEventListener('change', () => {
+    for (const r of rowsForHead) {
+      if (selectAll.checked) state.selection.add(r.__id);
+      else state.selection.delete(r.__id);
+    }
+    renderTable();
+  });
+
   $('#investor-table thead').replaceChildren(
-    el('tr', {}, [...shown.map((c) => el('th', { textContent: c })), el('th', { textContent: 'Answers' })])
+    el('tr', {}, [
+      el('th', { className: 'tick' }, selectAll),
+      ...shown.map((c) => el('th', { textContent: c })),
+      el('th', { textContent: 'Answers' }),
+    ])
   );
 
   const rows = visibleRows();
-  $('#count').textContent = `${rows.length} of ${state.investors.rows.length} rows`;
+  const picked = state.selection.size;
+  $('#count').textContent =
+    `${rows.length} of ${state.investors.rows.length} rows` + (picked ? ` · ${picked} selected` : '');
+  $('#clear-selection').classList.toggle('hidden', !picked);
   renderRunButtons(rows);
 
   $('#investor-table tbody').replaceChildren(
@@ -324,10 +395,23 @@ function renderTable() {
             title: queued ? 'Queued in this run' : '',
             textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
           });
+      const tick = el('input', { type: 'checkbox', checked: state.selection.has(r.__id) });
+      tick.addEventListener('click', (e) => {
+        e.stopPropagation(); // ticking a row should not open its detail pane
+        if (e.shiftKey && state.anchor) rangeSelect(state.anchor, r.__id, tick.checked);
+        else if (tick.checked) state.selection.add(r.__id);
+        else state.selection.delete(r.__id);
+        state.anchor = r.__id;
+        renderTable();
+      });
+
       const tr = el('tr', {
         className:
-          (r.__id === state.selected ? 'selected ' : '') + (active ? 'active' : queued ? 'queued' : ''),
+          (r.__id === state.selected ? 'selected ' : '') +
+          (state.selection.has(r.__id) ? 'ticked ' : '') +
+          (active ? 'active' : queued ? 'queued' : ''),
       }, [
+        el('td', { className: 'tick' }, tick),
         ...shown.map((c) => {
           const f = fieldFor(c);
           return f?.editable
@@ -406,24 +490,57 @@ function editableCell(row, column, field) {
   return sel;
 }
 
+/** Shift-click: apply the clicked state across the visible span. */
+function rangeSelect(fromId, toId, checked) {
+  const rows = visibleRows();
+  const a = rows.findIndex((r) => r.__id === fromId);
+  const b = rows.findIndex((r) => r.__id === toId);
+  if (a < 0 || b < 0) return;
+  for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
+    if (checked) state.selection.add(rows[i].__id);
+    else state.selection.delete(rows[i].__id);
+  }
+}
+
 /** Label the run buttons with the set they will run on. */
 function renderRunButtons(rows) {
   const filtered = isFiltered();
-  const unanswered = rows.filter((r) => r.__done < state.investors.stepCount);
+  const target = runTarget(rows);
+  const unanswered = target.rows.filter((r) => r.__done < state.investors.stepCount);
 
   const all = $('#run-all');
-  all.textContent = filtered ? `Run ${rows.length} filtered` : `Run all ${rows.length}`;
-  all.disabled = !rows.length || state.running;
-  all.title = filtered
+  all.textContent = target.selected
+    ? `Run ${target.rows.length} selected`
+    : filtered
+    ? `Run ${rows.length} filtered`
+    : `Run all ${rows.length}`;
+  all.disabled = !target.rows.length || state.running;
+  all.title = target.selected
+    ? 'Run the playbook on the ticked rows, wherever they are in the list'
+    : filtered
     ? 'Run the playbook on the rows matching the current filter'
     : 'Run the playbook on every row in this list';
 
   const rest = $('#run-unanswered');
   rest.textContent = `Run unanswered (${unanswered.length})`;
   rest.disabled = !unanswered.length || state.running;
-  rest.title = filtered
+  rest.title = target.selected
+    ? 'Run only the ticked rows that are missing answers'
+    : filtered
     ? 'Run only the filtered rows that are missing answers'
     : 'Run only the rows that are missing answers';
+}
+
+/**
+ * What a run should cover: the ticked rows if any (regardless of the current
+ * filter, since you picked them deliberately), otherwise what is on screen.
+ */
+function runTarget(rows = visibleRows()) {
+  if (state.selection.size) {
+    const byId = new Map(state.investors.rows.map((r) => [r.__id, r]));
+    return { selected: true, rows: [...state.selection].map((id) => byId.get(id)).filter(Boolean) };
+  }
+  return { selected: false, rows };
 }
 
 async function selectInvestor(id) {
@@ -847,19 +964,39 @@ function confirmRun(rows, what) {
 }
 
 $('#run-all').addEventListener('click', () => {
-  const rows = visibleRows();
-  if (!rows.length) return;
-  const filtered = isFiltered();
-  if (!confirmRun(rows, filtered ? 'filtered row(s)' : 'row(s)')) return;
-  // Send ids when filtered so the server runs exactly what is on screen.
-  run(filtered ? { investorIds: rows.map((r) => r.__id) } : { scope: 'all' });
+  const target = runTarget();
+  if (!target.rows.length) return;
+  const what = target.selected ? 'selected row(s)' : isFiltered() ? 'filtered row(s)' : 'row(s)';
+  if (!confirmRun(target.rows, what)) return;
+  // Send ids for anything but the whole list, so the server runs exactly this set.
+  run(
+    target.selected || isFiltered()
+      ? { investorIds: target.rows.map((r) => r.__id) }
+      : { scope: 'all' }
+  );
 });
 
 $('#run-unanswered').addEventListener('click', () => {
-  const rows = visibleRows().filter((r) => r.__done < state.investors.stepCount);
+  const target = runTarget();
+  const rows = target.rows.filter((r) => r.__done < state.investors.stepCount);
   if (!rows.length) return;
-  if (!confirmRun(rows, isFiltered() ? 'filtered row(s) with missing answers' : 'row(s) with missing answers')) return;
-  run(isFiltered() ? { investorIds: rows.map((r) => r.__id) } : { scope: 'unanswered' });
+  const what = target.selected
+    ? 'selected row(s) with missing answers'
+    : isFiltered()
+    ? 'filtered row(s) with missing answers'
+    : 'row(s) with missing answers';
+  if (!confirmRun(rows, what)) return;
+  run(
+    target.selected || isFiltered()
+      ? { investorIds: rows.map((r) => r.__id) }
+      : { scope: 'unanswered' }
+  );
+});
+
+$('#clear-selection').addEventListener('click', () => {
+  state.selection = new Set();
+  state.anchor = null;
+  renderTable();
 });
 $('#cancel').addEventListener('click', () => post('/api/run/cancel'));
 
