@@ -82,7 +82,7 @@ export const DEFAULT_SCHEMA = { fields: {} };
 const DEFAULT_SHOWN = 4;
 
 export function defaultField(custom = false, show = true) {
-  return { editable: custom, type: 'text', values: [], custom, show, filter: true };
+  return { editable: custom, type: 'text', values: [], custom, show, filter: false };
 }
 
 /**
@@ -120,8 +120,9 @@ export function readSchema(listId, columns) {
       editable: !!f.editable,
       type: f.type === 'enum' ? 'enum' : 'text',
       values: f.values || [],
-      // Dropdown columns offer a filter group unless you take it off the bar.
-      filter: f.filter !== false,
+      // Any column can be filtered on; dropdowns are on the bar by default
+      // because a fixed set of values is what you usually want to slice by.
+      filter: f.filter === undefined ? f.type === 'enum' : !!f.filter,
       custom: false,
       // Imported columns past the first few stay out of the table until asked for.
       show: f.show === undefined ? i < DEFAULT_SHOWN : !!f.show,
@@ -134,7 +135,7 @@ export function readSchema(listId, columns) {
       editable: f.editable !== false,
       type: f.type === 'enum' ? 'enum' : 'text',
       values: f.values || [],
-      filter: f.filter !== false,
+      filter: f.filter === undefined ? f.type === 'enum' : !!f.filter,
       custom: true,
       show: f.show !== false,
     };

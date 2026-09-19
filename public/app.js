@@ -217,8 +217,31 @@ const fieldFor = (col) => fields()[col];
 // In the list's own column order, not the object's.
 const columnsWhere = (pred) => (state.investors.columns || []).filter((c) => fields()[c] && pred(fields()[c]));
 const enumColumns = () => columnsWhere((f) => f.editable && f.type === 'enum');
-// Dropdown columns you have chosen to keep on the filter bar.
-const filterColumns = () => columnsWhere((f) => f.editable && f.type === 'enum' && f.filter !== false);
+
+// Filtering is a read: any column can be filtered on, dropdown or not. Only
+// columns with a workable number of distinct values are worth offering.
+const FILTERABLE_MAX = 60;
+
+/** Value -> count for one column, over the whole list. */
+function valueCounts(column) {
+  const counts = new Map();
+  for (const r of state.investors.rows) {
+    const v = cellValue(r, column);
+    counts.set(v, (counts.get(v) || 0) + 1);
+  }
+  return counts;
+}
+
+const distinctCount = (column) => [...valueCounts(column).keys()].filter((v) => v !== '').length;
+
+/** Columns currently on the filter bar. */
+const filterColumns = () => columnsWhere((f) => f.filter);
+
+/** Columns that could be added to it. */
+const filterCandidates = () =>
+  (state.investors.columns || []).filter(
+    (c) => fields()[c] && !fields()[c].filter && distinctCount(c) > 0 && distinctCount(c) <= FILTERABLE_MAX
+  );
 
 /** Change one column's settings from outside the Columns dialog. */
 async function patchField(column, patch) {
@@ -320,7 +343,7 @@ function filterGroup(label, chips, onRemove) {
 function renderFilters() {
   const bar = $('#filters');
   const cols = filterColumns();
-  const available = enumColumns().filter((c) => !cols.includes(c));
+  const available = filterCandidates();
   const n = state.investors.stepCount;
   bar.classList.toggle('hidden', !cols.length && !available.length && !n);
   if (!cols.length && !available.length && !n) return;
@@ -351,11 +374,7 @@ function renderFilters() {
 
   // One row per dropdown column.
   for (const col of cols) {
-    const counts = new Map();
-    for (const r of state.investors.rows) {
-      const v = cellValue(r, col);
-      counts.set(v, (counts.get(v) || 0) + 1);
-    }
+    const counts = valueCounts(col);
     const chosen = state.valueFilters[col] || new Set();
     const values = [...new Set([...(fieldFor(col)?.values || []), ...counts.keys()])].filter((v) => v !== '');
     if (counts.get('')) values.push('');
@@ -389,7 +408,9 @@ function renderFilters() {
   picker.classList.toggle('hidden', !available.length);
   picker.replaceChildren(
     el('option', { value: '', textContent: '+ Add filter' }),
-    ...available.map((c) => el('option', { value: c, textContent: c || '(unnamed column)' }))
+    ...available.map((c) =>
+      el('option', { value: c, textContent: `${c || '(unnamed column)'} (${distinctCount(c)})` })
+    )
   );
 
   $('#filter-groups').replaceChildren(...groups);
@@ -915,6 +936,16 @@ async function renderColumnConfig() {
     const show = el('input', { type: 'checkbox', checked: field.show });
     show.addEventListener('change', () => update({ show: show.checked }));
 
+    // Filtering does not need the column to be editable — it only reads.
+    const tooVaried = c.distinct.length > 60 || c.tooMany;
+    const filter = el('input', {
+      type: 'checkbox',
+      checked: !!field.filter,
+      disabled: tooVaried && !field.filter,
+      title: tooVaried ? 'Too many distinct values to filter by' : 'Offer this column on the filter bar',
+    });
+    filter.addEventListener('change', () => update({ filter: filter.checked }));
+
     const current = !field.editable ? 'readonly' : field.type === 'enum' ? 'enum' : 'text';
     const type = el('select', { className: 'type-pick' }, [
       el('option', { value: 'readonly', textContent: 'Read-only', selected: current === 'readonly' }),
@@ -950,6 +981,7 @@ async function renderColumnConfig() {
 
     const head = el('div', { className: 'col-head' }, [
       el('label', { className: 'inline' }, [show, document.createTextNode('Show')]),
+      el('label', { className: 'inline' }, [filter, document.createTextNode('Filter')]),
       el('span', { className: 'col-name', textContent: c.name || '(unnamed column)' }),
       el('span', {
         className: 'muted small',
@@ -1011,9 +1043,9 @@ async function renderColumnConfig() {
     el('p', {
       className: 'muted small',
       textContent:
-        'Imported columns are read-only until you make them editable; columns you add start editable. Only an ' +
-        'editable column can be typed into or filled in by a playbook step. Removing a choice only takes it out of ' +
-        'the dropdown; rows already set to it keep their value.',
+        'Show puts a column in the table; Filter puts it on the filter bar — filtering works on any column, it ' +
+        'does not need to be editable. Imported columns are read-only until you make them editable; columns you ' +
+        'add start editable. Only an editable column can be typed into or filled in by a playbook step.',
     })
   );
 }

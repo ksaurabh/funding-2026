@@ -88,10 +88,14 @@ its values, with counts and a `(blank)` bucket. Several chips in one row widen
 the match; chips in different rows narrow it. The search box filters on any
 column's text.
 
-You choose which dropdown columns are worth filtering by: **× ** on a row
-takes it off the bar (and stops it narrowing the list), **+ Add filter** puts
-one back. The choice is saved with the list. Collapsed, the bar still names
-what is currently narrowing the list, and remembers being collapsed.
+You choose what is worth filtering by. Filtering only reads, so **any** column
+can go on the bar — it does not have to be editable or a dropdown. Tick
+**Filter** next to a column in **Columns…**, or use **+ Add filter** on the bar
+itself; **×** on a row takes it off again (and stops it narrowing the list).
+Dropdown columns start on the bar, everything else starts off it, and columns
+with more than 60 distinct values are not offered. The choice is saved with the
+list. Collapsed, the bar still names what is currently narrowing the list, and
+remembers being collapsed.
 
 Rows also have **tick boxes**. Tick any set of rows — shift-click to take a
 span, the header box takes everything currently on screen — and the run
