@@ -455,6 +455,25 @@ $('#clear-filters').addEventListener('click', () => {
   renderTable();
 });
 
+/**
+ * A run's progress poll rebuilds the table every couple of seconds. If that
+ * happens while a cell is being edited it destroys the control mid-use — an
+ * open dropdown closes by itself, a half-typed value is lost. So renders are
+ * held back while an editor has focus and replayed once it is done.
+ */
+const editorFocused = () => !!document.activeElement?.closest?.('.cell-edit, .field-row');
+let renderDeferred = false;
+
+document.addEventListener('focusout', () => {
+  // Let focus settle: moving between two cells should not trigger a redraw.
+  setTimeout(() => {
+    if (renderDeferred && !editorFocused()) {
+      renderDeferred = false;
+      renderTable();
+    }
+  }, 0);
+});
+
 const TICK_W = 30;
 const STATUS_W = 92;
 /** Unset columns get a sensible default: the first one wider, the rest even. */
@@ -593,6 +612,10 @@ function editableCell(row, column, field) {
 }
 
 function renderTable() {
+  if (editorFocused()) {
+    renderDeferred = true;
+    return;
+  }
   const { stepCount = 0 } = state.investors;
   const shown = shownColumns();
   const rowsForHead = visibleRows();
@@ -1364,7 +1387,7 @@ async function poll() {
       await loadCost();
       if (s.listId === state.listId) {
         await loadInvestors();
-        if (state.selected) await selectInvestor(state.selected);
+        if (state.selected && !editorFocused()) await selectInvestor(state.selected);
       } else if (parseHash().view === 'lists') {
         await loadLists();
       }
