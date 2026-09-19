@@ -642,6 +642,50 @@ app.get('/api/lists/:listId/investors/:id', (req, res) => {
   });
 });
 
+// Exactly what went to the model for one step, rebuilt from what was stored
+// when it ran: the system prompt, the thread it was sent with, and everything
+// the model then read on its own. Nothing is duplicated into answers.json —
+// the thread is reassembled from the prompts and answers already there.
+app.get('/api/lists/:listId/investors/:id/steps/:stepId/request', (req, res) => {
+  try {
+    const list = findList(req.params.listId);
+    const playbook = playbookOf(list.id);
+    const entry = read(listFile(list.id, 'answers'), {})[req.params.id];
+    const record = entry?.steps?.[req.params.stepId];
+    if (!record) return res.status(404).json({ error: 'That step has not run for this row.' });
+
+    const messages = [];
+    for (const priorId of record.context || []) {
+      const prior = entry.steps[priorId];
+      if (!prior) continue;
+      messages.push({ role: 'user', content: prior.prompt, stepName: prior.stepName });
+      messages.push({ role: 'assistant', content: prior.text, stepName: prior.stepName });
+    }
+    messages.push({ role: 'user', content: record.prompt, stepName: record.stepName, current: true });
+
+    const promptChars = messages.reduce((n, m) => n + (m.content?.length || 0), 0) + (playbook.system?.length || 0);
+    const searchChars = (record.searches || []).reduce((n, s) => n + (s.chars || 0), 0);
+
+    res.json({
+      stepName: record.stepName,
+      model: record.model,
+      mode: record.mode || 'conversation',
+      webSearch: !!record.webSearch,
+      system: playbook.system,
+      messages,
+      searches: record.searches || [],
+      resumes: record.resumes || 0,
+      usage: record.usage || null,
+      cost: record.cost ?? null,
+      // Characters, so the UI can show where the input tokens went.
+      promptChars,
+      searchChars,
+    });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 app.delete('/api/lists/:listId/investors/:id/answers', (req, res) => {
   const key = listFile(req.params.listId, 'answers');
   const answers = read(key, {});

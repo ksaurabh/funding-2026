@@ -28,13 +28,20 @@ export async function askLLM(client, { system, messages, settings, webSearch, si
   };
 
   let response;
+  let resumes = 0;
+  // Everything the model pulled in on its own during this turn. These results
+  // are what inflate input_tokens far beyond the prompt we wrote.
+  const searches = [];
+
   // Server-tool turns can stop with `pause_turn`; resume by pushing the paused
   // assistant turn back and calling again.
   for (let i = 0; i < 10; i++) {
     if (signal?.aborted) throw new Error('Cancelled');
     response = await client.messages.create(params, { signal });
+    collectSearches(response.content, searches);
     if (response.stop_reason !== 'pause_turn') break;
     params.messages = [...params.messages, { role: 'assistant', content: response.content }];
+    resumes++;
   }
 
   if (response.stop_reason === 'refusal') {
@@ -67,6 +74,8 @@ export async function askLLM(client, { system, messages, settings, webSearch, si
   return {
     text,
     citations,
+    searches,
+    resumes,
     truncated: response.stop_reason === 'max_tokens',
     usage: {
       input: response.usage.input_tokens,
@@ -74,6 +83,30 @@ export async function askLLM(client, { system, messages, settings, webSearch, si
       cacheRead: response.usage.cache_read_input_tokens ?? 0,
     },
   };
+}
+
+/** Pair each web search the model ran with the results it got back. */
+function collectSearches(content, searches) {
+  const pending = new Map();
+  for (const block of content) {
+    if (block.type === 'server_tool_use' && block.name === 'web_search') {
+      pending.set(block.id, block.input?.query ?? '');
+    }
+    if (block.type !== 'web_search_tool_result') continue;
+    const query = pending.get(block.tool_use_id) ?? '';
+    if (!Array.isArray(block.content)) {
+      searches.push({ query, error: block.content?.error_code || 'failed', results: 0, chars: 0 });
+      continue;
+    }
+    searches.push({
+      query,
+      results: block.content.length,
+      // The page text itself comes back opaque, so measure the block instead:
+      // a fair proxy for how much reading this search added to the turn.
+      chars: JSON.stringify(block.content).length,
+      sources: block.content.map((r) => ({ title: r.title, url: r.url })),
+    });
+  }
 }
 
 /**

@@ -185,6 +185,7 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
   for (const [key, val] of Object.entries(answers[row.__id]?.byKey || {})) priorByKey[key] = val;
 
   const messages = [];
+  const answered = []; // step ids already in the thread, for later inspection
   const signal = job.controller.signal;
 
   for (const step of steps) {
@@ -200,6 +201,10 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
       missing,
       updatedAt: new Date().toISOString(),
       model: settings.model,
+      webSearch: !!step.webSearch,
+      mode: playbook.mode === 'independent' ? 'independent' : 'conversation',
+      // Steps whose prompt and answer were already in the thread when this ran.
+      context: playbook.mode === 'independent' ? [] : [...answered],
     };
 
     const conversation = playbook.mode !== 'independent';
@@ -222,7 +227,10 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
         error: null,
       });
       bill(record, settings.model, result.usage);
+      record.searches = result.searches;
+      record.resumes = result.resumes;
       priorByKey[slugify(step.key || step.name)] = result.text;
+      answered.push(step.id);
       log(`✓ ${label} · ${step.name} (${result.usage.output} out tokens)`);
 
       // Fill a column from this answer, if the step is wired to one.

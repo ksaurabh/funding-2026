@@ -373,3 +373,47 @@ h4.section:first-child { margin-top: 4px; }
 .type-pick { width: auto; font-size: 12px; padding: 3px 6px; }
 .col-head button { font-size: 12px; padding: 3px 8px; }
 .col-head .inline { gap: 4px; }
+
+/* ------------------------------------------------- "what was sent" panel */
+.request { margin-top: 10px; font-size: 12px; }
+.request > summary { cursor: pointer; color: var(--muted); }
+.request > summary:hover { color: var(--accent); }
+.request-body { margin-top: 8px; }
+.budget {
+  background: var(--accent-soft);
+  border: 1px solid #eccdbd;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  color: var(--text);
+}
+.budget > div + div { margin-top: 4px; }
+.request h5 {
+  margin: 12px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.request h5.current { color: var(--accent); }
+.request pre {
+  white-space: pre-wrap;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+.request .search { margin: 4px 0; padding-left: 2px; }
+.request .search summary { cursor: pointer; }
+.request .search a {
+  display: block;
+  color: var(--accent);
+  padding: 2px 0 2px 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

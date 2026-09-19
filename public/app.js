@@ -474,7 +474,7 @@ async function selectInvestor(id) {
       parts.push(el('div', { className: 'body error small', textContent: `⚠ column not filled: ${a.writeError}` }));
     }
     if (a?.prompt) {
-      parts.push(el('details', {}, [el('summary', { textContent: 'Prompt sent' }), el('pre', { textContent: a.prompt })]));
+      parts.push(requestDetails(id, s));
     }
     parts.push(
       el('div', { className: 'actions', style: 'margin-top:8px' }, [
@@ -490,6 +490,132 @@ async function selectInvestor(id) {
   ]);
 
   $('#detail').replaceChildren(head, ...answers, raw);
+}
+
+/** Roughly what a chunk of text costs in tokens; good enough to apportion. */
+const approxTokens = (chars) => Math.round(chars / 3.7);
+
+/**
+ * "What was sent" for one step, loaded when opened: the system prompt, the
+ * whole thread, and everything the model pulled in on its own — which is
+ * usually where a surprising input-token count comes from.
+ */
+function requestDetails(rowId, step) {
+  const box = el('details', { className: 'request' });
+  box.append(el('summary', { textContent: 'What was sent' }));
+  const body = el('div', { className: 'request-body muted', textContent: 'Loading…' });
+  box.append(body);
+
+  let loaded = false;
+  box.addEventListener('toggle', async () => {
+    if (!box.open || loaded) return;
+    loaded = true;
+    let r;
+    try {
+      r = await api(`/api/lists/${state.listId}/investors/${rowId}/steps/${step.id}/request`);
+    } catch (err) {
+      body.textContent = err.message;
+      return;
+    }
+
+    const promptTok = approxTokens(r.promptChars);
+    const totalIn = r.usage?.input || 0;
+    const nodes = [];
+
+    // Where the input tokens went. Only the prompt side is measurable from
+    // here, so say what is known and label the remainder honestly.
+    const searchTok = approxTokens(r.searchChars);
+    const results = r.searches.reduce((n, x) => n + x.results, 0);
+    const lines = [
+      el('div', {
+        textContent:
+          `${totalIn.toLocaleString()} input tokens were billed for this step. ` +
+          `The prompt and thread below are only about ${promptTok.toLocaleString()} of them.`,
+      }),
+    ];
+
+    if (r.searches.length) {
+      lines.push(
+        el('div', {
+          textContent:
+            `The model ran ${r.searches.length} web search${r.searches.length === 1 ? '' : 'es'} while answering and ` +
+            `read ${results} result${results === 1 ? '' : 's'} — roughly ${searchTok.toLocaleString()} tokens of ` +
+            'page content that never appears in the prompt you wrote. That is where the bulk of the count comes from.',
+        })
+      );
+    } else {
+      lines.push(
+        el('div', {
+          className: 'muted',
+          textContent: 'Web search was off for this step, so nothing was fetched.',
+        })
+      );
+    }
+
+    lines.push(
+      el('div', {
+        className: 'muted small',
+        textContent:
+          `The remainder (~${Math.max(0, totalIn - promptTok - (r.searches.length ? searchTok : 0)).toLocaleString()}) ` +
+          'is the tool definitions, per-message overhead and the model\u2019s own thinking, which the API bills as ' +
+          'input but does not break out. Prompt and search figures here are estimates from character counts.',
+      })
+    );
+
+    if (r.resumes) {
+      lines.push(
+        el('div', {
+          className: 'muted small',
+          textContent: `The turn was resumed ${r.resumes}\u00d7 while the model worked, each resume re-sending the thread.`,
+        })
+      );
+    }
+
+    nodes.push(el('div', { className: 'budget' }, lines));
+
+    for (const search of r.searches) {
+      const d = el('details', { className: 'search' });
+      d.append(
+        el('summary', {
+          textContent:
+            `🔍 ${search.query || '(no query recorded)'} — ` +
+            (search.error ? `failed: ${search.error}` : `${search.results} results, ~${approxTokens(search.chars).toLocaleString()} tokens`),
+        })
+      );
+      for (const src of search.sources || []) {
+        d.append(
+          el('a', { href: src.url, target: '_blank', rel: 'noreferrer noopener', textContent: src.title || src.url })
+        );
+      }
+      nodes.push(d);
+    }
+
+    // The thread itself.
+    nodes.push(el('h5', { textContent: `System prompt · ${r.model}` }));
+    nodes.push(el('pre', { textContent: r.system || '(none)' }));
+    if (r.mode === 'conversation' && r.messages.length > 1) {
+      nodes.push(
+        el('p', {
+          className: 'muted small',
+          textContent: 'Conversation mode: earlier steps of this run were replayed as part of the thread.',
+        })
+      );
+    }
+    for (const m of r.messages) {
+      nodes.push(
+        el('h5', { className: m.current ? 'current' : '' }, [
+          document.createTextNode(`${m.role === 'user' ? 'You' : 'Model'} · ${m.stepName}`),
+          m.current ? el('span', { className: 'badge', textContent: 'this step' }) : null,
+        ])
+      );
+      nodes.push(el('pre', { textContent: m.content || '(empty)' }));
+    }
+
+    body.classList.remove('muted');
+    body.replaceChildren(...nodes.filter(Boolean));
+  });
+
+  return box;
 }
 
 function button(text, cls, onClick) {

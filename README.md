@@ -139,7 +139,16 @@ silently undercounting.
 The list view is the CSV as a table, with an `answers` badge per row showing how
 many enabled steps have run. Click a row to read every answer — rendered as Markdown, so headings,
 lists, tables, code and links come out formatted — along with its sources and
-the exact prompt that produced it. From there you can re-run the whole playbook
+its cost.
+
+**What was sent** under each answer opens the whole request: the system prompt,
+every message in the thread (in conversation mode that includes the earlier
+steps replayed with it), and every web search the model ran while answering,
+with the queries and the pages it read. It also apportions the input tokens,
+which is usually the answer to "why did this step cost so much" — search
+results are billed as input even though they never appear in the prompt you
+wrote. Nothing extra is stored for this: the thread is reassembled from the
+prompts and answers already on record. From there you can re-run the whole playbook
 for that one row, or re-run a single step.
 
 The two run buttons always say what they will actually do:
