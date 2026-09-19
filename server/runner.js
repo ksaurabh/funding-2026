@@ -106,7 +106,7 @@ function log(msg) {
  * Run the playbook over the given investor ids. Steps run sequentially per
  * investor; investors run `concurrency` at a time.
  */
-export function startRun({ listId, listName, investorIds, stepIds, onlyMissing }) {
+export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, scopeLabel }) {
   if (job && job.status === 'running') throw new Error('A run is already in progress.');
 
   const settings = read('settings', {});
@@ -133,6 +133,9 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing }
     stepErrors: 0,
     cost: 0,
     costUnknown: false,
+    // How rows were chosen ('selected', 'filtered', or ''), for the log.
+    scopeLabel: (scopeLabel || '').trim(),
+    started: 0,
     current: [],
     pending: new Set(targets.map((r) => r.__id)),
     startedAt: new Date().toISOString(),
@@ -140,7 +143,13 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing }
     log: [],
     controller: new AbortController(),
   };
-  log(`Starting run: ${targets.length} investor(s) × ${steps.length} step(s).`);
+  const what = job.scopeLabel ? `${job.scopeLabel} row` : 'row';
+  log(
+    `Starting run: ${targets.length} ${what}${targets.length === 1 ? '' : 's'} × ` +
+      `${steps.length} step${steps.length === 1 ? '' : 's'}` +
+      (onlyMissing ? ', filling gaps only' : '') +
+      '.'
+  );
 
   const concurrency = Math.max(1, Math.min(8, Number(settings.concurrency) || 1));
   const queue = targets.slice();
@@ -149,15 +158,20 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing }
     while (queue.length) {
       if (job.controller.signal.aborted) return;
       const row = queue.shift();
-      const label = row[investors.columns[0]] || row.__id;
+      const name = row[investors.columns[0]] || row.__id;
+      // Position in the run, fixed when the row is picked up, so each line
+      // says where in the set it belongs even with several running at once.
+      const position = ++job.started;
+      const label = `${position}/${job.total}${job.scopeLabel ? ' ' + job.scopeLabel : ''}`;
       job.pending.delete(row.__id);
-      job.current = [...job.current, { id: row.__id, label }];
+      job.current = [...job.current, { id: row.__id, label: name }];
+      log(`[${label}] ${name}`);
       try {
-        await runOne({ listId, client, settings, playbook, steps, row, label, onlyMissing });
+        await runOne({ listId, client, settings, playbook, steps, row, label, name, onlyMissing });
       } catch (err) {
         if (job.controller.signal.aborted) return;
         job.stepErrors++;
-        log(`✗ ${label}: ${err.message}`);
+        log(`[${label}] ✗ ${name}: ${err.message}`);
       }
       job.current = job.current.filter((c) => c.id !== row.__id);
       job.completed++;
@@ -184,7 +198,8 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing }
   return jobStatus();
 }
 
-async function runOne({ listId, client, settings, playbook, steps, row, label, onlyMissing }) {
+async function runOne({ listId, client, settings, playbook, steps, row, label, name, onlyMissing }) {
+  const line = (msg) => log(`[${label}] ${msg}`);
   const schema = readSchema(listId);
   const answers = read(listFile(listId, 'answers'), {});
   const priorByKey = {};
@@ -211,7 +226,7 @@ async function runOne({ listId, client, settings, playbook, steps, row, label, o
     }
 
     const { text: prompt, missing } = renderTemplate(step.prompt, row, priorByKey);
-    log(`→ ${label} · ${step.name}`);
+    line(`→ ${name} · ${step.name}`);
 
     const record = {
       stepId: step.id,
@@ -250,16 +265,16 @@ async function runOne({ listId, client, settings, playbook, steps, row, label, o
       record.resumes = result.resumes;
       priorByKey[slugify(step.key || step.name)] = result.text;
       answered.push(step.id);
-      log(`✓ ${label} · ${step.name} (${result.usage.output} out tokens)`);
+      line(`✓ ${name} · ${step.name} (${result.usage.output} out tokens)`);
 
       // Fill a column from this answer, if the step is wired to one.
       const field = step.writeTo && findField(schema, step.writeTo);
       if (step.writeTo && !field) {
         record.writeError = `Column "${step.writeTo}" no longer exists.`;
-        log(`⚠ ${label} · ${step.name}: ${record.writeError}`);
+        line(`⚠ ${name} · ${step.name}: ${record.writeError}`);
       } else if (field && !field.editable) {
         record.writeError = `Column "${step.writeTo}" is read-only. Make it editable to let a step fill it.`;
-        log(`⚠ ${label} · ${step.name}: ${record.writeError}`);
+        line(`⚠ ${name} · ${step.name}: ${record.writeError}`);
       } else if (field) {
         const column = step.writeTo; // the field map is keyed by name
         try {
@@ -282,12 +297,12 @@ async function runOne({ listId, client, settings, playbook, steps, row, label, o
           writeCell(listId, row.__id, column, value);
           row[column] = value;
           record.wroteTo = { column, value };
-          log(`⤷ ${label} · ${column} = ${value.length > 60 ? value.slice(0, 60) + '…' : value}`);
+          line(`⤷ ${name} · ${column} = ${value.length > 60 ? value.slice(0, 60) + '…' : value}`);
         } catch (err) {
           if (signal.aborted) throw new Error('Cancelled');
           record.writeError = err.message;
           job.stepErrors++;
-          log(`✗ ${label} · ${column}: ${err.message}`);
+          line(`✗ ${name} · ${column}: ${err.message}`);
         }
       }
     } catch (err) {
@@ -297,7 +312,7 @@ async function runOne({ listId, client, settings, playbook, steps, row, label, o
       record.text = '';
       record.error = err.message;
       job.stepErrors++;
-      log(`✗ ${label} · ${step.name}: ${err.message}`);
+      line(`✗ ${name} · ${step.name}: ${err.message}`);
     }
 
     saveAnswer(listId, row.__id, step, record, priorByKey);

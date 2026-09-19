@@ -211,7 +211,10 @@ Every one of them names the set it will act on, so a selection or filter is
 never a surprise, and confirms first with the bill projected from this list's
 own average per row.
 A run streams progress into the log strip at the bottom and can be cancelled
-mid-flight. Answers are written to disk after every step, so nothing is lost if
+mid-flight. Every line is stamped in your own time zone and prefixed with the
+row's place in the run — `[15/30 selected]` — so a long run tells you how far
+along it is at a glance, and lines stay readable when several rows are being
+worked at once. Answers are written to disk after every step, so nothing is lost if
 you stop. One run happens at a time across the whole app.
 
 **Download CSV** gives you the whole list -- imported columns, your edits, and

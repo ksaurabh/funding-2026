@@ -755,6 +755,7 @@ app.post('/api/lists/:listId/run', (req, res) => {
         investorIds: ids,
         stepIds: body.stepIds,
         onlyMissing: body.scope === 'gaps' || !!body.onlyMissing,
+        scopeLabel: body.scopeLabel,
       })
     );
   } catch (err) {

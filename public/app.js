@@ -1234,7 +1234,7 @@ $('#run-all').addEventListener('click', () => {
   // Send ids for anything but the whole list, so the server runs exactly this set.
   run(
     target.selected || isFiltered()
-      ? { investorIds: target.rows.map((r) => r.__id) }
+      ? { investorIds: target.rows.map((r) => r.__id), scopeLabel: target.selected ? 'selected' : 'filtered' }
       : { scope: 'all' }
   );
 });
@@ -1248,7 +1248,11 @@ $('#fill-gaps').addEventListener('click', () => {
   if (!confirm(`Run ${missingSteps} missing step(s) across ${rows.length} ${what}?\n\nSteps that already have an answer are kept.`)) return;
   run(
     target.selected || isFiltered()
-      ? { investorIds: rows.map((r) => r.__id), onlyMissing: true }
+      ? {
+          investorIds: rows.map((r) => r.__id),
+          onlyMissing: true,
+          scopeLabel: target.selected ? 'selected' : 'filtered',
+        }
       : { scope: 'gaps' }
   );
 });
@@ -1265,7 +1269,7 @@ $('#run-unanswered').addEventListener('click', () => {
   if (!confirmRun(rows, what)) return;
   run(
     target.selected || isFiltered()
-      ? { investorIds: rows.map((r) => r.__id) }
+      ? { investorIds: rows.map((r) => r.__id), scopeLabel: target.selected ? 'selected' : 'filtered' }
       : { scope: 'unanswered' }
   );
 });
@@ -1327,7 +1331,12 @@ $('#steps-run').addEventListener('click', async (e) => {
 
   if (!confirm(`Run ${stepIds.length} step(s) on ${rows.length} row(s)?`)) return;
   $('#steps-dialog').close();
-  run({ investorIds: rows.map((r) => r.__id), stepIds, onlyMissing });
+  run({
+    investorIds: rows.map((r) => r.__id),
+    stepIds,
+    onlyMissing,
+    scopeLabel: target.selected ? 'selected' : isFiltered() ? 'filtered' : '',
+  });
 });
 
 $('#clear-selection').addEventListener('click', () => {
