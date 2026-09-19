@@ -228,7 +228,10 @@ app.post('/api/lists/:id/reimport', (req, res) => {
     const kept = Object.fromEntries(
       Object.entries(schema.fields).filter(([name, f]) => f.custom || investors.columns.includes(name))
     );
-    write(listFile(list.id, 'schema'), { fields: kept });
+    write(listFile(list.id, 'schema'), {
+      fields: kept,
+      order: schema.order.filter((n) => kept[n]),
+    });
     pruneEdits(list.id, new Set(Object.keys(kept)));
 
     const lists = getLists();
@@ -425,6 +428,7 @@ app.get('/api/lists/:listId/schema', (req, res) => {
     const { allColumns, columns, rows, schema } = readRowsMerged(list.id);
     res.json({
       fields: schema.fields,
+      order: allColumns,
       columns: allColumns.map((name) => {
         const distinct = distinctValues(rows, name);
         return {
@@ -469,11 +473,16 @@ app.put('/api/lists/:listId/schema', (req, res) => {
     }
     if (Object.keys(fields).length > 80) throw new Error('Too many columns.');
 
+    // Column order, as the list is displayed and downloaded.
+    const order = [];
+    for (const n of req.body?.order || []) if (fields[n] && !order.includes(n)) order.push(n);
+    for (const n of Object.keys(fields)) if (!order.includes(n)) order.push(n);
+
     // Forget cell values for added columns that are gone.
     const live = new Set([...imported, ...Object.keys(fields)]);
     pruneEdits(list.id, live);
 
-    res.json(write(listFile(list.id, 'schema'), { fields }));
+    res.json(write(listFile(list.id, 'schema'), { fields, order }));
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
@@ -539,7 +548,10 @@ app.post('/api/lists/:listId/columns/rename', (req, res) => {
 
     const fields = {};
     for (const [name, f] of Object.entries(schema.fields)) fields[name === from ? to : name] = f;
-    write(listFile(list.id, 'schema'), { fields });
+    write(listFile(list.id, 'schema'), {
+      fields,
+      order: schema.order.map((n) => (n === from ? to : n)),
+    });
 
     res.json({ ok: true, warnings: renamePlaybookRefs(list, from, to) });
   } catch (err) {

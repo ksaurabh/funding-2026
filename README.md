@@ -72,6 +72,9 @@ in. Per column you can:
   back.
 - **Show or hide** it in the table. The first four imported columns show by
   default; everything else is available but out of the way.
+- **Reorder** it with ↑ / ↓. One order drives the table, the **Fields** block
+  in the row detail, and the download, so what you arrange is what you get
+  everywhere. It survives renames and re-imports.
 - **Add** a column of your own, free text or dropdown. Added columns are
   editable from the start.
 
@@ -161,9 +164,11 @@ silently undercounting.
 ### Researching a list
 
 The list view is the CSV as a table, with an `answers` badge per row showing how
-many enabled steps have run. Click a row to read every answer — rendered as Markdown, so headings,
-lists, tables, code and links come out formatted — along with its sources and
-its cost.
+many enabled steps have run. Click a row to open it. **Fields** lists every one of its columns in the order
+you set, editable in place where the column allows it, and below that comes
+each answer — rendered as Markdown, so headings, lists, tables, code and links
+come out formatted — with its sources and its cost. The answers follow the
+playbook's step order, which you set by reordering steps on the Playbook tab.
 
 **What was sent** under each answer opens the whole request: the system prompt,
 every message in the thread (in conversation mode that includes the earlier

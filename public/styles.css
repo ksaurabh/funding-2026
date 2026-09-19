@@ -514,3 +514,27 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 }
 .filter-group:hover .drop-filter { color: var(--muted); }
 .drop-filter:hover { background: none; color: var(--err); }
+
+/* ------------------------------------------- row fields in the detail pane */
+.answer.fields h4 { margin-bottom: 8px; }
+.field-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid #f0ece4;
+}
+.field-row:last-child { border-bottom: 0; }
+.field-name {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.field-value { white-space: pre-wrap; word-break: break-word; }
+.field-row .cell-input { width: 100%; }
+.field-row .cell-select { max-width: 100%; }
+.reorder { display: inline-flex; gap: 2px; }
+.reorder button { padding: 3px 6px; line-height: 1; }

@@ -77,7 +77,7 @@ export const playbookFile = (id) => path.posix.join('playbooks', safeId(id));
 // Imported columns are shown but read-only until you say otherwise; a column
 // added here is editable from the start, since it would be useless read-only.
 // `type` only matters once a column is editable, and defaults to free text.
-export const DEFAULT_SCHEMA = { fields: {} };
+export const DEFAULT_SCHEMA = { fields: {}, order: [] };
 
 const DEFAULT_SHOWN = 4;
 
@@ -140,7 +140,13 @@ export function readSchema(listId, columns) {
       show: f.show !== false,
     };
   }
-  return { fields };
+  // A saved order wins; anything it does not mention keeps its natural place.
+  const wanted = (raw.order || []).filter((n) => n in fields);
+  const ordered = {};
+  for (const n of wanted) ordered[n] = fields[n];
+  for (const [n, f] of Object.entries(fields)) if (!(n in ordered)) ordered[n] = f;
+
+  return { fields: ordered, order: Object.keys(ordered) };
 }
 
 export const findField = (schema, name) => schema.fields[name];
@@ -158,7 +164,10 @@ export function readRowsMerged(listId) {
   const addedNames = Object.entries(schema.fields)
     .filter(([name, f]) => f.custom && !investors.columns.includes(name))
     .map(([name]) => name);
-  const allColumns = [...investors.columns, ...addedNames];
+  // schema.order already covers imported and added columns together.
+  const natural = [...investors.columns, ...addedNames];
+  const allColumns = schema.order.filter((n) => natural.includes(n));
+  for (const n of natural) if (!allColumns.includes(n)) allColumns.push(n);
   const allowed = new Set(allColumns);
 
   const rows = investors.rows.map((r) => {

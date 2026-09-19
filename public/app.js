@@ -250,13 +250,19 @@ async function patchField(column, patch) {
   state.schema = await api(`/api/lists/${state.listId}/schema`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields: next }),
+    body: JSON.stringify({ fields: next, order: state.investors.columns }),
   });
   await loadInvestors();
 }
 const editableColumns = () => columnsWhere((f) => f.editable);
 const shownColumns = () => columnsWhere((f) => f.show);
 const cellValue = (row, col) => String(row[col] ?? '').trim();
+
+/** Keep the table's copy of a row in step with an edit made anywhere. */
+function applyCellLocally(rowId, column, value) {
+  const row = state.investors.rows.find((r) => r.__id === rowId);
+  if (row) row[column] = value;
+}
 
 async function saveCell(rowId, column, value) {
   const r = await api(`/api/lists/${state.listId}/investors/${rowId}`, {
@@ -476,6 +482,8 @@ function editableCell(row, column, field) {
       try {
         await saveCell(row.__id, column, value);
         row[column] = value;
+        applyCellLocally(row.__id, column, value);
+        renderTable();
       } catch (err) {
         alert(err.message);
         input.value = current;
@@ -511,6 +519,7 @@ function editableCell(row, column, field) {
     try {
       await saveCell(row.__id, column, value);
       row[column] = value;
+      applyCellLocally(row.__id, column, value);
       renderFilters();
       renderTable();
     } catch (err) {
@@ -742,12 +751,23 @@ async function selectInvestor(id) {
     return el('div', { className: 'answer' }, parts);
   });
 
-  const raw = el('details', { className: 'answer' }, [
-    el('summary', { textContent: 'CSV row data' }),
-    el('pre', { textContent: data.columns.map((c) => `${c}: ${data.investor[c]}`).join('\n') }),
+  // The row's own columns, in the order set in Columns… — editable ones
+  // stay editable here, so the detail pane is a full view of the row.
+  const rowFields = el('div', { className: 'answer fields' }, [
+    el('h4', { textContent: 'Fields' }),
+    ...data.columns.map((c) => {
+      const f = data.schema?.fields?.[c];
+      const value = f?.editable
+        ? editableCell(data.investor, c, f)
+        : el('span', { className: 'field-value', textContent: data.investor[c] || '—' });
+      return el('div', { className: 'field-row' }, [
+        el('span', { className: 'field-name', textContent: c || '(unnamed)', title: c }),
+        value,
+      ]);
+    }),
   ]);
 
-  $('#detail').replaceChildren(head, ...answers, raw);
+  $('#detail').replaceChildren(head, rowFields, ...answers);
 }
 
 /** Roughly what a chunk of text costs in tokens; good enough to apportion. */
@@ -896,11 +916,11 @@ $('#columns-btn').addEventListener('click', async () => {
 
 $('#columns-dialog').addEventListener('close', () => loadInvestors());
 
-async function saveSchema(fields) {
+async function saveSchema(fields, order) {
   state.schema = await api(`/api/lists/${state.listId}/schema`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ fields }),
+    body: JSON.stringify({ fields, order: order || Object.keys(fields) }),
   });
   await renderColumnConfig();
 }
@@ -941,7 +961,17 @@ async function renderColumnConfig() {
   state.schema = { fields: info.fields };
   const all = info.fields;
 
-  const rows = info.columns.map((c) => {
+  const order = info.order || info.columns.map((c) => c.name);
+  const move = (name, delta) => {
+    const next = [...order];
+    const i = next.indexOf(name);
+    const j = i + delta;
+    if (i < 0 || j < 0 || j >= next.length) return;
+    next.splice(j, 0, next.splice(i, 1)[0]);
+    saveSchema(all, next);
+  };
+
+  const rows = info.columns.map((c, index) => {
     const field = all[c.name] || { editable: !c.imported, type: 'text', values: [], custom: !c.imported, show: true };
     const update = (patch) => saveSchema({ ...all, [c.name]: { ...field, ...patch } });
 
@@ -1002,6 +1032,10 @@ async function renderColumnConfig() {
           : 'added here',
       }),
       type,
+      el('span', { className: 'reorder' }, [
+        button('↑', '', () => move(c.name, -1)),
+        button('↓', '', () => move(c.name, 1)),
+      ]),
       rename,
       c.imported
         ? null
