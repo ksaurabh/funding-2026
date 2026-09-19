@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { csvToRecords, toCsv } from './csv.js';
 import {
+  MAX_AUTO_FILTER,
   read,
   write,
   exists,
@@ -461,12 +462,14 @@ app.put('/api/lists/:listId/schema', (req, res) => {
       const custom = !imported.has(name);
       const type = TYPES.has(f?.type) ? f.type : 'text';
       const editable = custom ? f?.editable !== false : !!f?.editable;
+      // Choices are kept even while read-only, so toggling back is lossless.
+      const values = type === 'enum' ? cleanValues(f?.values) : [];
       fields[name] = {
         editable,
         type,
-        // Choices are kept even while read-only, so toggling back is lossless.
-        values: type === 'enum' ? cleanValues(f?.values) : [],
-        filter: f?.filter === undefined ? type === 'enum' : !!f.filter,
+        values,
+        filter:
+          f?.filter === undefined ? type === 'enum' && values.length <= MAX_AUTO_FILTER : !!f.filter,
         custom,
         show: f?.show !== false,
       };

@@ -95,8 +95,10 @@ You choose what is worth filtering by. Filtering only reads, so **any** column
 can go on the bar — it does not have to be editable or a dropdown. Tick
 **Filter** next to a column in **Columns…**, or use **+ Add filter** on the bar
 itself; **×** on a row takes it off again (and stops it narrowing the list).
-Dropdown columns start on the bar, everything else starts off it, and columns
-with more than 60 distinct values are not offered. The choice is saved with the
+A dropdown of **10 values or fewer** starts on the bar, since that makes a
+short scannable row of chips; longer dropdowns and every other column start
+off it and go on when you say so. Columns with more than 60 distinct values
+are not offered at all. The choice is saved with the
 list. Collapsed, the bar still names what is currently narrowing the list, and
 remembers being collapsed.
 

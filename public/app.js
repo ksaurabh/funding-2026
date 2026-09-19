@@ -221,6 +221,9 @@ const enumColumns = () => columnsWhere((f) => f.editable && f.type === 'enum');
 // Filtering is a read: any column can be filtered on, dropdown or not. Only
 // columns with a workable number of distinct values are worth offering.
 const FILTERABLE_MAX = 60;
+// Matches the server: a dropdown joins the filter bar on its own only if its
+// chips make a short row. Longer ones you add deliberately.
+const MAX_AUTO_FILTER = 10;
 
 /** Value -> count for one column, over the whole list. */
 function valueCounts(column) {
@@ -1000,13 +1003,16 @@ async function renderColumnConfig() {
       }),
     ]);
     // Switching to a dropdown seeds the choices from what is already in the column.
-    type.addEventListener('change', () =>
+    type.addEventListener('change', () => {
+      const values = type.value === 'enum' && !field.values.length ? c.distinct : field.values;
       update({
         editable: type.value !== 'readonly',
         type: type.value === 'enum' ? 'enum' : 'text',
-        values: type.value === 'enum' && !field.values.length ? c.distinct : field.values,
-      })
-    );
+        values,
+        // Put a short new dropdown on the filter bar; never take one off.
+        filter: field.filter || (type.value === 'enum' && values.length <= MAX_AUTO_FILTER),
+      });
+    });
 
     const rename = button('Rename', '', async () => {
       const to = prompt(`Rename "${c.name}" to`, c.name);

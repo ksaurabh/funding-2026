@@ -80,6 +80,11 @@ export const playbookFile = (id) => path.posix.join('playbooks', safeId(id));
 export const DEFAULT_SCHEMA = { fields: {}, order: [] };
 
 const DEFAULT_SHOWN = 4;
+// A dropdown goes on the filter bar by itself only if its values make a short,
+// scannable row of chips. Anything longer you add deliberately.
+export const MAX_AUTO_FILTER = 10;
+
+const autoFilter = (f) => f.type === 'enum' && (f.values || []).length <= MAX_AUTO_FILTER;
 
 export function defaultField(custom = false, show = true) {
   return { editable: custom, type: 'text', values: [], custom, show, filter: false };
@@ -120,9 +125,9 @@ export function readSchema(listId, columns) {
       editable: !!f.editable,
       type: f.type === 'enum' ? 'enum' : 'text',
       values: f.values || [],
-      // Any column can be filtered on; dropdowns are on the bar by default
-      // because a fixed set of values is what you usually want to slice by.
-      filter: f.filter === undefined ? f.type === 'enum' : !!f.filter,
+      // Any column can be filtered on; a short dropdown is the one case worth
+      // putting on the bar without being asked.
+      filter: f.filter === undefined ? autoFilter(f) : !!f.filter,
       custom: false,
       // Imported columns past the first few stay out of the table until asked for.
       show: f.show === undefined ? i < DEFAULT_SHOWN : !!f.show,
@@ -135,7 +140,7 @@ export function readSchema(listId, columns) {
       editable: f.editable !== false,
       type: f.type === 'enum' ? 'enum' : 'text',
       values: f.values || [],
-      filter: f.filter === undefined ? f.type === 'enum' : !!f.filter,
+      filter: f.filter === undefined ? autoFilter(f) : !!f.filter,
       custom: true,
       show: f.show !== false,
     };
