@@ -538,3 +538,16 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .field-row .cell-select { max-width: 100%; }
 .reorder { display: inline-flex; gap: 2px; }
 .reorder button { padding: 3px 6px; line-height: 1; }
+
+.step-pick {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+}
+.step-pick:last-child { border-bottom: 0; }
+.step-pick input { margin: 0; }
+.gap-top { margin-top: 12px; }
+.dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }

@@ -42,6 +42,7 @@
     <button id="columns-btn">Columns…</button>
     <span class="spacer"></span>
     <button id="run-all">Run all</button>
+    <button id="run-steps">Run steps…</button>
     <button id="fill-gaps">Fill gaps</button>
     <button id="run-unanswered">Run unanswered</button>
     <button id="cancel" class="danger" disabled>Cancel</button>
@@ -69,6 +70,22 @@
     </aside>
   </div>
   <div id="log" class="log"></div>
+
+  <dialog id="steps-dialog">
+    <form method="dialog" class="dialog-head">
+      <h3>Run selected steps</h3>
+      <button value="close">Cancel</button>
+    </form>
+    <p id="steps-target" class="muted small"></p>
+    <div id="step-picker"></div>
+    <label class="inline gap-top">
+      <input id="steps-only-missing" type="checkbox" />
+      Skip rows that already have an answer for these steps
+    </label>
+    <div class="dialog-foot">
+      <button id="steps-run" class="primary">Run</button>
+    </div>
+  </dialog>
 
   <dialog id="columns-dialog">
     <form method="dialog" class="dialog-head">

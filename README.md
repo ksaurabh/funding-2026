@@ -197,6 +197,12 @@ The two run buttons always say what they will actually do:
 - **Run unanswered (n)** — the whole playbook again on every row missing
   anything, replacing what is there. Use it when a prompt changed and you want
   a clean pass rather than the cheap one.
+- **Run steps…** — tick which steps to run, and they run on whatever set is in
+  play (selected, filtered, or the whole list). This is the one to reach for
+  after editing a single step's prompt: re-run just that step, just on the
+  rows you care about. A **Skip rows that already have an answer for these
+  steps** option turns it into a targeted gap-fill. The picker remembers your
+  last choice.
 
 Every one of them names the set it will act on, so a selection or filter is
 never a surprise, and confirms first with the bill projected from this list's

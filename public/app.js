@@ -24,6 +24,7 @@ const state = {
   cost: null,
   playbooks: [],
   running: false,
+  lastStepPick: null, // remembered tick state of the step picker
   // Which rows the current run is working on / still has queued.
   job: { listId: null, current: new Set(), pending: new Set() },
   listId: null,
@@ -1165,6 +1166,66 @@ $('#run-unanswered').addEventListener('click', () => {
       ? { investorIds: rows.map((r) => r.__id) }
       : { scope: 'unanswered' }
   );
+});
+
+// ------------------------------------------------- run a subset of steps
+
+$('#run-steps').addEventListener('click', () => {
+  const target = runTarget();
+  if (!target.rows.length) return alert('No rows to run.');
+
+  const steps = (state.playbook?.steps || []).filter((s) => s.enabled !== false);
+  if (!steps.length) return alert('This list’s playbook has no enabled steps.');
+
+  const scope = target.selected ? 'selected' : isFiltered() ? 'filtered' : '';
+  $('#steps-target').textContent =
+    `${target.rows.length} ${scope ? scope + ' row' : 'row'}${target.rows.length === 1 ? '' : 's'}` +
+    '. Pick the steps to run; the answers they produce replace what is there.';
+
+  // Default to whatever was picked last time, else everything.
+  $('#step-picker').replaceChildren(
+    ...steps.map((st) =>
+      el('label', { className: 'step-pick' }, [
+        el('input', {
+          type: 'checkbox',
+          value: st.id,
+          checked: state.lastStepPick ? state.lastStepPick.includes(st.id) : true,
+        }),
+        el('span', { textContent: st.name }),
+        st.writeTo ? el('span', { className: 'badge', textContent: `→ ${st.writeTo}` }) : null,
+      ])
+    )
+  );
+  $('#steps-dialog').showModal();
+});
+
+$('#steps-run').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const stepIds = [...document.querySelectorAll('#step-picker input:checked')].map((i) => i.value);
+  if (!stepIds.length) return alert('Pick at least one step.');
+  state.lastStepPick = stepIds;
+
+  const onlyMissing = $('#steps-only-missing').checked;
+  const target = runTarget();
+  let rows = target.rows;
+  if (onlyMissing) {
+    // Rows already holding every picked step have nothing to do.
+    const answered = await Promise.all(
+      rows.map(async (r) => {
+        const d = await api(`/api/lists/${state.listId}/investors/${r.__id}`);
+        return d.steps.every((st) => !stepIds.includes(st.id) || st.answer?.text);
+      })
+    );
+    rows = rows.filter((_, i) => !answered[i]);
+    if (!rows.length) {
+      $('#steps-dialog').close();
+      return alert('Every one of those rows already has an answer for the steps you picked.');
+    }
+  }
+
+  if (!confirm(`Run ${stepIds.length} step(s) on ${rows.length} row(s)?`)) return;
+  $('#steps-dialog').close();
+  run({ investorIds: rows.map((r) => r.__id), stepIds, onlyMissing });
 });
 
 $('#clear-selection').addEventListener('click', () => {
