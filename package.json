@@ -1,0 +1,15 @@
+{
+  "name": "investor-playbook",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Run an LLM playbook against a CSV list of investors",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.127.0",
+    "express": "^4.21.2"
+  }
+}

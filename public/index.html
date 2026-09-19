@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Investor Playbook</title>
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<header>
+  <h1>Investor Playbook</h1>
+  <nav>
+    <button class="tab active" data-view="investors">Investors</button>
+    <button class="tab" data-view="playbook">Playbook</button>
+    <button class="tab" data-view="settings">Settings</button>
+  </nav>
+  <div id="runpill" class="pill idle">Idle</div>
+</header>
+
+<!-- ------------------------------------------------------------ investors -->
+<main id="view-investors" class="view">
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Filter investors…" />
+    <span id="count" class="muted"></span>
+    <span class="spacer"></span>
+    <button id="run-all">Run all</button>
+    <button id="run-unanswered">Run unanswered</button>
+    <button id="cancel" class="danger" disabled>Cancel</button>
+    <a href="/api/export.csv" class="btn">Export CSV</a>
+    <label class="btn">Import CSV<input id="import" type="file" accept=".csv" hidden /></label>
+  </div>
+  <div class="split">
+    <div class="listpane">
+      <table id="investor-table">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <aside id="detail" class="detail">
+      <p class="muted pad">Select an investor to see its answers.</p>
+    </aside>
+  </div>
+  <div id="log" class="log"></div>
+</main>
+
+<!-- ------------------------------------------------------------- playbook -->
+<main id="view-playbook" class="view hidden">
+  <div class="toolbar">
+    <button id="add-step" class="primary">+ Add step</button>
+    <button id="save-playbook">Save playbook</button>
+    <span id="playbook-status" class="muted"></span>
+  </div>
+  <div class="split">
+    <div class="listpane pad">
+      <label class="field">
+        <span>System prompt <em>(applies to every step)</em></span>
+        <textarea id="system" rows="4"></textarea>
+      </label>
+      <label class="field">
+        <span>Step context</span>
+        <select id="mode">
+          <option value="conversation">Conversation — each step sees the previous answers</option>
+          <option value="independent">Independent — each step is a fresh call</option>
+        </select>
+      </label>
+      <div id="steps"></div>
+    </div>
+    <aside class="detail pad">
+      <h3>Template variables</h3>
+      <p class="muted">Click to copy. Use them anywhere in a step prompt.</p>
+      <div id="tokens" class="tokens"></div>
+      <h3>Preview</h3>
+      <p class="muted">Rendered against the first investor in the list.</p>
+      <pre id="preview" class="preview"></pre>
+    </aside>
+  </div>
+</main>
+
+<!-- ------------------------------------------------------------- settings -->
+<main id="view-settings" class="view hidden">
+  <div class="pad narrow">
+    <h2>Anthropic API</h2>
+    <label class="field">
+      <span>API key <em id="keyhint"></em></span>
+      <input id="apiKey" type="password" placeholder="sk-ant-…" autocomplete="off" />
+    </label>
+    <label class="field">
+      <span>Model</span>
+      <select id="model">
+        <option value="claude-opus-5">Claude Opus 5 — most capable</option>
+        <option value="claude-sonnet-5">Claude Sonnet 5 — cheaper</option>
+        <option value="claude-haiku-4-5">Claude Haiku 4.5 — fastest / cheapest</option>
+      </select>
+    </label>
+    <label class="field">
+      <span>Effort</span>
+      <select id="effort">
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+        <option value="xhigh">xhigh</option>
+        <option value="max">max</option>
+      </select>
+    </label>
+    <div class="row">
+      <label class="field">
+        <span>Max tokens per answer</span>
+        <input id="maxTokens" type="number" min="512" max="64000" step="512" />
+      </label>
+      <label class="field">
+        <span>Investors in parallel</span>
+        <input id="concurrency" type="number" min="1" max="8" />
+      </label>
+    </div>
+    <button id="save-settings" class="primary">Save settings</button>
+    <button id="clear-key" class="danger">Clear stored key</button>
+    <p id="settings-status" class="muted"></p>
+    <p class="muted small">The key is stored in <code>data/settings.json</code> on this machine only.</p>
+  </div>
+</main>
+
+<script src="/app.js" type="module"></script>
+</body>
+</html>

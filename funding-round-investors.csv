@@ -1,0 +1,530 @@
+Lead Investor,Deals,Avg Round Size (USD),Companies,Min Announced Date,Max Announced Date
+Forgepoint Capital,20,17392500,"Bayshore Networks,Uptycs,Surefire Cyber,SPHERE,Discern Security,Cloudentity,4iQ,1Kosmos,Symmetry Systems,Remediant,Converge,DataBahn,GetReal Security,Huntress,SolCyber,ReversingLabs,Bishop Fox,Cysiv,Qevlar AI,IronNet Cybersecurity",2015-10-25,2026-07-30
+Accel,18,17839312,"Demisto,Corelight,Sysdig,Tailscale,Luma,Tessian,Privacera,Styra,Truora,C1 (formerly ConductorOne),Vorlon,Filigran,Ermetic - a Tenable company,Stairwell,CrowdStrike,Prophet Security,Callsign,depthfirst",2012-02-23,2026-01-14
+Lightspeed Venture Partners,16,17381250,"Arctic Wolf,Confluera,Rubrik,enSilo,Theta Lake,Glean,Oosto,Panther,CyCognito,Ocean,Fireglass,Blink Ops,Straiker,Normalyze,Noname Security,Zscaler",2012-05-01,2026-05-19
+Andreessen Horowitz,14,17509064,"Luma,Illumio,Bromium,Pindrop,Stoïk,SentiLink,Truffle Security,Doppel,Socket,Method Security,Material Security,Aleo,Isovalent,CipherCloud",2011-06-22,2025-11-19
+Insight Partners,13,22819087,"Detectify,DeepFactor,Calamu Technologies,Veriti,Reco,Cycode,Ory Corp,Frontegg,DNSFilter,Root,Laminar,Docker",2018-03-16,2025-04-22
+New Enterprise Associates,13,15640000,"Barkly,Evident,WireWheel.io,Bitglass,ThreatQuotient,ZeroFox,Laurel Networks,DataVisor,SafeBase,Expanse,Beyond Identity,Cyence",2000-03-09,2022-03-10
+SYN Ventures,13,19423077,"Upfort,Metabase Q,SynSaber,Sevco Security,BforeAI,Query,Miggo Security,Balance Theory,SquareX,RevealSecurity,Tuskira,iCOUNTER,Phosphorus Cybersecurity",2021-05-20,2026-07-31
+Ten Eleven Ventures,13,13369231,"Hexadite,Device Authority,Silent Push,Vulcan Cyber,Revelock,VulnCheck,JASK,Corsha,Vaultree,Axis Security,BlueFlag Security,Ordr,Fig Security",2016-02-10,2026-03-23
+Bain Capital Ventures,11,15268773,"Rapid7,Attivo Networks,Qwiet,Evident.io,Sysdig,VISO TRUST,JupiterOne,ObserveIT,Straiker,Red Balloon Security,InAuth",2008-09-17,2025-03-27
+Kleiner Perkins,11,13113636,"Shape Security,Synack,Area 1 Security,Trusona,interos.ai,Ionic Security,DUST Identity,Glean,Open Raven,Teleport",2012-04-26,2020-06-16
+Ballistic Ventures,10,16550000,"SpecterOps,Alethea,Zip Security,ArmorCode,Concentric AI,BreachRx,Oligo Security,Reach Security,Noma Security,Pangea",2022-05-11,2025-07-14
+Bessemer Venture Partners,10,18619728,"Protectt.ai,Bastille Networks Internet Security,Electric,Defense.Net,Axonius,Eye Security,Bold Security,Virtru,Legit Security,Claroty",2013-08-06,2026-03-12
+ClearSky,10,12880000,"Inky,SecurityAdvisor,ZeroNorth,AppOmni,Solebit,Mitiga,BigID,Phylum,Bluelava",2018-01-29,2023-03-14
+Evolution Equity Partners,10,21380000,"Panaseer,Guardsix,BluBracket,TrueFort,Satori Cyber,Bright Security,Phosphorus Cybersecurity,Sweet Security,Oleria,Protect AI",2017-04-04,2024-03-06
+Greylock,10,12900000,"NETSCOUT Systems,CoWare,Skyhigh Networks,Obsidian Security,Opal Security,Palo Alto Networks,Sqreen,Kodem Security,Abnormal AI,Bedrock Data",1996-02-01,2025-11-17
+Paladin Capital Group,10,14989307,"IriusRisk,RiskSense,Expel,SCYTHE,Hack The Box,Human Security,CalypsoAI,MIND,RADICL Defense",2014-06-24,2026-02-03
+Index Ventures,9,15211111,"Datadog,Lacoon Mobile Security,AttackIQ,Castle,Signal Sciences,Monad,Sublime Security,Astelia,Linx Security",2012-11-21,2026-02-24
+AllegisCyber,8,13400000,"CyberGRX,Conceal,Deepfence Inc,Source Defense,Dragos,Prevailion,Vicarius,Elisity",2016-07-14,2022-02-09
+Battery Ventures,8,22025000,"LightCyber,ZeroTier,Bridgecrew,Vera,Normalyze,imper.ai,AegisAI,Koi",2014-09-10,2026-07-23
+CRV,8,17812500,"Upstream Security,Respond Software,InCountry,Outtake,Fleet Device Management,Doppler,Astrix Security,ProjectDiscovery",2017-08-16,2025-04-09
+Dell Technologies Capital,8,12562500,"Cymulate,RedLock,JASK,Oloid,RiskRecon,Remediant,Lightspin,Entro Security",2017-03-27,2024-06-18
+Norwest,8,16527500,"Exabeam,Bitglass,Aporeto,Dtex Systems,Red Access,SlashNext,Fireglass,ORION Security",2013-03-08,2026-02-03
+Sequoia Capital,8,16856250,"Palo Alto Networks,SecurityScorecard,Versa Networks,Cohesity,StrongDM,Stairwell,XBOW,Prelude",2006-01-01,2025-01-01
+Shasta Ventures,8,9862500,"Deep Sentinel,Skycure,Cequence Security,Portal26,Viakoo,ISARA Corporation,Valimail,Banyan Security",2015-03-24,2025-11-04
+U.S. Venture Partners,8,13750000,"Arkose Labs,prevoty,AirEye,Luminate Security,TrustLab,Hunters,Cato Networks,IONIX",2015-03-11,2023-06-15
+Benchmark,7,11714286,"Blue Hexagon,Proofpoint,CloudPassage,CTERA Networks,HackerOne,Elastic,Docker",2003-01-02,2019-11-13
+Intel Capital,7,17571429,"Intezer,SAM Seamless Network,Duality Technologies,Zenity,Grip Security,Trinity Cyber,Tuskira",2017-10-19,2024-12-04
+M12 - Microsoft's Venture Fund,7,13671429,"HYAS,Aqua Security,Reach Security,Edera,NsKnox,Hunters,Valence Security",2016-09-27,2025-07-29
+Notable Capital,7,23000000,"Nozomi Networks,Token Security,Torq,Orca Security,Gem,Clover Security,Act Security",2016-10-24,2025-12-29
+Energy Impact Partners,6,13333333,"Dragos,Oort,Finite State,VanishID,RangeForce,42Crunch",2017-08-14,2022-10-06
+Felicis,6,17750000,"Altitude Networks,Operant AI,C1 (formerly ConductorOne),Ethena,Runlayer,Terra Security",2019-07-31,2026-06-24
+Google Ventures,6,14185318,"Luma,Push Security,Mokn,Censys,dope.security,Resistant AI",2016-09-14,2026-05-29
+Storm Ventures,6,10066667,"RedLock,Digital Shadows,LogicHub,TruSTAR,Dasera,Clear Skye",2015-02-11,2023-04-19
+Tiger Global Management,6,21584909,"Securden,SentinelOne,Cloudsmith,Laminar,ARMO,Cider Security",2014-04-23,2022-06-02
+.406 Ventures,5,8760000,"GreatHorn,Terbium Labs,Onapsis,Corvus Insurance,Oort",2014-06-18,2022-10-06
+Crosslink Capital,5,10300000,"Bluelava,Britive,Bolster AI,ZeroNorth,VanishID",2019-08-23,2022-02-23
+General Catalyst,5,13200000,"Preempt Security,Ostra Security,Menlo Security,Armorblox,Method Security",2014-11-18,2025-11-19
+Madrona,5,15670000,"Esper,Eclypsium,PlexTrac,Impart Security,Gray Swan",2018-12-04,2026-05-28
+Mayfield Fund,5,13215000,"BigPanda,Balbix,Qwiet,HashiCorp,Securiti",2014-10-28,2019-08-08
+Menlo Ventures,5,15520000,"Veriflow,tCell,Dedrone,Crogl,Relyance AI",2016-05-17,2025-03-06
+Venrock,5,13684000,"CoreTrace,Cygilant,RedSeal,Auditoria.AI,Zero Networks",2006-04-28,2022-02-22
+Balderton Capital,4,18221155,"GitGuardian,Tessian,Escape,Geordie AI",2018-06-17,2026-05-28
+Bright Pixel Capital,4,10281000,"Hackuity,Tidal Cyber,Trustero,Tamnoon",2022-03-15,2025-09-03
+Cervin Ventures,4,11125000,"FireCompass,Anvilogic,Conveyor,Bolster AI",2021-05-11,2023-10-11
+Decibel Partners,4,18291471,"Dreadnode,""runZero, Inc"",Censys,SpecterOps",2020-08-05,2025-02-25
+Glilot Capital Partners,4,22750000,"Guardz,Cyolo,LayerX,Seemplicity",2021-07-28,2024-05-02
+Highland Capital Partners,4,17250000,"Carbon Black,Impermium,Cloudbrink,Malwarebytes",2005-09-20,2022-11-15
+Jump Capital,4,12875000,"LogicGate,LayerX,Realm Security,Prompt Security",2018-07-24,2025-10-08
+N47,4,18375000,"CenterBoard,Radiant Security,Harmonic Security,Echo",2003-11-12,2025-12-16
+Redpoint,4,17356248,"Arctic Wolf,Caspida,Fable,imper.ai",2012-05-01,2025-12-04
+Team8,4,27250000,"Akeyless Security,Fig Security,Clover Security,Koi",2021-04-28,2026-03-03
+TechOperators Venture Capital,4,7493750,"Evo Security,Phantom,BrightPoint Security,Tala Security",2014-04-29,2024-05-10
+Viola Ventures,4,12875000,"PlainID,NsKnox,CardinalOps",2018-07-02,2022-03-03
+Wing Venture Capital,4,21750000,"Dtex Systems,Cohesity,SlashNext,Gray Swan",2013-11-15,2026-05-28
+33N Ventures,3,11742650,"AcoruAI,Equixly,StrikeReady",2024-04-09,2025-12-09
+Ace Capital Partners,3,15260696,"GLIMPS,Jscrambler,TEHTRIS",2020-11-12,2021-09-23
+Arthur Ventures,3,10500000,"CyberQP,CertifID",2022-05-10,2023-04-24
+Canaan Partners,3,15000000,"Snyk,Aim Security,Cynomi",2018-03-06,2024-06-16
+Crosspoint Capital Partners,3,25666667,"Glide.id,TENEX.AI,MIND",2025-06-04,2025-10-13
+Cyberstarts,3,28000000,"Fireblocks,Linx Security,Onyx Security",2019-06-11,2026-03-12
+DNX Ventures,3,15800000,"SOC Prime,NetRise,Mitiga",2021-07-02,2025-04-15
+Dawn Capital,3,19000000,"Doubleword,Zivver,Oneleet",2018-10-16,2025-10-02
+Elephant,3,11876167,"KnowBe4,EVERTRUST,Mosyle",2016-02-01,2025-12-09
+Foundation Capital,3,11333333,"MistNet,Respond Software,TrustLab",2017-08-16,2023-06-15
+GreatPoint Ventures,3,19000000,"Namogoo,Hypori,Seraphic Security",2017-08-01,2025-01-30
+Grotech Ventures,3,11431023,"ThreatX,Human Security,Racktop Systems",2014-06-24,2019-03-04
+Jerusalem Venture Partners (JVP),3,8900000,"Morphisec,Source Defense,SCADAfence",2015-07-06,2018-09-26
+Khosla Ventures,3,20400000,"Cylance,Loti,Runlayer",2013-02-13,2026-06-24
+MMC Ventures,3,11055714,"Red Sift,Cloudsmith,BlackWall",2019-09-19,2024-03-13
+Maverick Ventures,3,14166667,"Cylera,BlueTalon,BlueFlag Security",2016-08-25,2026-03-23
+Nexus Venture Partners,3,8466667,"Fingerprint,LogicHub,ZITADEL",2017-02-01,2024-11-20
+RRE Ventures,3,15833333,"HYPR,NodeSource,Spire Global",2014-07-29,2017-10-03
+Radian Capital,3,19245232,"GreyNoise Intelligence,EasyDMARC,Evina",2021-11-18,2024-09-16
+Rally Ventures,3,11166667,"Ostra Security,Verodin,VanishID",2016-06-28,2025-06-20
+Red Dot Capital Partners,3,25000000,"Utila,Anecdotes,Bold Security",2022-02-23,2026-03-12
+Ribbit Capital,3,21000000,"Coalition,OneKey Customer Service,Blockaid",2018-03-01,2023-10-23
+Salesforce Ventures,3,14186016,"Hubbl Diagnostics,Gospel Technology,Laminar",2018-09-24,2026-02-09
+Scale Venture Partners,3,13666667,"Permit.io,ClearVector,Prime Security",2024-02-15,2025-12-09
+StepStone Group,3,17222058,"Silent Push,Inspectiv,Root",2022-01-26,2024-12-11
+TCV,3,26000000,"Nagomi Security,Avalor,Legit Security",2022-02-10,2024-04-23
+Tikehau Capital,3,13800992,"Yogosha,Build38,Prove & Run",2022-01-25,2023-12-06
+Toba Capital,3,12833333,"Wallarm,Clear Skye,Hyperproof",2018-10-22,2022-03-24
+True Ventures,3,12091665,"Caspida,Fletch,Feroot Security",2014-03-03,2025-11-18
+Two Bear Capital,3,23133333,"Gravwell,Elisity,QuSecure",2021-06-15,2025-10-21
+Venture Guides,3,13000000,"Clarity Security,Compyl,Elastio Software",2023-06-14,2025-06-04
+Vertex Ventures,3,9600000,"Cymulate,WireX Cube,Indegy",2015-07-21,2019-03-13
+Vertex Ventures Israel,3,16000000,"Indegy,Cylus,Blink Ops",2016-07-13,2024-05-01
+83North,2,11500000,"Siemplify,Vdoo",2016-11-15,2018-01-17
+AVP,2,18491422,"CryptoNext Security,Abstract Security",2023-11-30,2026-07-22
+Airbus Ventures,2,9000000,Qunnect,2022-10-05,2025-06-24
+Aleph,2,22300000,"Luminate Security,Dream",2018-03-14,2023-11-21
+Alpha Intelligence Capital,2,8457002,"Envelop Risk,Getvisibility",2020-05-14,2022-03-11
+Arbor Ventures,2,12250000,"EverC,InCountry",2016-12-14,2019-07-18
+August Capital,2,10640000,"UpGuard,Fletch",2014-08-14,2022-04-01
+Avalon Ventures,2,10000000,Averon,2017-10-23,2018-03-21
+BIP Ventures,2,7750000,Lumu,2021-03-10,2022-08-04
+BREEGA,2,12863744,"Dattak,CrowdSec",2022-10-06,2023-08-30
+Beringea,2,7716494,"Moonshot,Exonar",2019-01-21,2021-06-03
+Blueprint Equity,2,11500000,"Cyrisma,Spin.AI",2022-08-09,2024-10-09
+Blumberg Capital,2,8750000,"IntSights,BioCatch",2014-06-17,2016-08-30
+CXO Fund,2,17425000,TruU,2020-04-02,2022-04-25
+Caffeinated Capital,2,28000000,"InCountry,Twenty Technologies",2020-09-01,2025-11-20
+Costanoa Ventures,2,9500000,"Bugcrowd,Cyberhaven",2015-03-11,2019-12-05
+Drive Capital,2,7850000,"Immuta,DisruptOps",2017-07-01,2020-03-10
+Edison Partners,2,19044149,"Bricata,Field Effect",2017-07-25,2022-10-03
+Eight Roads Ventures,2,18000000,"Fireblocks,SenseOn",2019-06-11,2021-09-27
+Fairhaven Capital Partners,2,12250000,"GoSecure (formerly CounterTack),Cylance",2011-11-17,2013-02-13
+Flint Capital,2,11000000,"CyberX,Socure",2016-08-01,2016-12-13
+Foundry Group,2,9125000,"Elevate Security,Deduce",2020-09-29,2021-06-24
+Gaw Capital Partners,2,10850000,Blackpanda,2023-01-18,2024-09-25
+Goldman Sachs Growth Equity,2,28500000,"Unqork,iboss",2015-11-03,2019-04-18
+Gradient,2,8250000,"TypingDNA,Mine",2020-01-04,2020-10-21
+Green Pine Capital Partners,2,13968037,"Datacloak,Insight Technology",2020-01-07,2022-07-08
+Gula Tech Adventures,2,8000000,"Inky,SCYTHE",2019-11-14,2021-11-08
+IQ Capital,2,7299536,"CyberSmart,CybSafe",2020-07-14,2021-01-28
+Icon Ventures,2,17500000,"Area 1 Security,Confluera",2015-10-14,2020-05-19
+Ignition Partners,2,13525000,"Acalvio Technologies,Tempered",2015-03-03,2015-08-26
+Inovia Capital,2,8389304,"Flare,Tugboat Logic",2020-03-16,2022-06-09
+JP Morgan Chase,2,17500000,"Inpher.io,ReversingLabs",2017-11-29,2018-11-02
+M13,2,22500000,"Baselayer,Teleskope",2025-11-03,2026-08-10
+Marker,2,16500000,Team8,2014-06-24,2015-02-10
+MassMutual Ventures,2,22500000,"CloudSEK,Phosphorus Cybersecurity",2021-10-08,2022-02-22
+Mercia Ventures,2,8840968,"Risk Ledger,CultureAI",2023-11-07,2024-07-17
+Molten Ventures,2,15900000,"Vaultree,Binalyze",2022-12-07,2023-09-12
+Mubadala Capital Ventures,2,16500000,InCountry,2019-07-18,2020-09-01
+Munich Re Ventures,2,12840734,"Stoïk,Abstract Security",2023-09-19,2024-10-28
+NFX,2,23000000,"Permit.io,Koi",2024-02-15,2025-09-10
+Noro-Moseley Partners,2,9250000,"Liminal,PlexTrac",2021-04-14,2025-04-10
+Northern Gritstone,2,8488620,"Cytix,Sitehop",2025-10-09,2026-08-12
+One Peak,2,27500000,"ThreatAware,Keepit",2020-09-14,2026-02-26
+Option3Ventures,2,18050000,"Dellfer,Centripetal",2014-06-12,2021-10-19
+Partech,2,23000000,"Privitar,Qevlar AI",2017-07-18,2026-03-10
+Picture Capital,2,33000000,"Bold Security,Koi",2025-09-10,2026-03-12
+Pitango VC,2,9000000,"Perception Point,CyberMDX",2018-02-13,2018-07-17
+Polaris Partners,2,13250000,"Bitium,Tausight",2014-03-01,2021-03-10
+RTP Global,2,8100000,"Datadog,DoControl",2012-11-21,2021-04-12
+Razor's Edge Ventures,2,13500000,"Corsha,Racktop Systems",2019-03-04,2022-04-05
+Seventure Partners,2,9701577,"Wultra,Citalid",2022-10-12,2026-06-29
+Sierra Ventures,2,8000000,"RedLock,Zimperium",2013-10-01,2017-03-27
+SignalFire,2,27000000,"Clutch Security,Dig Security",2022-09-14,2025-01-29
+SineWave Ventures,2,14000000,"Operant AI,Corsha",2024-09-12,2025-04-08
+Singtel Innov8,2,13350000,"Blackpanda,Fireglass",2016-02-16,2024-09-25
+Square Peg Capital,2,6750000,"Sternum,PureSec",2018-10-04,2020-09-15
+Streamlined,2,18000000,"SOC Prime,Cloudbrink",2021-10-19,2022-11-15
+Susquehanna International Group,2,8550000,"Stellar Cyber,AnChain.ai",2019-10-01,2021-08-12
+Sutter Hill Ventures,2,16000000,Lacework,2015-05-25,2018-08-28
+TIN Capital,2,7820370,"Probely,Saporo",2022-10-13,2025-11-27
+Techstars,2,6650000,"GreatHorn,Voatz",2017-06-21,2019-06-06
+Tenaya Capital,2,18000000,"Fireblocks,Salt Security",2019-06-11,2020-06-16
+Theory Ventures,2,20925000,"Dropzone AI,Maze",2024-04-25,2025-06-10
+Two Sigma Ventures,2,13500000,"Firedome,Cerby",2019-10-23,2023-08-22
+Unusual Ventures,2,22500000,"Traceable,Relyance AI",2020-07-14,2021-09-15
+Volition Capital,2,22250000,"Ensighten,Securonix",2012-09-12,2017-09-20
+eCAPITAL ENTREPRENEURIAL PARTNERS,2,10358848,"Exein,Baobab",2021-09-22,2025-06-04
+2.0 Ventures,1,8000000,Cydome,2023-09-01,2023-09-01
+5IR Funds,1,6500000,RIIG,2025-10-13,2025-10-13
+645 Ventures,1,20000000,Shift5,2021-10-12,2021-10-12
+8VC,1,17000000,Fieldguide,2022-03-02,2022-03-02
+ABS Capital Partners,1,23000000,Deepwatch,2019-04-03,2019-04-03
+ACME Capital,1,9000000,Cymmetria,2015-11-10,2015-11-10
+AON Investment,1,14286360,CLUSH,2024-11-20,2024-11-20
+ARIA Fund,1,6700000,Nethone,2021-07-15,2021-07-15
+ATX Venture Partners,1,9000000,Cyvatar.ai,2021-06-11,2021-06-11
+Access Venture Partners,1,8200000,ThreatX,2018-04-04,2018-04-04
+Acero Capital,1,8000000,Contrast Security,2014-06-25,2014-06-25
+Acrew Capital,1,25000000,Aembit,2024-07-29,2024-07-29
+Addition,1,20000000,PQShield,2022-01-26,2022-01-26
+Airbridge Equity Partners,1,6701631,CybaVerse,2025-10-15,2025-10-15
+Album VC,1,30000000,Mindgard,2026-08-12,2026-08-12
+Alliance Entreprendre,1,11354475,Sentryo,2018-12-03,2018-12-03
+Alsop Louie Partners,1,6300000,RunSafe Security,2019-11-30,2019-11-30
+Alstin Capital,1,12000000,Secfix,2026-02-25,2026-02-25
+Alstom,1,10000000,Cylus,2020-12-09,2020-12-09
+Altimeter Capital,1,18500000,Permiso Security,2024-04-03,2024-04-03
+Amazon Alexa Fund,1,12500000,Luma,2016-04-07,2016-04-07
+Amex Ventures,1,12501223,EverC,2018-03-12,2018-03-12
+Amplify Partners,1,7500000,Minerva Labs,2017-06-07,2017-06-07
+Anonymous Trust,1,9000000,Rubica,2018-03-13,2018-03-13
+Anorak Ventures,1,13500000,ZeroTier,2024-07-26,2024-07-26
+Anthos Capital,1,28000000,Todyl,2022-03-17,2022-03-17
+Anzu Partners,1,9400000,Opscura,2023-02-07,2023-02-07
+Aquiline Technology Growth,1,17613758,Friss,2017-12-12,2017-12-12
+Arise,1,15000000,iiDENTIFii,2022-09-28,2022-09-28
+Arkin Capital,1,16000000,CyberRidge,2025-10-28,2025-10-28
+Artiman Ventures,1,7488210,Virsec,2015-03-09,2015-03-09
+Arvato Bertelsmann,1,8000000,SecuredTouch,2018-04-23,2018-04-23
+Aspect Ventures,1,20000000,Cato Networks,2015-10-27,2015-10-27
+Aspenwood Ventures,1,7000000,Defectdojo,2024-09-25,2024-09-25
+Asymmetric Capital Partners,1,9000000,Zorus,2021-12-09,2021-12-09
+Athera Venture Partners,1,7000000,FireCompass,2023-02-06,2023-02-06
+Atlantic Bridge,1,25000000,Mitiga,2021-07-02,2021-07-02
+Atlantica Ventures,1,7000000,Sendmarc,2023-02-08,2023-02-08
+Atlas Venture,1,6000000,Carbon Black,2005-09-20,2005-09-20
+Atmos Ventures,1,6700000,Nethone,2021-07-15,2021-07-15
+Atomico,1,20000000,Lakera,2024-07-24,2024-07-24
+Auriga Partners,1,6894529,Wallix,2011-11-15,2011-11-15
+Automate Health,1,7061158,Naq,2025-09-08,2025-09-08
+Awz Ventures,1,10000000,Pentera,2019-11-13,2019-11-13
+B Capital,1,20000000,Satori Cyber,2021-09-14,2021-09-14
+BDC Venture Capital,1,8030212,Private AI,2022-11-17,2022-11-17
+BM H Beteiligungs-Managementgesellschaft Hessen,1,8557910,QuoIntelligence,2026-04-27,2026-04-27
+BNP Paribas Développement,1,11354475,Sentryo,2018-12-03,2018-12-03
+BNVT Capital,1,9200000,Cognna,2025-12-02,2025-12-02
+BT,1,33000000,Safe Security,2021-07-21,2021-07-21
+Baird Capital,1,12500000,NowSecure,2014-12-02,2014-12-02
+Baring Private Equity India,1,9200000,BluSapphire,2022-10-27,2022-10-27
+Base10 Partners,1,12000000,Riot,2023-02-07,2023-02-07
+Benhamou Global Ventures,1,11000000,Spikes Security,2014-10-22,2014-10-22
+Bill Wood Ventures,1,10000000,Praetorian,2020-02-13,2020-02-13
+Binhai,1,9500000,Anbai Technology,2018-03-13,2018-03-13
+BlackFin Capital Partners,1,17613758,Friss,2017-12-12,2017-12-12
+Blackbird Ventures,1,10000000,Cyble,2022-02-22,2022-02-22
+Bloc Ventures,1,7400000,ShieldIOT,2021-11-19,2021-11-19
+Blossom Capital,1,10000000,Cado Security,2021-04-15,2021-04-15
+Bold Capital Partners,1,10000000,MagicCube,2017-08-08,2017-08-08
+Bonfire Ventures,1,13500000,ZeroTier,2024-07-26,2024-07-26
+Borderless Capital,1,7000000,Cloudburst Technologies,2025-09-23,2025-09-23
+Bosch,1,28000000,Oosto,2018-07-20,2018-07-20
+Bowery Capital,1,17000000,Cerby,2023-08-22,2023-08-22
+Bpifrance,1,11300000,CybelAngel,2018-10-11,2018-10-11
+Brewer Lane Ventures,1,20000000,Cowbell,2021-03-11,2021-03-11
+Brightmind Partners,1,25000000,Empirical Security,2026-07-20,2026-07-20
+Brighton Park Capital,1,30000000,AppViewX,2019-07-29,2019-07-29
+Business Growth Fund,1,7153451,Crypto Quantique,2022-07-06,2022-07-06
+C5 Capital,1,8000000,Balabit,2014-06-18,2014-06-18
+CE Ventures (CEIIF),1,7000000,Alcide,2018-11-19,2018-11-19
+CICC,1,15701792,Saibo Kunlun,2021-12-28,2021-12-28
+CME Ventures,1,6000000,Avathon,2016-04-26,2016-04-26
+Camber Partners,1,25000000,Trustifi,2025-06-03,2025-06-03
+Canapi Ventures,1,20000000,Elpha Secure,2022-10-06,2022-10-06
+Canvas Prime,1,17500000,Skyflow,2020-12-08,2020-12-08
+Capital Four,1,9500000,Ostra Security,2025-06-20,2025-06-20
+Cargill Ventures,1,14310000,Compellent Technologies,2003-07-18,2003-07-18
+Carrick Capital Partners,1,40000000,Saviynt,2018-04-18,2018-04-18
+Carya Venture Partners,1,6000000,Oloid,2024-10-24,2024-10-24
+Cedars Sinai,1,7800000,Censinet,2019-04-22,2019-04-22
+Centerstone Capital,1,6471478,6clicks,2022-09-26,2022-09-26
+Cerberus Ventures,1,22500000,Nudge Security,2025-11-18,2025-11-18
+Chartered Group,1,6000000,CogniFiber,2022-02-09,2022-02-09
+Chevron Technology Ventures,1,8646000,Mission Secure,2018-10-10,2018-10-10
+Cheyenne Ventures,1,25000000,Abstract Security,2026-07-22,2026-07-22
+Chris Galvin,1,9500000,UncommonX,2021-12-14,2021-12-14
+Cisco Investments,1,12500000,Valtix,2021-01-21,2021-01-21
+Citi Ventures,1,11000000,Pindrop,2013-06-19,2013-06-19
+Co-Stone Venture Capital,1,13000000,Datacloak,2020-01-07,2020-01-07
+Coatue,1,17500000,Persona,2020-01-28,2020-01-28
+Columbia Capital,1,6000000,Nisos,2019-01-28,2019-01-28
+CommerzVentures,1,23000000,Curv,2020-07-01,2020-07-01
+Concord Health Partners,1,10000000,Cylera,2021-03-18,2021-03-18
+Conviction,1,35000000,Onyx Security,2026-03-12,2026-03-12
+Covera Ventures,1,8020000,CoreTrace,2007-11-09,2007-11-09
+Cowin Capital,1,15384852,HUAUN,2021-03-15,2021-03-15
+Craft Ventures,1,21000000,SecurityPal,2022-09-20,2022-09-20
+Crédit Mutuel Innovation,1,26446743,HarfangLab,2023-10-09,2023-10-09
+Curql,1,10000000,Allure Security Technology,2024-04-03,2024-04-03
+DENSO Ventures,1,8000000,Dellfer,2021-10-19,2021-10-19
+DataTribe Opportunities Fund,1,7200000,Xona Systems,2022-05-25,2022-05-25
+Deal Box Ventures,1,9000000,True I/O,2023-01-18,2023-01-18
+Defy.vc,1,8000000,Elevate Security,2019-02-13,2019-02-13
+Deutsche Beteiligungs,1,15198569,Bug Bounty Switzerland,2026-04-29,2026-04-29
+Direttissima Growth Partners,1,15198569,Bug Bounty Switzerland,2026-04-29,2026-04-29
+Dowling Capital Management,1,40000000,Cyence,2016-09-15,2016-09-15
+Downing Ventures,1,8378912,Exonar,2019-01-21,2019-01-21
+Dragonfly,1,20000000,OneKey Customer Service,2022-09-28,2022-09-28
+Draper Associates,1,11500000,NAORIS,2022-07-27,2022-07-27
+EBRD Venture Capital,1,7500000,Scalarr,2021-02-11,2021-02-11
+EOS VC Fund,1,15000000,Immutable Systems,2019-09-23,2019-09-23
+EPIC Ventures,1,8500000,Braintrace,2019-03-01,2019-03-01
+ETF Partners,1,27624309,Look Up Space,2025-06-11,2025-06-11
+Earlybird Digital East Fund,1,6250000,Picus,2019-10-24,2019-10-24
+Ecliptic Capital,1,10000000,ThreatWarrior,2021-07-01,2021-07-01
+Elaia,1,7000000,CodeNotary,2020-01-21,2020-01-21
+Elevation Capital,1,10000000,Sprinto,2022-02-09,2022-02-09
+Elevator Ventures,1,8557910,QuoIntelligence,2026-04-27,2026-04-27
+Emergence Capital,1,12000000,Whistic,2020-07-29,2020-07-29
+Energy Innovation Capital,1,8646000,Mission Secure,2018-10-10,2018-10-10
+Ensemble VC,1,15000000,Manifest,2025-04-24,2025-04-24
+Envision Ventures,1,7000000,Baffle,2018-01-17,2018-01-17
+EquityPitcher Ventures,1,6654536,xorlab,2021-10-24,2021-10-24
+Era,1,15000000,Jericho Security,2025-04-24,2025-04-24
+Expa,1,6600000,Cmd,2016-01-01,2016-01-01
+Expedition Growth Capital,1,13125728,ThreatSpike,2025-02-17,2025-02-17
+Exposition Ventures,1,6000000,Oloid,2024-10-24,2024-10-24
+FINTOP Capital,1,6325391,Qohash,2021-01-14,2021-01-14
+FM Capital,1,21000000,GuardKnox,2019-06-04,2019-06-04
+FTV Capital,1,10000000,Trustwave,2004-05-19,2004-05-19
+Faction,1,15000000,Turnkey,2024-04-23,2024-04-23
+FinTech Collective,1,13600000,Strike,2025-03-26,2025-03-26
+First Analysis,1,6000000,Stamus Networks,2023-08-08,2023-08-08
+First In,1,12600000,SCATR,2026-04-22,2026-04-22
+FirstMark,1,20000000,Tracebit,2026-03-17,2026-03-17
+Fishtech Labs,1,9000000,Perch Security,2018-10-04,2018-10-04
+Flare Capital Partners,1,20000000,Tausight,2021-03-10,2021-03-10
+Fortino Capital,1,10914004,Getvisibility,2022-03-11,2022-03-11
+Fortune Venture Capital,1,13810629,Saibo Kunlun,2023-07-03,2023-07-03
+Founders Fund,1,9000000,Newfront,2018-09-01,2018-09-01
+Future Industry Ventures,1,7012369,Exein,2021-09-22,2021-09-22
+G20 Ventures,1,10000000,Siemplify,2016-11-15,2016-11-15
+GGV Capital,1,23000000,Gem,2023-09-27,2023-09-27
+GIC,1,21625000,CloudMosa,2015-07-11,2015-07-11
+GSR Ventures,1,14500000,DataVisor,2015-10-13,2015-10-13
+Galaxy Digital,1,15000000,Turnkey,2024-04-23,2024-04-23
+George Kaiser Family Foundation,1,6000000,Oloid,2024-10-24,2024-10-24
+Georgian,1,15000000,DefenseStorm,2019-07-15,2019-07-15
+Giza Venture Capital,1,8400000,Core6,2005-09-01,2005-09-01
+Glasswing Ventures,1,6000000,Terbium Labs,2017-11-29,2017-11-29
+Global Brain Corporation,1,11854878,Noxtua,2021-08-09,2021-08-09
+Global Founders Capital,1,15000000,InCountry,2019-07-18,2019-07-18
+Global Venture Capital,1,31000000,Root,2022-01-26,2022-01-26
+Goldman Sachs,1,8000000,Immersive,2019-01-14,2019-01-14
+Google,1,29000000,Isovalent,2020-11-10,2020-11-10
+Graphene Ventures,1,13000000,Segura®,2022-12-06,2022-12-06
+GreenPoint Partners,1,15000000,Zerv,2021-06-29,2021-06-29
+Greenfield Cities Holdings,1,14900000,Avanan,2016-05-17,2016-05-17
+Gresham House Ventures,1,6999219,OnSecurity,2024-06-10,2024-06-10
+Greycroft,1,21000000,Iru,2020-10-28,2020-10-28
+Group 11,1,33600000,Dream,2023-11-21,2023-11-21
+Guggenheim Investments,1,30000000,Rezilion,2021-09-13,2021-09-13
+HCM Capital,1,7000000,Cambridge Blockchain,2018-05-16,2018-05-16
+HLM Venture Partners,1,7800000,Censinet,2019-04-22,2019-04-22
+Hanaco Venture Capital,1,6500000,Sepio,2019-11-07,2019-11-07
+Hanwha Aerospace,1,9000000,infiniDome,2023-04-24,2023-04-24
+Harmony Partners,1,20000000,Randori,2020-04-23,2020-04-23
+Harvest Lane Asset Management,1,11500000,Votiro,2023-03-30,2023-03-30
+Headline,1,30000000,Notch,2026-03-25,2026-03-25
+Helion Venture Partners,1,6000000,Seclore,2013-04-24,2013-04-24
+Hewlett Packard Pathfinder,1,8000000,Hexadite,2016-02-10,2016-02-10
+Hi Inov - Dentressangle,1,6555944,ANOZR WAY,2024-03-12,2024-03-12
+High Alpha,1,8800000,Verisoul,2025-12-16,2025-12-16
+IA Ventures,1,6558048,Gospel Technology,2018-09-24,2018-09-24
+IDG Capital,1,7700000,CertiK,2020-06-03,2020-06-03
+IN Venture,1,8000000,GK8 by Galaxy,2020-10-01,2020-10-01
+IVP,1,25000000,Venice,2025-12-01,2025-12-01
+Iberis Capital,1,7520883,Probely,2022-10-13,2022-10-13
+Ibex Investors,1,7000000,Cynet,2016-02-10,2016-02-10
+Idinvest Partners,1,14685698,Alsid,2019-04-17,2019-04-17
+Impact46,1,9200000,Cognna,2025-12-02,2025-12-02
+Information Venture Partners,1,8000000,Strike Graph,2021-09-14,2021-09-14
+Inkef,1,6339955,EclecticIQ,2016-05-02,2016-05-02
+Innovation Endeavors,1,16000000,Authomize (Now part of Delinea),2021-05-13,2021-05-13
+Invest Tech,1,6968857,Skyone,2018-01-05,2018-01-05
+Invictus Growth Partners,1,30000000,PeerSpot,2021-10-06,2021-10-06
+Invoke Capital,1,18000000,Darktrace,2015-03-17,2015-03-17
+Iron Wolf Capital,1,7072553,CyberUpgrade,2026-02-19,2026-02-19
+JAFCO,1,11000000,Trillium Secure,2018-07-04,2018-07-04
+JIF Capital,1,12900000,TXOne Networks,2021-08-19,2021-08-19
+Javelin Venture Partners,1,11000000,Spikes Security,2014-10-22,2014-10-22
+Jeneration Capital,1,13000000,Datacloak,2020-01-07,2020-01-07
+Jungle Ventures,1,12000000,Dathena Science,2020-05-13,2020-05-13
+K1 Investment Management,1,6500000,IRONSCALES,2017-12-05,2017-12-05
+KDDI Open Innovation Fund,1,11854878,Noxtua,2021-08-09,2021-08-09
+KOMPAS VC,1,19000000,Backslash Security,2026-02-10,2026-02-10
+KPMG,1,11400000,Norse,2015-09-30,2015-09-30
+KREAXI,1,11354475,Sentryo,2018-12-03,2018-12-03
+Kassabov|Santos Ventures,1,13000000,Fortress Information Security,2017-12-31,2017-12-31
+Kayne Anderson Growth Capital,1,12000000,PROFICIO,2016-11-27,2016-11-27
+Keen Venture Partners,1,9912025,Bodyguard,2022-03-10,2022-03-10
+Keith Rabois,1,13000000,At-Bay,2018-05-09,2018-05-09
+Koch Disruptive Technologies,1,30000000,Beyond Identity,2020-04-14,2020-04-14
+Korea Investment Partners,1,7000000,StealthMole,2024-03-28,2024-03-28
+Koro Capital,1,20000000,Baselayer,2026-08-10,2026-08-10
+L.P.,1,14900000,Avanan,2016-05-17,2016-05-17
+Lachy Groom,1,15000000,WorkOS,2020-05-27,2020-05-27
+Lakewood & Company,1,11000000,Spikes Security,2014-10-22,2014-10-22
+Laurent Dassault,1,6228848,GEOSATIS,2017-07-03,2017-07-03
+Layer 7 Capital,1,7000000,CloudFirst,2017-12-14,2017-12-14
+Leawood Venture Capital,1,6000000,Adlumin,2020-09-28,2020-09-28
+Liberty City Ventures,1,40000000,MPCH,2022-09-27,2022-09-27
+Lucky Investment Managers,1,12000000,Pantherun Technologies,2025-10-10,2025-10-10
+Lux Capital,1,7500000,Nozomi Networks,2016-10-24,2016-10-24
+MAIF Avenir,1,7000000,Ledger,2017-03-30,2017-03-30
+MML Capital Partners,1,24868611,Roboyo,2020-09-15,2020-09-15
+MS&AD Ventures,1,7000000,Safe Security,2019-12-04,2019-12-04
+MState - Not Making New Investments,1,16000000,Fireblocks,2019-06-11,2019-06-11
+Magma Venture Partners,1,12000000,Cylus,2019-01-16,2019-01-16
+Malibu Ventures,1,9700000,Podium Data,2016-09-26,2016-09-26
+Maor Investments,1,28000000,OneLayer,2025-10-16,2025-10-16
+Marc Benioff,1,11700000,Averon,2018-03-21,2018-03-21
+March Capital,1,21000000,Xage Security,2018-12-28,2018-12-28
+Marius Nacht,1,10000000,SECDO,2016-12-06,2016-12-06
+Matrix,1,8000000,Kolide,2018-04-16,2018-04-16
+Maven Capital Partners,1,6648954,Approov,2025-08-04,2025-08-04
+McKinsey & Company,1,10000000,Praetorian,2020-02-13,2020-02-13
+Medici Ventures,1,7000000,Voatz,2019-06-06,2019-06-06
+Mercato Partners,1,15500000,SaltStack,2018-02-14,2018-02-14
+Mercia Fund Managers,1,7054077,Moonshot,2021-06-03,2021-06-03
+Merck Global Health Innovation Fund,1,30000000,Liaison Technologies,2012-04-10,2012-04-10
+Mercury Fund,1,10300000,Blumira,2021-08-18,2021-08-18
+Merlin Ventures,1,6500000,Sepio,2019-11-07,2019-11-07
+Miramar Ventures,1,6300000,Protego Networks,2004-01-16,2004-01-16
+Mohr Davidow Ventures,1,6500000,Proofpoint,2003-01-02,2003-01-02
+Moneta Ventures,1,6000000,PeakMetrics,2026-04-09,2026-04-09
+Moore Strategic Ventures,1,7500000,Black Kite,2020-10-06,2020-10-06
+Mosaic Ventures,1,7700000,Veriff,2018-06-19,2018-06-19
+Mosaik Partners,1,8600000,PeerNova,2014-12-17,2014-12-17
+Mount Morning Capital,1,31600000,315Net,2018-03-14,2018-03-14
+Move Capital,1,17116508,GATEWATCHER,2022-02-10,2022-02-10
+NATO Innovation Fund,1,15000000,RevEng,2026-05-27,2026-05-27
+NAventures,1,37000000,Memcyco,2026-01-27,2026-01-27
+NTT Venture Capital,1,10000000,Spyderbat,2022-10-24,2022-10-24
+Naspers,1,15000000,Immutable Systems,2019-09-23,2019-09-23
+Nat Friedman,1,22000000,XBOW,2025-01-01,2025-01-01
+National Quantum Mission,1,7095452,QNu Labs,2025-04-30,2025-04-30
+Nationwide Ventures,1,16000000,Deep Sentinel,2020-03-03,2020-03-03
+Nava Ventures,1,20000000,Hydrolix,2023-06-05,2023-06-05
+New Era Capital Partners,1,15500000,Apono,2024-09-30,2024-09-30
+NewSpring,1,29000000,Venn,2023-06-28,2023-06-28
+NextLeap Ventures,1,7400000,ShieldIOT,2021-11-19,2021-11-19
+Northgate Capital,1,12500000,Valtix,2021-01-21,2021-01-21
+Notion Capital,1,11000000,Resistant AI,2023-06-27,2023-06-27
+Nyca Partners,1,18000000,Utila,2025-03-19,2025-03-19
+Oak HC/FT,1,15000000,Panorays,2019-12-04,2019-12-04
+Oak Investment Partners,1,10000000,Norse,2013-12-12,2013-12-12
+Oleka Capital,1,8200000,Onlayer,2025-11-19,2025-11-19
+Omidyar Network India,1,8000000,Sequretek,2023-11-07,2023-11-07
+Omnes Capital,1,11354475,Sentryo,2018-12-03,2018-12-03
+Open Opportunity Fund,1,7500000,Lumu,2021-03-10,2021-03-10
+Orchard Holdings Group,1,10000000,Morphick Cyber Security,2015-09-21,2015-09-21
+Osage Venture Partners,1,7007586,Dataships,2025-01-05,2025-01-05
+Ott Kaukver,1,8500000,Arcjet,2025-10-08,2025-10-08
+OurCrowd,1,10000000,BioCatch,2014-06-17,2014-06-17
+P&I Investment,1,14286360,CLUSH,2024-11-20,2024-11-20
+PGV,1,17500000,DeNexus,2024-10-16,2024-10-16
+PRYTEK,1,20000000,ThriveDX,2017-02-04,2017-02-04
+PSP Growth,1,10000000,WireWheel.io,2018-10-25,2018-10-25
+PTB Ventures,1,35000000,Callsign,2018-03-12,2018-03-12
+Pace Capital,1,9904105,NetBird,2026-01-13,2026-01-13
+Paradigm,1,18000000,Privy,2023-11-21,2023-11-21
+Parallax Ventures,1,14547303,CAF,2022-07-21,2022-07-21
+Parkwalk Advisors,1,7153451,Crypto Quantique,2022-07-06,2022-07-06
+Partners Investment,1,6408603,Quad Miners,2022-06-10,2022-06-10
+Peak XV Partners,1,19000000,watchTowr,2024-10-07,2024-10-07
+Pelion Venture Partners,1,12000000,Rubicon Labs,2014-10-29,2014-10-29
+Pembroke VCT,1,6701631,CybaVerse,2025-10-15,2025-10-15
+Pivotal Group,1,8200000,CYR3CON,2020-07-14,2020-07-14
+Plural Platform,1,8500000,Arcjet,2025-10-08,2025-10-08
+Point72 Ventures,1,18500000,Permiso Security,2024-04-03,2024-04-03
+Polychain,1,30000000,Origo,2018-05-31,2018-05-31
+Preface Ventures,1,14000000,Feroot Security,2025-11-18,2025-11-18
+Prefix Capital,1,15000000,Symmetry Systems,2021-06-23,2021-06-23
+Prelude Fund,1,10000000,Cyware,2020-08-18,2020-08-18
+Primavera Capital Group,1,15000000,Blackpanda,2023-01-18,2023-01-18
+Prime Movers Lab,1,13000000,FORT Robotics,2021-03-18,2021-03-18
+Primo Capital,1,8000000,Quantum Bridge,2026-05-20,2026-05-20
+Propel,1,15000000,Truora,2022-04-04,2022-04-04
+Prosus Ventures,1,18000000,Borneo,2021-09-06,2021-09-06
+Purestone Capital,1,12900000,TXOne Networks,2021-08-19,2021-08-19
+QED Investors,1,13000000,One Footprint,2024-05-21,2024-05-21
+Qiming Venture Partners,1,7817830,IDsManager,2018-06-11,2018-06-11
+Quantonation,1,11982845,CryptoNext Security,2023-11-30,2023-11-30
+Quantstamp,1,16000000,Hypernative,2024-09-03,2024-09-03
+Quona Capital,1,12000000,Bureau,2021-12-16,2021-12-16
+Qure Ventures,1,10000000,CyberMDX,2018-07-17,2018-07-17
+RDC - Rafael Development Corporation,1,10000000,SECDO,2016-12-06,2016-12-06
+Redstone.VC,1,7012369,Exein,2021-09-22,2021-09-22
+Rembrandt Venture Partners,1,9000000,enSilo,2016-02-25,2016-02-25
+Ring Capital,1,9912025,Bodyguard,2022-03-10,2022-03-10
+Riverside Acceleration Capital,1,21000000,CyberSaint Security,2024-03-20,2024-03-20
+Road Ventures,1,14500000,Alto,2019-01-22,2019-01-22
+Rocket Strategies Inc.,1,8000000,BlastWave,2018-10-15,2018-10-15
+S32,1,35000000,Sola Security,2025-09-04,2025-09-04
+Sahasrar Capital,1,12000000,Pantherun Technologies,2025-10-10,2025-10-10
+Sands Capital Ventures,1,10206991,LimaCharlie,2024-02-08,2024-02-08
+Sapphire Ventures,1,10000000,StackHawk,2020-10-27,2020-10-27
+Savant Growth,1,30000000,FileCloud,2021-12-14,2021-12-14
+Semapa Next,1,7520883,Probely,2022-10-13,2022-10-13
+Serena,1,11300000,CybelAngel,2018-10-11,2018-10-11
+Shine Capital,1,12000000,iVerify,2024-06-26,2024-06-26
+Signal Peak Ventures,1,6100000,Monarx,2023-02-23,2023-02-23
+Silversmith Capital Partners,1,15000000,Northbeam,2022-08-16,2022-08-16
+Singular,1,17000000,Aikido Security,2024-05-01,2024-05-01
+Smedvig Ventures,1,10000000,CultureAI,2024-07-17,2024-07-17
+Smilegate Investment,1,10000000,SEWORKS,2016-12-01,2016-12-01
+Social Capital,1,6000000,CryptoMove,2018-02-12,2018-02-12
+SonicWALL,1,10000000,Perimeter 81,2019-11-21,2019-11-21
+Sopra Steria,1,11354475,Sentryo,2018-12-03,2018-12-03
+Standard Capital,1,13000000,Casco,2026-07-16,2026-07-16
+Standard Investments,1,30000000,Sentra,2023-01-31,2023-01-31
+Stata Venture Partners (SVP),1,6000000,Nantero,2001-10-01,2001-10-01
+Steel Connect,1,25000000,MobileLogic,2000-04-04,2000-04-04
+Summit Partners,1,10000000,RiskIQ,2013-07-18,2013-07-18
+Supernova Invest,1,13705013,CrowdSec,2022-10-06,2022-10-06
+Systena America,1,10000000,StrongKey,2018-10-09,2018-10-09
+TDF Ventures,1,11000000,BlackCloak,2021-07-29,2021-07-29
+TLV Partners,1,11500000,Silverfort,2018-06-25,2018-06-25
+TPG Growth,1,14900000,Avanan,2016-05-17,2016-05-17
+Talis Capital,1,18000000,Darktrace,2015-03-17,2015-03-17
+Tanglin Venture Partners,1,8900000,Ennoventure,2024-11-12,2024-11-12
+Tanium,1,10000000,Cyware,2020-08-18,2020-08-18
+Taronga Ventures,1,15000000,Zerv,2021-06-29,2021-06-29
+Tenfore Holdings,1,6000000,Threater,2019-02-20,2019-02-20
+The Fabric,1,25000000,Cloudbrink,2022-11-15,2022-11-15
+The Investor Group,1,25000000,MobileLogic,2000-04-04,2000-04-04
+Third Point Ventures,1,12000000,Rubicon Labs,2014-10-29,2014-10-29
+Thomvest Ventures,1,10000000,Bolster AI,2019-08-23,2019-08-23
+Tola Capital,1,11716424,Code Intelligence,2022-06-01,2022-06-01
+TomorrowVentures,1,6000000,Shape Security,2012-04-26,2012-04-26
+Tongchuang Albert,1,15384852,HUAUN,2021-03-15,2021-03-15
+Touchstone Innovations,1,14686624,Garrison Technology,2017-03-06,2017-03-06
+Trident Capital,1,14000000,Survela,2016-08-03,2016-08-03
+Trinity Ventures,1,9000000,Bulletproof,2015-06-23,2015-06-23
+Turkcell,1,8588739,Procenne,2022-08-24,2022-08-24
+UVC Partners,1,6677789,Enginsight,2024-09-25,2024-09-25
+United Ventures,1,10753208,Cleafy,2023-09-12,2023-09-12
+Updata Partners,1,20000000,Shufti,2022-03-15,2022-03-15
+Upfront Ventures,1,6500000,ellipse,2018-12-21,2018-12-21
+VINGroup,1,17000000,VinCSS Cybersecurity,2018-06-10,2018-06-10
+Valley Capital Partners,1,13200000,Stellar Cyber,2019-02-26,2019-02-26
+Valor Equity Partners,1,10000000,Coalition,2018-03-01,2018-03-01
+VenturEast,1,6000000,Seclore,2013-04-24,2013-04-24
+Verizon Ventures,1,6000000,Avathon,2016-04-26,2016-04-26
+Vertex Ventures US,1,13000000,Cyberhaven,2019-12-05,2019-12-05
+Viola FinTech,1,13705326,Baobab,2025-06-04,2025-06-04
+Vision Plus Capital,1,12584245,Yige Cloud Technology,2022-11-24,2022-11-24
+Vocap Partners,1,10500000,YourSix,2024-06-13,2024-06-13
+Vulcan Capital,1,18000000,Borneo,2021-09-06,2021-09-06
+Vy Capital,1,10000000,Coalition,2018-03-01,2018-03-01
+Walter Ventures,1,7000000,Pistachio,2025-04-29,2025-04-29
+Wa’ed Ventures,1,9000000,spiderSilk,2023-11-01,2023-11-01
+West Hill Capital,1,13000000,SafeToNet,2018-06-01,2018-06-01
+Wipro,1,20000000,SquareX,2025-04-24,2025-04-24
+YL Ventures,1,17000000,Miggo Security,2025-04-23,2025-04-23
+Yaletown Partners,1,6000000,Oloid,2024-10-24,2024-10-24
+Yoni Cheifetz,1,13000000,At-Bay,2018-05-09,2018-05-09
+Zeev Ventures,1,20000000,Reco,2022-06-03,2022-06-03
+Zobito,1,7747948,CyberVadis,2023-05-03,2023-05-03
+Zohar Zisapel,1,10000000,Radiflow,2011-11-11,2011-11-11
+boldstart ventures,1,7000000,Snyk,2018-03-06,2018-03-06
+lobby capital,1,12000000,Mesh Security,2026-01-28,2026-01-28
