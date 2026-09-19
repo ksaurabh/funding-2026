@@ -7,6 +7,10 @@ import {
   read,
   write,
   exists,
+  readRowsMerged,
+  readSchema,
+  findField,
+  writeCell,
   removeList,
   listFile,
   ROOT,
@@ -133,6 +137,13 @@ app.post('/api/lists/:id/reimport', (req, res) => {
     const list = findList(req.params.id);
     const investors = parseInvestors(req.body?.csv || '');
     write(listFile(list.id, 'investors'), investors);
+
+    // Drop config for CSV columns the new file no longer has; columns added
+    // here survive a re-import, as do their values.
+    const schema = readSchema(list.id);
+    const kept = schema.fields.filter((f) => f.custom || investors.columns.includes(f.name));
+    if (kept.length !== schema.fields.length) write(listFile(list.id, 'schema'), { fields: kept });
+
     const lists = getLists();
     Object.assign(
       lists.find((l) => l.id === list.id),
@@ -196,6 +207,8 @@ app.put('/api/lists/:listId/playbook', (req, res) => {
       prompt: s.prompt || '',
       webSearch: !!s.webSearch,
       enabled: s.enabled !== false,
+      // Column this step's answer fills in, if any.
+      writeTo: String(s.writeTo || '').trim(),
     }));
     const playbook = {
       system: body.system ?? DEFAULT_PLAYBOOK.system,
@@ -228,10 +241,134 @@ app.post('/api/lists/:listId/playbook/copy-from/:sourceId', (req, res) => {
 
 // Render a step's prompt against one row, without calling the model.
 app.post('/api/lists/:listId/playbook/preview', (req, res) => {
-  const investors = read(listFile(req.params.listId, 'investors'), { rows: [] });
+  const investors = readRowsMerged(req.params.listId);
   const row = investors.rows.find((r) => r.__id === req.body?.investorId) || investors.rows[0];
   if (!row) return res.status(400).json({ error: 'This list has no rows.' });
   res.json(renderTemplate(req.body?.prompt, row, {}));
+});
+
+// ------------------------------------------------------------------- schema
+// Editable columns come in two flavours: a CSV column turned editable, and a
+// column added here (its values live only in edits.json). Both are either free
+// text or a dropdown of allowed values.
+
+const MAX_CHOICES = 200;
+const TYPES = new Set(['text', 'enum']);
+
+function distinctValues(rows, column) {
+  const seen = new Map();
+  for (const r of rows) {
+    const v = String(r[column] ?? '').trim();
+    if (!v) continue;
+    seen.set(v, (seen.get(v) || 0) + 1);
+    if (seen.size > MAX_CHOICES) return null; // too free-text to be a dropdown
+  }
+  return [...seen.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([v]) => v);
+}
+
+function cleanValues(values) {
+  const out = [];
+  for (const v of values || []) {
+    const t = String(v).trim();
+    if (t && !out.includes(t)) out.push(t);
+  }
+  return out.slice(0, MAX_CHOICES);
+}
+
+app.get('/api/lists/:listId/schema', (req, res) => {
+  try {
+    const list = findList(req.params.listId);
+    const { columns, rows, schema } = readRowsMerged(list.id);
+    res.json({
+      fields: schema.fields,
+      candidates: columns.map((name) => {
+        const distinct = distinctValues(rows, name);
+        return {
+          name,
+          distinct: distinct || [],
+          tooMany: distinct === null,
+          blanks: rows.filter((r) => !String(r[name] ?? '').trim()).length,
+        };
+      }),
+    });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+app.put('/api/lists/:listId/schema', (req, res) => {
+  try {
+    const list = findList(req.params.listId);
+    const { columns } = read(listFile(list.id, 'investors'), { columns: [] });
+    const csvColumns = new Set(columns);
+
+    const fields = [];
+    for (const f of req.body?.fields || []) {
+      const name = String(f?.name ?? '').trim();
+      if (!name || fields.some((x) => x.name === name)) continue;
+      const custom = !csvColumns.has(name);
+      const type = TYPES.has(f.type) ? f.type : 'text';
+      fields.push({
+        name,
+        // A CSV column is only worth making editable as a dropdown; free-text
+        // editing of imported data is what a re-import is for.
+        type: custom ? type : 'enum',
+        values: type === 'enum' || !custom ? cleanValues(f.values) : [],
+        custom,
+      });
+    }
+    if (fields.length > 60) throw new Error('Too many editable columns.');
+
+    // Forget cell values for columns that no longer exist.
+    const live = new Set([...csvColumns, ...fields.map((f) => f.name)]);
+    const editKey = listFile(list.id, 'edits');
+    const edits = read(editKey, {});
+    let pruned = false;
+    for (const [rowId, patch] of Object.entries(edits)) {
+      for (const col of Object.keys(patch)) {
+        if (!live.has(col)) {
+          delete patch[col];
+          pruned = true;
+        }
+      }
+      if (!Object.keys(patch).length) delete edits[rowId];
+    }
+    if (pruned) write(editKey, edits);
+
+    res.json(write(listFile(list.id, 'schema'), { fields }));
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
+// Set one cell of one row. A dropdown value that is not yet in the column's
+// choice list is added to it, so the list grows as you use it.
+app.patch('/api/lists/:listId/investors/:id', (req, res) => {
+  try {
+    const list = findList(req.params.listId);
+    const { columns, rows } = read(listFile(list.id, 'investors'), { columns: [], rows: [] });
+    const schema = readSchema(list.id);
+    const column = req.body?.column;
+    const field = findField(schema, column);
+
+    if (!field && !columns.includes(column)) return res.status(400).json({ error: 'Unknown column.' });
+    if (!field) return res.status(400).json({ error: 'That column is not editable.' });
+    if (!rows.some((r) => r.__id === req.params.id)) {
+      return res.status(404).json({ error: 'Row not found.' });
+    }
+
+    const value = String(req.body?.value ?? '').trim();
+    writeCell(list.id, req.params.id, column, value);
+
+    if (field.type === 'enum' && value && !field.values.includes(value)) {
+      field.values = [...field.values, value].slice(0, MAX_CHOICES);
+      write(listFile(list.id, 'schema'), schema);
+    }
+
+    res.json({ ok: true, value, fields: schema.fields });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
 });
 
 // ---------------------------------------------------------------- investors
@@ -239,7 +376,7 @@ app.post('/api/lists/:listId/playbook/preview', (req, res) => {
 app.get('/api/lists/:listId/investors', (req, res) => {
   try {
     const list = findList(req.params.listId);
-    const investors = read(listFile(list.id, 'investors'), { columns: [], rows: [] });
+    const investors = readRowsMerged(list.id);
     const answers = read(listFile(list.id, 'answers'), {});
     const playbook = read(listFile(list.id, 'playbook'), DEFAULT_PLAYBOOK);
     const enabled = playbook.steps.filter((s) => s.enabled !== false);
@@ -254,21 +391,29 @@ app.get('/api/lists/:listId/investors', (req, res) => {
       };
     });
 
-    res.json({ list, columns: investors.columns, rows, stepCount: enabled.length });
+    res.json({
+      list,
+      columns: investors.allColumns,
+      csvColumns: investors.columns,
+      rows,
+      stepCount: enabled.length,
+      schema: investors.schema,
+    });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
 });
 
 app.get('/api/lists/:listId/investors/:id', (req, res) => {
-  const investors = read(listFile(req.params.listId, 'investors'), { columns: [], rows: [] });
+  const investors = readRowsMerged(req.params.listId);
   const row = investors.rows.find((r) => r.__id === req.params.id);
   if (!row) return res.status(404).json({ error: 'Investor not found.' });
   const playbook = read(listFile(req.params.listId, 'playbook'), DEFAULT_PLAYBOOK);
   const entry = read(listFile(req.params.listId, 'answers'), {})[req.params.id] || { steps: {} };
   res.json({
     investor: row,
-    columns: investors.columns,
+    columns: investors.allColumns,
+    schema: investors.schema,
     steps: playbook.steps.map((s) => ({ ...s, answer: entry.steps?.[s.id] || null })),
     updatedAt: entry.updatedAt || null,
   });
@@ -287,7 +432,7 @@ app.delete('/api/lists/:listId/investors/:id/answers', (req, res) => {
 app.post('/api/lists/:listId/run', (req, res) => {
   try {
     const list = findList(req.params.listId);
-    const investors = read(listFile(list.id, 'investors'), { rows: [] });
+    const investors = readRowsMerged(list.id);
     const body = req.body || {};
     let ids = body.investorIds;
 
@@ -315,14 +460,18 @@ app.post('/api/run/cancel', (_req, res) => res.json({ cancelled: cancelJob() }))
 app.get('/api/lists/:listId/export.csv', (req, res) => {
   try {
     const list = findList(req.params.listId);
-    const investors = read(listFile(list.id, 'investors'), { columns: [], rows: [] });
+    const investors = readRowsMerged(list.id);
     const answers = read(listFile(list.id, 'answers'), {});
     const playbook = read(listFile(list.id, 'playbook'), DEFAULT_PLAYBOOK);
-    const columns = [...investors.columns, ...playbook.steps.map((s) => s.name)];
+    // The list itself, then the raw answer text of each step alongside it.
+    const stepColumns = playbook.steps.map((s) => `${s.name} (answer)`);
+    const columns = [...investors.allColumns, ...stepColumns];
     const records = investors.rows.map((r) => {
       const out = {};
-      for (const c of investors.columns) out[c] = r[c];
-      for (const s of playbook.steps) out[s.name] = answers[r.__id]?.steps?.[s.id]?.text || '';
+      for (const c of investors.allColumns) out[c] = r[c];
+      playbook.steps.forEach((s, i) => {
+        out[stepColumns[i]] = answers[r.__id]?.steps?.[s.id]?.text || '';
+      });
       return out;
     });
     const slug = list.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'list';

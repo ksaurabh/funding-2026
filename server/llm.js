@@ -75,3 +75,55 @@ export async function askLLM(client, { system, messages, settings, webSearch, si
     },
   };
 }
+
+/**
+ * Pick one of `values` for a column, given the thread the step just produced.
+ * A JSON-schema output format constrains the reply, so the result is always
+ * one of the allowed values (or the call fails).
+ */
+export async function chooseValue(client, { system, messages, settings, column, values, signal }) {
+  const response = await client.messages.create(
+    {
+      model: settings.model,
+      max_tokens: 2000,
+      system,
+      messages: [
+        ...messages,
+        {
+          role: 'user',
+          content:
+            `Based on your answer above, choose the single best value for the "${column}" column.\n` +
+            `Allowed values: ${values.join(' | ')}\n` +
+            'You must pick one of them, even if the fit is imperfect.',
+        },
+      ],
+      thinking: { type: 'adaptive' },
+      output_config: {
+        effort: 'low',
+        format: {
+          type: 'json_schema',
+          schema: {
+            type: 'object',
+            properties: { value: { type: 'string', enum: values } },
+            required: ['value'],
+            additionalProperties: false,
+          },
+        },
+      },
+    },
+    { signal }
+  );
+
+  const text = response.content
+    .filter((b) => b.type === 'text')
+    .map((b) => b.text)
+    .join('');
+  let value;
+  try {
+    value = JSON.parse(text).value;
+  } catch {
+    throw new Error(`Could not read a value for "${column}" from the model.`);
+  }
+  if (!values.includes(value)) throw new Error(`Model returned "${value}", which is not an allowed value.`);
+  return value;
+}

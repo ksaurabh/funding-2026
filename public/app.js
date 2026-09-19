@@ -17,7 +17,9 @@ const state = {
   lists: [],
   listId: null,
   list: null,
-  investors: { columns: [], rows: [], stepCount: 0 },
+  investors: { columns: [], csvColumns: [], rows: [], stepCount: 0 },
+  schema: { fields: [] },
+  valueFilters: {}, // { column: Set(selected values) }; '' means blank
   playbook: null,
   selected: null,
   filter: '',
@@ -39,6 +41,7 @@ async function route() {
     state.listId = listId;
     state.selected = null;
     state.filter = '';
+    state.valueFilters = {};
     $('#search').value = '';
     $('#detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select a row to see its answers.' }));
     try {
@@ -63,6 +66,7 @@ async function route() {
 
   if (view === 'lists') await loadLists();
   if (view === 'playbook') {
+    renderSteps(); // the column dropdowns depend on the current schema
     renderTokens();
     await fillCopyMenu();
   }
@@ -107,7 +111,7 @@ async function loadLists() {
         el('div', { className: 'card-actions' }, [
           el('a', { className: 'btn primary', href: `#/list/${l.id}/investors`, textContent: 'Research' }),
           el('a', { className: 'btn', href: `#/list/${l.id}/playbook`, textContent: 'Playbook' }),
-          el('a', { className: 'btn', href: `/api/lists/${l.id}/export.csv`, textContent: 'Export' }),
+          el('a', { className: 'btn', href: `/api/lists/${l.id}/export.csv`, textContent: 'Download' }),
           button('Rename', '', async () => {
             const name = prompt('List name', l.name);
             if (!name) return;
@@ -152,20 +156,102 @@ $('#import-new').addEventListener('change', async (e) => {
 async function loadInvestors() {
   state.investors = await api(`/api/lists/${state.listId}/investors`);
   state.list = state.investors.list;
+  state.schema = state.investors.schema || { fields: [] };
+  // Drop filters for columns that are no longer dropdowns.
+  for (const col of Object.keys(state.valueFilters)) {
+    if (!enumColumns().includes(col)) delete state.valueFilters[col];
+  }
+  renderFilters();
   renderTable();
+}
+
+const fields = () => state.schema.fields || [];
+const fieldFor = (col) => fields().find((f) => f.name === col);
+const enumColumns = () => fields().filter((f) => f.type === 'enum').map((f) => f.name);
+const cellValue = (row, col) => String(row[col] ?? '').trim();
+
+async function saveCell(rowId, column, value) {
+  const r = await api(`/api/lists/${state.listId}/investors/${rowId}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ column, value }),
+  });
+  state.schema = { fields: r.fields };
+  return r.value;
+}
+
+function matchesValueFilters(row) {
+  // Within a column: any selected value matches. Across columns: all must match.
+  for (const [col, chosen] of Object.entries(state.valueFilters)) {
+    if (!chosen.size) continue;
+    if (!chosen.has(cellValue(row, col))) return false;
+  }
+  return true;
 }
 
 function visibleRows() {
   const q = state.filter.trim().toLowerCase();
-  if (!q) return state.investors.rows;
-  return state.investors.rows.filter((r) =>
-    state.investors.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(q))
+  return state.investors.rows.filter((r) => {
+    if (!matchesValueFilters(r)) return false;
+    if (!q) return true;
+    return state.investors.columns.some((c) => String(r[c] ?? '').toLowerCase().includes(q));
+  });
+}
+
+function renderFilters() {
+  const bar = $('#filters');
+  const cols = enumColumns();
+  bar.classList.toggle('hidden', !cols.length);
+  if (!cols.length) return;
+
+  const active = Object.values(state.valueFilters).some((v) => v.size);
+
+  bar.replaceChildren(
+    ...cols.map((col) => {
+      const counts = new Map();
+      for (const r of state.investors.rows) {
+        const v = cellValue(r, col);
+        counts.set(v, (counts.get(v) || 0) + 1);
+      }
+      const chosen = state.valueFilters[col] || new Set();
+      const values = [...new Set([...(fieldFor(col)?.values || []), ...counts.keys()])].filter((v) => v !== '');
+      if (counts.get('')) values.push('');
+
+      return el('div', { className: 'filter-group' }, [
+        el('span', { className: 'filter-label', textContent: col }),
+        ...values.map((v) => {
+          const chip = el('button', {
+            className: 'chip' + (chosen.has(v) ? ' on' : ''),
+            textContent: `${v === '' ? '(blank)' : v} ${counts.get(v) || 0}`,
+          });
+          chip.addEventListener('click', () => {
+            const set = (state.valueFilters[col] ||= new Set());
+            set.has(v) ? set.delete(v) : set.add(v);
+            renderFilters();
+            renderTable();
+          });
+          return chip;
+        }),
+      ]);
+    }),
+    active
+      ? (() => {
+          const b = el('button', { className: 'chip clear', textContent: 'Clear filters' });
+          b.addEventListener('click', () => {
+            state.valueFilters = {};
+            renderFilters();
+            renderTable();
+          });
+          return b;
+        })()
+      : null
   );
 }
 
 function renderTable() {
-  const { columns, stepCount = 0 } = state.investors;
-  const shown = columns.slice(0, 4);
+  const { csvColumns = [], stepCount = 0 } = state.investors;
+  // Always show the editable columns, even if they sit past the first few.
+  const shown = [...new Set([...csvColumns.slice(0, 4), ...fields().map((f) => f.name)])];
   $('#investor-table thead').replaceChildren(
     el('tr', {}, [...shown.map((c) => el('th', { textContent: c })), el('th', { textContent: 'Answers' })])
   );
@@ -180,13 +266,82 @@ function renderTable() {
         textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
       });
       const tr = el('tr', { className: r.__id === state.selected ? 'selected' : '' }, [
-        ...shown.map((c) => el('td', { textContent: r[c] ?? '', title: r[c] ?? '' })),
+        ...shown.map((c) => {
+          const f = fieldFor(c);
+          return f
+            ? el('td', { className: 'cell-edit' }, editableCell(r, f))
+            : el('td', { textContent: r[c] ?? '', title: r[c] ?? '' });
+        }),
         el('td', {}, status),
       ]);
       tr.addEventListener('click', () => selectInvestor(r.__id));
       return tr;
     })
   );
+}
+
+/** An editable table cell: a dropdown for enum columns, an input for text. */
+function editableCell(row, field) {
+  const current = cellValue(row, field.name);
+
+  if (field.type === 'text') {
+    const input = el('input', {
+      type: 'text',
+      className: 'cell-input',
+      value: current,
+      title: current,
+      placeholder: '—',
+    });
+    input.addEventListener('click', (e) => e.stopPropagation());
+    const commit = async () => {
+      const value = input.value.trim();
+      if (value === current) return;
+      try {
+        await saveCell(row.__id, field.name, value);
+        row[field.name] = value;
+      } catch (err) {
+        alert(err.message);
+        input.value = current;
+      }
+    };
+    input.addEventListener('blur', commit);
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') {
+        input.value = current;
+        input.blur();
+      }
+    });
+    return input;
+  }
+
+  const choices = [...new Set([...field.values, ...(current ? [current] : [])])];
+  const sel = el('select', { className: 'cell-select' }, [
+    el('option', { value: '', textContent: '—', selected: !current }),
+    ...choices.map((v) => el('option', { value: v, textContent: v, selected: v === current })),
+    el('option', { value: '\u0000new', textContent: '+ New value…' }),
+  ]);
+  sel.addEventListener('click', (e) => e.stopPropagation()); // don't open the detail pane
+  sel.addEventListener('change', async () => {
+    let value = sel.value;
+    if (value === '\u0000new') {
+      value = (prompt(`New value for "${field.name}"`) || '').trim();
+      if (!value) {
+        sel.value = current;
+        return;
+      }
+    }
+    try {
+      await saveCell(row.__id, field.name, value);
+      row[field.name] = value;
+      renderFilters();
+      renderTable();
+    } catch (err) {
+      alert(err.message);
+      sel.value = current;
+    }
+  });
+  return sel;
 }
 
 async function selectInvestor(id) {
@@ -238,6 +393,17 @@ async function selectInvestor(id) {
         ])
       );
     }
+    if (a?.wroteTo) {
+      parts.push(
+        el('div', { className: 'wrote' }, [
+          el('span', { className: 'muted small', textContent: `${a.wroteTo.column} → ` }),
+          el('span', { className: 'badge full', textContent: a.wroteTo.value || '(blank)' }),
+        ])
+      );
+    }
+    if (a?.writeError) {
+      parts.push(el('div', { className: 'body error small', textContent: `⚠ column not filled: ${a.writeError}` }));
+    }
     if (a?.prompt) {
       parts.push(el('details', {}, [el('summary', { textContent: 'Prompt sent' }), el('pre', { textContent: a.prompt })]));
     }
@@ -267,6 +433,147 @@ $('#search').addEventListener('input', (e) => {
   state.filter = e.target.value;
   renderTable();
 });
+
+// --------------------------------------------------- editable-column config
+
+$('#columns-btn').addEventListener('click', async () => {
+  await renderColumnConfig();
+  $('#columns-dialog').showModal();
+});
+
+$('#columns-dialog').addEventListener('close', () => loadInvestors());
+
+async function saveSchema(fields) {
+  state.schema = await api(`/api/lists/${state.listId}/schema`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fields }),
+  });
+  await renderColumnConfig();
+}
+
+/** The chips + "add a value" row shared by every dropdown column. */
+function valueEditor(field, all) {
+  const chips = el('div', { className: 'tokens' }, [
+    ...field.values.map((v) => {
+      const chip = el('button', { className: 'chip removable', textContent: v });
+      chip.append(el('i', { textContent: '×' }));
+      chip.addEventListener('click', () =>
+        saveSchema(all.map((f) => (f.name === field.name ? { ...f, values: f.values.filter((n) => n !== v) } : f)))
+      );
+      return chip;
+    }),
+    field.values.length ? null : el('span', { className: 'muted small', textContent: 'No choices yet.' }),
+  ]);
+
+  const input = el('input', { type: 'text', placeholder: 'Add a value…' });
+  const add = () => {
+    const v = input.value.trim();
+    if (!v) return;
+    input.value = '';
+    saveSchema(all.map((f) => (f.name === field.name ? { ...f, values: [...f.values, v] } : f)));
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      add();
+    }
+  });
+
+  return [chips, el('div', { className: 'add-value' }, [input, button('Add', '', add)])];
+}
+
+async function renderColumnConfig() {
+  const info = await api(`/api/lists/${state.listId}/schema`);
+  state.schema = { fields: info.fields };
+  const all = info.fields;
+
+  // --- columns that came from the CSV -------------------------------------
+  const csv = info.candidates.map((c) => {
+    const field = all.find((f) => f.name === c.name);
+    const toggle = el('input', { type: 'checkbox', checked: !!field, disabled: !field && c.tooMany });
+    toggle.addEventListener('change', () =>
+      saveSchema(
+        toggle.checked
+          ? [...all, { name: c.name, type: 'enum', values: c.distinct, custom: false }]
+          : all.filter((f) => f.name !== c.name)
+      )
+    );
+
+    const head = el('label', { className: 'col-head' }, [
+      toggle,
+      el('span', { textContent: c.name || '(unnamed column)' }),
+      el('span', {
+        className: 'muted small',
+        textContent: c.tooMany
+          ? 'too many distinct values for a dropdown'
+          : `${c.distinct.length} value${c.distinct.length === 1 ? '' : 's'}` + (c.blanks ? `, ${c.blanks} blank` : ''),
+      }),
+    ]);
+
+    if (!field) return el('div', { className: 'col-row' }, head);
+    return el('div', { className: 'col-row open' }, [head, ...valueEditor(field, all)]);
+  });
+
+  // --- columns added here --------------------------------------------------
+  const added = all
+    .filter((f) => f.custom)
+    .map((f) => {
+      const head = el('div', { className: 'col-head' }, [
+        el('span', { textContent: f.name }),
+        el('span', { className: 'badge', textContent: f.type === 'enum' ? 'dropdown' : 'free text' }),
+        el('span', { className: 'muted small' }, [
+          button('Remove', 'danger', () => {
+            if (!confirm(`Remove the column "${f.name}" and every value in it?`)) return;
+            saveSchema(all.filter((x) => x.name !== f.name));
+          }),
+        ]),
+      ]);
+      return el('div', { className: 'col-row open' }, f.type === 'enum' ? [head, ...valueEditor(f, all)] : [head]);
+    });
+
+  const newName = el('input', { type: 'text', placeholder: 'Column name' });
+  const newType = el('select', {}, [
+    el('option', { value: 'text', textContent: 'Free text' }),
+    el('option', { value: 'enum', textContent: 'Dropdown' }),
+  ]);
+  const newValues = el('input', { type: 'text', placeholder: 'Choices, comma separated', hidden: true });
+  newType.addEventListener('change', () => {
+    newValues.hidden = newType.value !== 'enum';
+  });
+  const addColumn = () => {
+    const name = newName.value.trim();
+    if (!name) return;
+    if (all.some((f) => f.name === name) || info.candidates.some((c) => c.name === name)) {
+      return alert('This list already has a column with that name.');
+    }
+    saveSchema([
+      ...all,
+      {
+        name,
+        type: newType.value,
+        values: newType.value === 'enum' ? newValues.value.split(',') : [],
+        custom: true,
+      },
+    ]);
+  };
+  newName.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), addColumn()));
+
+  $('#column-config').replaceChildren(
+    el('h4', { className: 'section', textContent: 'Columns from the CSV' }),
+    el('p', { className: 'muted small', textContent: 'Tick one to turn it into a dropdown you can edit row by row.' }),
+    ...csv,
+    el('h4', { className: 'section', textContent: 'Columns you added' }),
+    ...(added.length ? added : [el('p', { className: 'muted small', textContent: 'None yet.' })]),
+    el('div', { className: 'add-column' }, [newName, newType, newValues, button('Add column', 'primary', addColumn)]),
+    el('p', {
+      className: 'muted small',
+      textContent:
+        'A playbook step can fill one of these in automatically \u2014 pick the column on the step. ' +
+        'Removing a choice only takes it out of the dropdown; rows already set to it keep their value.',
+    })
+  );
+}
 
 // ---------------------------------------------------------------------- run
 
@@ -344,6 +651,27 @@ async function loadPlaybook() {
 
 let activePrompt = null;
 
+/** Which column this step's answer should fill in, if any. */
+function writeToSelect(step) {
+  const sel = el('select', { className: 'writeto' }, [
+    el('option', { value: '', textContent: '— none —', selected: !step.writeTo }),
+    ...fields().map((f) =>
+      el('option', {
+        value: f.name,
+        textContent: `${f.name} (${f.type === 'enum' ? 'dropdown' : 'text'})`,
+        selected: f.name === step.writeTo,
+      })
+    ),
+  ]);
+  if (step.writeTo && !fieldFor(step.writeTo)) {
+    sel.append(el('option', { value: step.writeTo, textContent: `${step.writeTo} (missing)`, selected: true }));
+  }
+  sel.addEventListener('change', () => {
+    step.writeTo = sel.value;
+  });
+  return sel;
+}
+
 function renderSteps() {
   $('#steps').replaceChildren(
     ...state.playbook.steps.map((s, i) => {
@@ -392,6 +720,7 @@ function renderSteps() {
         el('div', { className: 'step-opts' }, [
           el('label', {}, [web, document.createTextNode('Let the model search the web')]),
           el('label', {}, [on, document.createTextNode('Enabled')]),
+          el('label', {}, [document.createTextNode('Fill column'), writeToSelect(s)]),
           el('span', { textContent: `reference later as {{steps.${slug(s.key || s.name)}}}` }),
         ])
       );

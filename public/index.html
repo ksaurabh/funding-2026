@@ -35,12 +35,14 @@
   <div class="toolbar">
     <input id="search" type="search" placeholder="Filter rows…" />
     <span id="count" class="muted small"></span>
+    <button id="columns-btn">Editable columns…</button>
     <span class="spacer"></span>
     <button id="run-all">Run all</button>
     <button id="run-unanswered">Run unanswered</button>
     <button id="cancel" class="danger" disabled>Cancel</button>
-    <a id="export" href="#" class="btn">Export CSV</a>
+    <a id="export" href="#" class="btn">Download CSV</a>
   </div>
+  <div id="filters" class="filters hidden"></div>
   <div class="split">
     <div class="listpane">
       <table id="investor-table">
@@ -53,6 +55,18 @@
     </aside>
   </div>
   <div id="log" class="log"></div>
+
+  <dialog id="columns-dialog">
+    <form method="dialog" class="dialog-head">
+      <h3>Editable columns</h3>
+      <button value="close">Done</button>
+    </form>
+    <p class="muted small">
+      Turn a column into a dropdown you can edit row by row. The choices start as
+      the values already in that column; new ones are added as you use them.
+    </p>
+    <div id="column-config"></div>
+  </dialog>
 </main>
 
 <!-- -------------------------------------------------------------- playbook -->

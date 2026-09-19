@@ -1,5 +1,5 @@
-import { read, write, listFile } from './store.js';
-import { makeClient, askLLM } from './llm.js';
+import { read, write, listFile, readRowsMerged, readSchema, findField, writeCell } from './store.js';
+import { makeClient, askLLM, chooseValue } from './llm.js';
 
 /**
  * Fill {{Column Name}} from the investor row and {{steps.key}} (or
@@ -89,7 +89,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
 
   const settings = read('settings', {});
   const playbook = read(listFile(listId, 'playbook'), { steps: [] });
-  const investors = read(listFile(listId, 'investors'), { columns: [], rows: [] });
+  const investors = readRowsMerged(listId);
 
   let steps = playbook.steps.filter((s) => s.enabled !== false);
   if (stepIds && stepIds.length) steps = steps.filter((s) => stepIds.includes(s.id));
@@ -157,6 +157,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
 }
 
 async function runOne({ listId, client, settings, playbook, steps, row, label }) {
+  const schema = readSchema(listId);
   const answers = read(listFile(listId, 'answers'), {});
   const priorByKey = {};
   for (const [key, val] of Object.entries(answers[row.__id]?.byKey || {})) priorByKey[key] = val;
@@ -201,6 +202,39 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
       });
       priorByKey[slugify(step.key || step.name)] = result.text;
       log(`✓ ${label} · ${step.name} (${result.usage.output} out tokens)`);
+
+      // Fill a column from this answer, if the step is wired to one.
+      const field = step.writeTo && findField(schema, step.writeTo);
+      if (step.writeTo && !field) {
+        record.writeError = `Column "${step.writeTo}" no longer exists.`;
+        log(`⚠ ${label} · ${step.name}: ${record.writeError}`);
+      } else if (field) {
+        try {
+          let value;
+          if (field.type === 'enum') {
+            if (!field.values.length) throw new Error(`Column "${field.name}" has no allowed values.`);
+            value = await chooseValue(client, {
+              system: playbook.system,
+              messages: thread,
+              settings,
+              column: field.name,
+              values: field.values,
+              signal,
+            });
+          } else {
+            value = result.text;
+          }
+          writeCell(listId, row.__id, field.name, value);
+          row[field.name] = value;
+          record.wroteTo = { column: field.name, value };
+          log(`⤷ ${label} · ${field.name} = ${value.length > 60 ? value.slice(0, 60) + '…' : value}`);
+        } catch (err) {
+          if (signal.aborted) throw new Error('Cancelled');
+          record.writeError = err.message;
+          job.stepErrors++;
+          log(`✗ ${label} · ${field.name}: ${err.message}`);
+        }
+      }
     } catch (err) {
       if (signal.aborted) throw new Error('Cancelled');
       // Drop the unanswered user turn so the thread stays alternating.
