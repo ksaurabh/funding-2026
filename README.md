@@ -134,11 +134,19 @@ many enabled steps have run. Click a row to read every answer, its sources, and
 the exact prompt that produced it. From there you can re-run the whole playbook
 for that one row, or re-run a single step.
 
-Across the whole list: **Run all**, or **Run unanswered** to fill in only the
-gaps (useful after adding a step, or after a partial run). A run streams
-progress into the log strip at the bottom and can be cancelled mid-flight.
-Answers are written to disk after every step, so nothing is lost if you stop.
-One run happens at a time across the whole app.
+The two run buttons always say what they will actually do:
+
+- **Run all 529** — every row, when nothing is filtered.
+- **Run 37 filtered** — exactly the rows the search box and dropdown filters
+  have left on screen. The set is fixed when you click, so rows still run even
+  if the playbook changes a value they were filtered on.
+- **Run unanswered (n)** — only rows missing answers, narrowed to the filtered
+  set when a filter is on. Useful after adding a step, or after a partial run.
+
+Both confirm first, projecting the bill from this list's own average per row.
+A run streams progress into the log strip at the bottom and can be cancelled
+mid-flight. Answers are written to disk after every step, so nothing is lost if
+you stop. One run happens at a time across the whole app.
 
 **Download CSV** gives you the whole list -- imported columns, your edits, and
 the columns the playbook filled in -- plus one `<step name> (answer)` column

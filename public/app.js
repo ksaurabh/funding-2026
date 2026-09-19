@@ -21,6 +21,7 @@ const state = {
   lists: [],
   cost: null,
   playbooks: [],
+  running: false,
   listId: null,
   list: null,
   investors: { columns: [], csvColumns: [], rows: [], stepCount: 0 },
@@ -220,6 +221,9 @@ function matchesValueFilters(row) {
   return true;
 }
 
+const isFiltered = () =>
+  !!state.filter.trim() || Object.values(state.valueFilters).some((v) => v.size);
+
 function visibleRows() {
   const q = state.filter.trim().toLowerCase();
   return state.investors.rows.filter((r) => {
@@ -289,6 +293,7 @@ function renderTable() {
 
   const rows = visibleRows();
   $('#count').textContent = `${rows.length} of ${state.investors.rows.length} rows`;
+  renderRunButtons(rows);
 
   $('#investor-table tbody').replaceChildren(
     ...rows.map((r) => {
@@ -373,6 +378,26 @@ function editableCell(row, field) {
     }
   });
   return sel;
+}
+
+/** Label the run buttons with the set they will run on. */
+function renderRunButtons(rows) {
+  const filtered = isFiltered();
+  const unanswered = rows.filter((r) => r.__done < state.investors.stepCount);
+
+  const all = $('#run-all');
+  all.textContent = filtered ? `Run ${rows.length} filtered` : `Run all ${rows.length}`;
+  all.disabled = !rows.length || state.running;
+  all.title = filtered
+    ? 'Run the playbook on the rows matching the current filter'
+    : 'Run the playbook on every row in this list';
+
+  const rest = $('#run-unanswered');
+  rest.textContent = `Run unanswered (${unanswered.length})`;
+  rest.disabled = !unanswered.length || state.running;
+  rest.title = filtered
+    ? 'Run only the filtered rows that are missing answers'
+    : 'Run only the rows that are missing answers';
 }
 
 async function selectInvestor(id) {
@@ -627,15 +652,31 @@ async function run(body) {
   }
 }
 
-$('#run-all').addEventListener('click', () => {
-  const n = state.investors.rows.length;
+/** Ask before a big run, projecting the bill from this list's own history. */
+function confirmRun(rows, what) {
   const done = state.cost?.byList.find((l) => l.id === state.listId);
-  // Project from what this list has actually cost per researched row.
   const per = done?.calls && state.investors.stepCount ? done.cost / (done.calls / state.investors.stepCount) : null;
-  const estimate = per ? `\n\nRoughly ${money(per * n)} at this list's average of ${money(per)} per row.` : '';
-  if (confirm(`Run the playbook on all ${n} rows?${estimate}`)) run({ scope: 'all' });
+  const estimate = per
+    ? `\n\nRoughly ${money(per * rows.length)} at this list's average of ${money(per)} per row.`
+    : '';
+  return confirm(`Run the playbook on ${rows.length} ${what}?${estimate}`);
+}
+
+$('#run-all').addEventListener('click', () => {
+  const rows = visibleRows();
+  if (!rows.length) return;
+  const filtered = isFiltered();
+  if (!confirmRun(rows, filtered ? 'filtered row(s)' : 'row(s)')) return;
+  // Send ids when filtered so the server runs exactly what is on screen.
+  run(filtered ? { investorIds: rows.map((r) => r.__id) } : { scope: 'all' });
 });
-$('#run-unanswered').addEventListener('click', () => run({ scope: 'unanswered' }));
+
+$('#run-unanswered').addEventListener('click', () => {
+  const rows = visibleRows().filter((r) => r.__done < state.investors.stepCount);
+  if (!rows.length) return;
+  if (!confirmRun(rows, isFiltered() ? 'filtered row(s) with missing answers' : 'row(s) with missing answers')) return;
+  run(isFiltered() ? { investorIds: rows.map((r) => r.__id) } : { scope: 'unanswered' });
+});
 $('#cancel').addEventListener('click', () => post('/api/run/cancel'));
 
 let polling = false;
@@ -648,6 +689,10 @@ async function poll() {
     const s = await api('/api/run/status');
     const pill = $('#runpill');
     $('#cancel').disabled = !s.running;
+    if (state.running !== !!s.running) {
+      state.running = !!s.running;
+      renderRunButtons(visibleRows());
+    }
 
     if (s.running) {
       pill.className = 'pill running';
