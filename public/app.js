@@ -618,14 +618,20 @@ function renderRunButtons(rows) {
     ? 'Run the playbook on the rows matching the current filter'
     : 'Run the playbook on every row in this list';
 
+  // Fill gaps never redoes finished work: per row, only its missing steps run.
+  const gaps = $('#fill-gaps');
+  const partial = target.rows.filter((r) => r.__done > 0 && r.__done < state.investors.stepCount);
+  gaps.textContent = `Fill gaps (${unanswered.length})`;
+  gaps.disabled = !unanswered.length || state.running;
+  gaps.title =
+    `Run only the steps that have no answer yet, on the ${unanswered.length} row(s) that are missing any` +
+    (partial.length ? ` — ${partial.length} of them are part-way through` : '') +
+    '. Answers already recorded are kept, not re-asked.';
+
   const rest = $('#run-unanswered');
   rest.textContent = `Run unanswered (${unanswered.length})`;
   rest.disabled = !unanswered.length || state.running;
-  rest.title = target.selected
-    ? 'Run only the ticked rows that are missing answers'
-    : filtered
-    ? 'Run only the filtered rows that are missing answers'
-    : 'Run only the rows that are missing answers';
+  rest.title = 'Re-run the whole playbook on every row that is missing any answer, replacing what is there';
 }
 
 /**
@@ -1081,6 +1087,20 @@ $('#run-all').addEventListener('click', () => {
     target.selected || isFiltered()
       ? { investorIds: target.rows.map((r) => r.__id) }
       : { scope: 'all' }
+  );
+});
+
+$('#fill-gaps').addEventListener('click', () => {
+  const target = runTarget();
+  const rows = target.rows.filter((r) => r.__done < state.investors.stepCount);
+  if (!rows.length) return;
+  const missingSteps = rows.reduce((n, r) => n + (state.investors.stepCount - r.__done), 0);
+  const what = target.selected ? 'selected row(s)' : isFiltered() ? 'filtered row(s)' : 'row(s)';
+  if (!confirm(`Run ${missingSteps} missing step(s) across ${rows.length} ${what}?\n\nSteps that already have an answer are kept.`)) return;
+  run(
+    target.selected || isFiltered()
+      ? { investorIds: rows.map((r) => r.__id), onlyMissing: true }
+      : { scope: 'gaps' }
   );
 });
 

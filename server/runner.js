@@ -106,7 +106,7 @@ function log(msg) {
  * Run the playbook over the given investor ids. Steps run sequentially per
  * investor; investors run `concurrency` at a time.
  */
-export function startRun({ listId, listName, investorIds, stepIds }) {
+export function startRun({ listId, listName, investorIds, stepIds, onlyMissing }) {
   if (job && job.status === 'running') throw new Error('A run is already in progress.');
 
   const settings = read('settings', {});
@@ -153,7 +153,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
       job.pending.delete(row.__id);
       job.current = [...job.current, { id: row.__id, label }];
       try {
-        await runOne({ listId, client, settings, playbook, steps, row, label });
+        await runOne({ listId, client, settings, playbook, steps, row, label, onlyMissing });
       } catch (err) {
         if (job.controller.signal.aborted) return;
         job.stepErrors++;
@@ -184,7 +184,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
   return jobStatus();
 }
 
-async function runOne({ listId, client, settings, playbook, steps, row, label }) {
+async function runOne({ listId, client, settings, playbook, steps, row, label, onlyMissing }) {
   const schema = readSchema(listId);
   const answers = read(listFile(listId, 'answers'), {});
   const priorByKey = {};
@@ -196,6 +196,19 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
 
   for (const step of steps) {
     if (signal.aborted) throw new Error('Cancelled');
+
+    // Filling gaps: a step that already has an answer is not re-asked, but it
+    // is replayed into the thread so later steps still see it.
+    const existing = answers[row.__id]?.steps?.[step.id];
+    if (onlyMissing && existing?.text) {
+      if (playbook.mode !== 'independent') {
+        messages.push({ role: 'user', content: existing.prompt });
+        messages.push({ role: 'assistant', content: existing.text });
+      }
+      priorByKey[slugify(step.key || step.name)] = existing.text;
+      answered.push(step.id);
+      continue;
+    }
 
     const { text: prompt, missing } = renderTemplate(step.prompt, row, priorByKey);
     log(`→ ${label} · ${step.name}`);

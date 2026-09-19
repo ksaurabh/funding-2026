@@ -182,8 +182,14 @@ The two run buttons always say what they will actually do:
 - **Run 37 filtered** — the rows the filters have left on screen, when nothing
   is ticked. Either way the set is fixed when you click, so rows still run if
   the playbook changes a value they were filtered on.
-- **Run unanswered (n)** — only rows missing answers, narrowed to whichever of
-  those sets is in play. Useful after adding a step, or after a partial run.
+- **Fill gaps (n)** — for each row that is missing anything, run *only* the
+  steps with no answer. Answers already recorded are kept, not re-asked, so a
+  run interrupted half way finishes for the price of what is left. In
+  conversation mode the answers already on file are replayed into the thread,
+  so a later step still sees the earlier ones without paying to redo them.
+- **Run unanswered (n)** — the whole playbook again on every row missing
+  anything, replacing what is there. Use it when a prompt changed and you want
+  a clean pass rather than the cheap one.
 
 Both confirm first, projecting the bill from this list's own average per row.
 A run streams progress into the log strip at the bottom and can be cancelled

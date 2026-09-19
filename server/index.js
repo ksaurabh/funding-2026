@@ -720,7 +720,9 @@ app.post('/api/lists/:listId/run', (req, res) => {
     let ids = body.investorIds;
 
     if (body.scope === 'all' || !ids) ids = investors.rows.map((r) => r.__id);
-    if (body.scope === 'unanswered') {
+    // 'gaps' picks the same rows as 'unanswered' but runs only their missing
+    // steps; the client can also send explicit ids with onlyMissing.
+    if (body.scope === 'unanswered' || body.scope === 'gaps') {
       const answers = read(listFile(list.id, 'answers'), {});
       const playbook = playbookOf(list.id);
       const enabled = playbook.steps.filter((s) => s.enabled !== false);
@@ -729,7 +731,15 @@ app.post('/api/lists/:listId/run', (req, res) => {
         .map((r) => r.__id);
     }
 
-    res.json(startRun({ listId: list.id, listName: list.name, investorIds: ids, stepIds: body.stepIds }));
+    res.json(
+      startRun({
+        listId: list.id,
+        listName: list.name,
+        investorIds: ids,
+        stepIds: body.stepIds,
+        onlyMissing: body.scope === 'gaps' || !!body.onlyMissing,
+      })
+    );
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
