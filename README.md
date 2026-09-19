@@ -182,8 +182,8 @@ The two run buttons always say what they will actually do:
 - **Run 37 filtered** — the rows the filters have left on screen, when nothing
   is ticked. Either way the set is fixed when you click, so rows still run if
   the playbook changes a value they were filtered on.
-- **Fill gaps (n)** — for each row that is missing anything, run *only* the
-  steps with no answer. Answers already recorded are kept, not re-asked, so a
+- **Fill gaps in 8 selected** / **Fill gaps (8)** — for each row that is
+  missing anything, run *only* the steps with no answer. Answers already recorded are kept, not re-asked, so a
   run interrupted half way finishes for the price of what is left. In
   conversation mode the answers already on file are replayed into the thread,
   so a later step still sees the earlier ones without paying to redo them.
@@ -191,7 +191,9 @@ The two run buttons always say what they will actually do:
   anything, replacing what is there. Use it when a prompt changed and you want
   a clean pass rather than the cheap one.
 
-Both confirm first, projecting the bill from this list's own average per row.
+Every one of them names the set it will act on, so a selection or filter is
+never a surprise, and confirms first with the bill projected from this list's
+own average per row.
 A run streams progress into the log strip at the bottom and can be cancelled
 mid-flight. Answers are written to disk after every step, so nothing is lost if
 you stop. One run happens at a time across the whole app.

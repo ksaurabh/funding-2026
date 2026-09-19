@@ -618,20 +618,26 @@ function renderRunButtons(rows) {
     ? 'Run the playbook on the rows matching the current filter'
     : 'Run the playbook on every row in this list';
 
+  // Name the set these act on, so the selection is visible in the button.
+  const scope = target.selected ? 'selected' : filtered ? 'filtered' : '';
+  const of = scope ? ` of ${target.rows.length} ${scope}` : '';
+  const partial = target.rows.filter((r) => r.__done > 0 && r.__done < state.investors.stepCount);
+
   // Fill gaps never redoes finished work: per row, only its missing steps run.
   const gaps = $('#fill-gaps');
-  const partial = target.rows.filter((r) => r.__done > 0 && r.__done < state.investors.stepCount);
-  gaps.textContent = `Fill gaps (${unanswered.length})`;
+  gaps.textContent = scope ? `Fill gaps in ${unanswered.length} ${scope}` : `Fill gaps (${unanswered.length})`;
   gaps.disabled = !unanswered.length || state.running;
   gaps.title =
-    `Run only the steps that have no answer yet, on the ${unanswered.length} row(s) that are missing any` +
-    (partial.length ? ` — ${partial.length} of them are part-way through` : '') +
-    '. Answers already recorded are kept, not re-asked.';
+    `Run only the steps with no answer yet, on the ${unanswered.length} row(s)${of} that are missing any` +
+    (partial.length ? ` — ${partial.length} part-way through` : '') +
+    '. Steps already evaluated are skipped, not re-asked.';
 
   const rest = $('#run-unanswered');
-  rest.textContent = `Run unanswered (${unanswered.length})`;
+  rest.textContent = scope ? `Run unanswered ${scope} (${unanswered.length})` : `Run unanswered (${unanswered.length})`;
   rest.disabled = !unanswered.length || state.running;
-  rest.title = 'Re-run the whole playbook on every row that is missing any answer, replacing what is there';
+  rest.title =
+    `Re-run the whole playbook on the ${unanswered.length} row(s)${of} missing any answer, ` +
+    'replacing the answers already there.';
 }
 
 /**
