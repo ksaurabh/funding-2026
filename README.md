@@ -94,6 +94,10 @@ its values, with counts and a `(blank)` bucket. Several chips in one row widen
 the match; chips in different rows narrow it. The search box filters on any
 column's text.
 
+The right of the bar's header always shows how many rows survive **all** the
+filters together, the search box included — `37 of 529 rows match` — and it
+stays visible when the bar is collapsed.
+
 You choose what is worth filtering by. Filtering only reads, so **any** column
 can go on the bar — it does not have to be editable or a dropdown. Tick
 **Filter** next to a column in **Columns…**, or use **+ Add filter** on the bar

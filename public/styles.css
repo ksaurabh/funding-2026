@@ -580,3 +580,12 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .col-resize.dragging::after { background: var(--accent); }
 .reset-widths { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .reset-widths button { font-size: 12px; padding: 3px 8px; }
+
+.filter-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.filter-count.active { color: var(--accent); font-weight: 600; }

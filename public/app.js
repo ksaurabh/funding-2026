@@ -354,6 +354,18 @@ function filterGroup(label, chips, onRemove) {
   return el('div', { className: 'filter-group' }, [head, el('div', { className: 'chips' }, chips)]);
 }
 
+/** How many rows survive every filter together, the search box included. */
+function updateFilterCount() {
+  const count = $('#filter-count');
+  if (!count) return;
+  const total = state.investors.rows.length;
+  const matched = visibleRows().length;
+  count.textContent = isFiltered()
+    ? `${matched.toLocaleString()} of ${total.toLocaleString()} rows match`
+    : `${total.toLocaleString()} rows`;
+  count.classList.toggle('active', isFiltered());
+}
+
 function renderFilters() {
   const bar = $('#filters');
   const cols = filterColumns();
@@ -442,6 +454,8 @@ function renderFilters() {
   $('#filters-summary').textContent = activeBits.length ? `Filters — ${activeBits.join(' · ')}` : 'Filters';
   $('#filters-summary').parentElement.classList.toggle('active', activeBits.length > 0);
   $('#clear-filters').classList.toggle('hidden', !activeBits.length);
+
+  updateFilterCount();
 
   setFiltersOpen(filtersOpen());
 }
@@ -996,6 +1010,7 @@ function button(text, cls, onClick) {
 
 $('#search').addEventListener('input', (e) => {
   state.filter = e.target.value;
+  updateFilterCount();
   renderTable();
 });
 
