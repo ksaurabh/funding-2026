@@ -1,3 +1,5 @@
+import { renderMarkdown } from './markdown.js';
+
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, props = {}, kids = []) => {
   const n = Object.assign(document.createElement(tag), props);
@@ -424,11 +426,15 @@ async function selectInvestor(id) {
 
   const answers = data.steps.map((s) => {
     const a = s.answer;
-    const body = a?.error
-      ? el('div', { className: 'body error', textContent: '⚠ ' + a.error })
-      : a?.text
-      ? el('div', { className: 'body', textContent: a.text })
-      : el('div', { className: 'body empty', textContent: 'No answer yet.' });
+    let body;
+    if (a?.error) {
+      body = el('div', { className: 'body error', textContent: '⚠ ' + a.error });
+    } else if (a?.text) {
+      body = el('div', { className: 'body md' });
+      body.append(renderMarkdown(a.text));
+    } else {
+      body = el('div', { className: 'body empty', textContent: 'No answer yet.' });
+    }
 
     const parts = [
       el('h4', {}, [

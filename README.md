@@ -130,7 +130,8 @@ silently undercounting.
 ### Researching a list
 
 The list view is the CSV as a table, with an `answers` badge per row showing how
-many enabled steps have run. Click a row to read every answer, its sources, and
+many enabled steps have run. Click a row to read every answer — rendered as Markdown, so headings,
+lists, tables, code and links come out formatted — along with its sources and
 the exact prompt that produced it. From there you can re-run the whole playbook
 for that one row, or re-run a single step.
 
@@ -165,6 +166,7 @@ server/
   csv.js      RFC-4180 parse/serialize
   store.js    atomic JSON file store
 public/       single-page UI, hash-routed, no build step
+  markdown.js small Markdown renderer; builds DOM nodes, never innerHTML
 data/                          (gitignored)
   settings.json                global
   lists.json                   the list index
