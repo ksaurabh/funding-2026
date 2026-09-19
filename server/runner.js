@@ -1,4 +1,4 @@
-import { read, write } from './store.js';
+import { read, write, listFile } from './store.js';
 import { makeClient, askLLM } from './llm.js';
 
 /**
@@ -53,10 +53,12 @@ export function jobStatus() {
   if (!job) return { running: false };
   return {
     running: job.status === 'running',
+    listId: job.listId,
+    listName: job.listName,
     status: job.status,
     total: job.total,
     completed: job.completed,
-    failed: job.failed,
+    stepErrors: job.stepErrors,
     current: job.current,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
@@ -82,12 +84,12 @@ function log(msg) {
  * Run the playbook over the given investor ids. Steps run sequentially per
  * investor; investors run `concurrency` at a time.
  */
-export function startRun({ investorIds, stepIds }) {
+export function startRun({ listId, listName, investorIds, stepIds }) {
   if (job && job.status === 'running') throw new Error('A run is already in progress.');
 
   const settings = read('settings', {});
-  const playbook = read('playbook', { steps: [] });
-  const investors = read('investors', { columns: [], rows: [] });
+  const playbook = read(listFile(listId, 'playbook'), { steps: [] });
+  const investors = read(listFile(listId, 'investors'), { columns: [], rows: [] });
 
   let steps = playbook.steps.filter((s) => s.enabled !== false);
   if (stepIds && stepIds.length) steps = steps.filter((s) => stepIds.includes(s.id));
@@ -100,10 +102,12 @@ export function startRun({ investorIds, stepIds }) {
   const client = makeClient(settings.apiKey);
 
   job = {
+    listId,
+    listName,
     status: 'running',
     total: targets.length,
     completed: 0,
-    failed: 0,
+    stepErrors: 0,
     current: [],
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -122,10 +126,10 @@ export function startRun({ investorIds, stepIds }) {
       const label = row[investors.columns[0]] || row.__id;
       job.current = [...job.current.filter((c) => c !== label), label];
       try {
-        await runOne({ client, settings, playbook, steps, row, label });
+        await runOne({ listId, client, settings, playbook, steps, row, label });
       } catch (err) {
         if (job.controller.signal.aborted) return;
-        job.failed++;
+        job.stepErrors++;
         log(`✗ ${label}: ${err.message}`);
       }
       job.current = job.current.filter((c) => c !== label);
@@ -152,8 +156,8 @@ export function startRun({ investorIds, stepIds }) {
   return jobStatus();
 }
 
-async function runOne({ client, settings, playbook, steps, row, label }) {
-  const answers = read('answers', {});
+async function runOne({ listId, client, settings, playbook, steps, row, label }) {
+  const answers = read(listFile(listId, 'answers'), {});
   const priorByKey = {};
   for (const [key, val] of Object.entries(answers[row.__id]?.byKey || {})) priorByKey[key] = val;
 
@@ -203,19 +207,20 @@ async function runOne({ client, settings, playbook, steps, row, label }) {
       if (conversation) thread.pop();
       record.text = '';
       record.error = err.message;
-      job.failed++;
+      job.stepErrors++;
       log(`✗ ${label} · ${step.name}: ${err.message}`);
     }
 
-    saveAnswer(row.__id, step, record, priorByKey);
+    saveAnswer(listId, row.__id, step, record, priorByKey);
   }
 }
 
-function saveAnswer(investorId, step, record, priorByKey) {
-  const answers = read('answers', {});
+function saveAnswer(listId, investorId, step, record, priorByKey) {
+  const key = listFile(listId, 'answers');
+  const answers = read(key, {});
   const entry = (answers[investorId] ||= { steps: {}, byKey: {} });
   entry.steps[step.id] = record;
   entry.byKey = { ...entry.byKey, ...priorByKey };
   entry.updatedAt = record.updatedAt;
-  write('answers', answers);
+  write(key, answers);
 }

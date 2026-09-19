@@ -31,8 +31,13 @@ header {
   top: 0;
   z-index: 10;
 }
-header h1 { font-size: 15px; margin: 0; letter-spacing: -0.01em; }
+.brand { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); text-decoration: none; white-space: nowrap; }
+.brand:hover { color: var(--accent); }
+.crumb { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+.crumb:not(:empty)::before { content: "/"; margin-right: 8px; color: var(--line); }
 nav { display: flex; gap: 4px; }
+a.tab { font: inherit; padding: 5px 11px; border: 1px solid transparent; border-radius: 6px; color: var(--muted); text-decoration: none; }
+a.tab:hover { background: #f3f0ea; }
 
 button, .btn {
   font: inherit;
@@ -52,7 +57,7 @@ button.primary:hover { filter: brightness(1.08); }
 button.danger { color: var(--err); }
 .tab.active { background: var(--accent-soft); border-color: #eccdbd; color: var(--accent); }
 
-.pill { margin-left: auto; font-size: 12px; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
+.pill { font-size: 12px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 10px; border-radius: 99px; border: 1px solid var(--line); }
 .pill.idle { color: var(--muted); }
 .pill.running { background: var(--accent-soft); border-color: #eccdbd; color: var(--accent); }
 .pill.done { color: var(--ok); border-color: #bfdcca; }
@@ -165,3 +170,28 @@ tbody tr.selected { background: var(--accent-soft); }
   .split { grid-template-columns: 1fr; }
   .detail { border-top: 1px solid var(--line); }
 }
+
+
+/* ----------------------------------------------------------------- lists */
+.scroll { overflow: auto; flex: 1; min-height: 0; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+.card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.card h3 { margin: 0; font-size: 15px; }
+.card h3 a { color: var(--text); text-decoration: none; }
+.card h3 a:hover { color: var(--accent); }
+.bar { height: 5px; border-radius: 99px; background: #eee9e1; overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); }
+.card-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.card-actions .btn, .card-actions button { font-size: 12px; padding: 4px 9px; }

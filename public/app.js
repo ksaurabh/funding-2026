@@ -1,7 +1,7 @@
 const $ = (sel) => document.querySelector(sel);
 const el = (tag, props = {}, kids = []) => {
   const n = Object.assign(document.createElement(tag), props);
-  for (const k of [].concat(kids)) n.append(k);
+  for (const k of [].concat(kids)) if (k) n.append(k);
   return n;
 };
 const api = async (url, opts) => {
@@ -10,25 +10,148 @@ const api = async (url, opts) => {
   if (!res.ok) throw new Error(body?.error || res.statusText);
   return body;
 };
+const post = (url, body) =>
+  api(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
 
-const state = { investors: { columns: [], rows: [] }, playbook: null, selected: null, filter: '' };
+const state = {
+  lists: [],
+  listId: null,
+  list: null,
+  investors: { columns: [], rows: [], stepCount: 0 },
+  playbook: null,
+  selected: null,
+  filter: '',
+};
 
-// ------------------------------------------------------------------- tabs
+// ------------------------------------------------------------------ routing
+// #/lists | #/list/<id>/investors | #/list/<id>/playbook | #/settings
 
-document.querySelectorAll('.tab').forEach((t) =>
-  t.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x === t));
-    document.querySelectorAll('.view').forEach((v) =>
-      v.classList.toggle('hidden', v.id !== 'view-' + t.dataset.view)
+function parseHash() {
+  const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
+  if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
+  return { view: parts[0] === 'settings' ? 'settings' : 'lists', listId: null };
+}
+
+async function route() {
+  const { view, listId } = parseHash();
+
+  if (listId && listId !== state.listId) {
+    state.listId = listId;
+    state.selected = null;
+    state.filter = '';
+    $('#search').value = '';
+    $('#detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select a row to see its answers.' }));
+    try {
+      await Promise.all([loadInvestors(), loadPlaybook()]);
+    } catch (err) {
+      alert(err.message);
+      location.hash = '#/lists';
+      return;
+    }
+  }
+  if (!listId) state.listId = null;
+
+  for (const v of document.querySelectorAll('.view')) v.classList.toggle('hidden', v.id !== 'view-' + view);
+  $('#list-tabs').classList.toggle('hidden', !listId);
+  $('#crumb').textContent = listId && state.list ? state.list.name : '';
+  for (const t of document.querySelectorAll('#list-tabs .tab')) {
+    t.href = `#/list/${listId}/${t.dataset.view}`;
+    t.classList.toggle('active', t.dataset.view === view);
+  }
+  $('#settings-tab').classList.toggle('active', view === 'settings');
+  $('#export').href = `/api/lists/${listId}/export.csv`;
+
+  if (view === 'lists') await loadLists();
+  if (view === 'playbook') {
+    renderTokens();
+    await fillCopyMenu();
+  }
+  if (view === 'settings') await loadSettings();
+}
+
+window.addEventListener('hashchange', route);
+
+// -------------------------------------------------------------------- lists
+
+async function loadLists() {
+  state.lists = await api('/api/lists');
+  const grid = $('#list-grid');
+
+  if (!state.lists.length) {
+    grid.replaceChildren(
+      el('p', { className: 'muted', textContent: 'No lists yet. Import a CSV to get started — the first column is used as the name of each row.' })
     );
-    if (t.dataset.view === 'playbook') renderTokens();
-  })
-);
+    return;
+  }
 
-// -------------------------------------------------------------- investors
+  grid.replaceChildren(
+    ...state.lists.map((l) => {
+      const pct = l.rowCount ? Math.round((l.answered / l.rowCount) * 100) : 0;
+      const card = el('div', { className: 'card' }, [
+        el('h3', {}, [el('a', { href: `#/list/${l.id}/investors`, textContent: l.name })]),
+        el('div', {
+          className: 'muted small',
+          textContent:
+            `${l.rowCount} rows · ${l.columns.length} columns · ${l.stepCount} playbook step${l.stepCount === 1 ? '' : 's'}` +
+            (l.source ? ` · ${l.source}` : ''),
+        }),
+        el('div', { className: 'bar' }, el('i', { style: `width:${pct}%` })),
+        el('div', {
+          className: 'muted small',
+          textContent: l.stepCount
+            ? `${l.answered} of ${l.rowCount} fully researched` +
+              (l.errors ? ` · ${l.errors} with errors` : '') +
+              (l.lastRun ? ` · last run ${new Date(l.lastRun).toLocaleString()}` : '')
+            : 'No playbook steps yet',
+        }),
+        el('div', { className: 'card-actions' }, [
+          el('a', { className: 'btn primary', href: `#/list/${l.id}/investors`, textContent: 'Research' }),
+          el('a', { className: 'btn', href: `#/list/${l.id}/playbook`, textContent: 'Playbook' }),
+          el('a', { className: 'btn', href: `/api/lists/${l.id}/export.csv`, textContent: 'Export' }),
+          button('Rename', '', async () => {
+            const name = prompt('List name', l.name);
+            if (!name) return;
+            await api(`/api/lists/${l.id}`, {
+              method: 'PATCH',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ name }),
+            });
+            loadLists();
+          }),
+          button('Delete', 'danger', async () => {
+            if (!confirm(`Delete "${l.name}" and all of its answers?`)) return;
+            try {
+              await api(`/api/lists/${l.id}`, { method: 'DELETE' });
+            } catch (err) {
+              return alert(err.message);
+            }
+            loadLists();
+          }),
+        ]),
+      ]);
+      return card;
+    })
+  );
+}
+
+$('#import-new').addEventListener('change', async (e) => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if (!f) return;
+  try {
+    const name = prompt('Name this list', f.name.replace(/\.csv$/i, '')) || f.name;
+    const created = await post('/api/lists', { csv: await f.text(), name, source: f.name });
+    location.hash = `#/list/${created.id}/playbook`;
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+// ---------------------------------------------------------------- investors
 
 async function loadInvestors() {
-  state.investors = await api('/api/investors');
+  state.investors = await api(`/api/lists/${state.listId}/investors`);
+  state.list = state.investors.list;
   renderTable();
 }
 
@@ -43,20 +166,17 @@ function visibleRows() {
 function renderTable() {
   const { columns, stepCount = 0 } = state.investors;
   const shown = columns.slice(0, 4);
-  const thead = $('#investor-table thead');
-  thead.replaceChildren(
+  $('#investor-table thead').replaceChildren(
     el('tr', {}, [...shown.map((c) => el('th', { textContent: c })), el('th', { textContent: 'Answers' })])
   );
 
   const rows = visibleRows();
-  $('#count').textContent = `${rows.length} of ${state.investors.rows.length} investors`;
+  $('#count').textContent = `${rows.length} of ${state.investors.rows.length} rows`;
 
-  const tbody = $('#investor-table tbody');
-  tbody.replaceChildren(
+  $('#investor-table tbody').replaceChildren(
     ...rows.map((r) => {
       const status = el('span', {
-        className:
-          'badge ' + (r.__errors ? 'err' : stepCount && r.__done >= stepCount ? 'full' : ''),
+        className: 'badge ' + (r.__errors ? 'err' : stepCount && r.__done >= stepCount ? 'full' : ''),
         textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
       });
       const tr = el('tr', { className: r.__id === state.selected ? 'selected' : '' }, [
@@ -72,7 +192,7 @@ function renderTable() {
 async function selectInvestor(id) {
   state.selected = id;
   renderTable();
-  const data = await api('/api/investors/' + id);
+  const data = await api(`/api/lists/${state.listId}/investors/${id}`);
   const name = data.investor[data.columns[0]];
 
   const head = el('div', { className: 'detail-head' }, [
@@ -82,20 +202,13 @@ async function selectInvestor(id) {
       textContent: data.updatedAt ? 'Last run ' + new Date(data.updatedAt).toLocaleString() : 'Never run',
     }),
     el('div', { className: 'actions' }, [
-      button('Run playbook on this investor', 'primary', () => run({ investorIds: [id] })),
+      button('Run playbook on this row', 'primary', () => run({ investorIds: [id] })),
       button('Clear answers', 'danger', async () => {
-        await api(`/api/investors/${id}/answers`, { method: 'DELETE' });
+        await api(`/api/lists/${state.listId}/investors/${id}/answers`, { method: 'DELETE' });
         await loadInvestors();
         selectInvestor(id);
       }),
     ]),
-  ]);
-
-  const fields = el('details', { className: 'answer' }, [
-    el('summary', { textContent: 'CSV row data' }),
-    el('pre', {
-      textContent: data.columns.map((c) => `${c}: ${data.investor[c]}`).join('\n'),
-    }),
   ]);
 
   const answers = data.steps.map((s) => {
@@ -109,29 +222,24 @@ async function selectInvestor(id) {
     const parts = [
       el('h4', {}, [
         document.createTextNode(s.name),
-        s.webSearch ? el('span', { className: 'badge', textContent: 'web' }) : '',
-        a?.truncated ? el('span', { className: 'badge err', textContent: 'truncated' }) : '',
+        s.webSearch ? el('span', { className: 'badge', textContent: 'web' }) : null,
+        a?.truncated ? el('span', { className: 'badge err', textContent: 'truncated' }) : null,
       ]),
       body,
     ];
 
     if (a?.citations?.length) {
       parts.push(
-        el(
-          'div',
-          { className: 'cites' },
-          [el('strong', { textContent: 'Sources' })].concat(
-            a.citations.map((c) =>
-              el('a', { href: c.url, target: '_blank', rel: 'noreferrer', textContent: c.title || c.url })
-            )
-          )
-        )
+        el('div', { className: 'cites' }, [
+          el('strong', { textContent: 'Sources' }),
+          ...a.citations.map((c) =>
+            el('a', { href: c.url, target: '_blank', rel: 'noreferrer', textContent: c.title || c.url })
+          ),
+        ])
       );
     }
     if (a?.prompt) {
-      parts.push(
-        el('details', {}, [el('summary', { textContent: 'Prompt sent' }), el('pre', { textContent: a.prompt })])
-      );
+      parts.push(el('details', {}, [el('summary', { textContent: 'Prompt sent' }), el('pre', { textContent: a.prompt })]));
     }
     parts.push(
       el('div', { className: 'actions', style: 'margin-top:8px' }, [
@@ -141,7 +249,12 @@ async function selectInvestor(id) {
     return el('div', { className: 'answer' }, parts);
   });
 
-  $('#detail').replaceChildren(head, ...answers, fields);
+  const raw = el('details', { className: 'answer' }, [
+    el('summary', { textContent: 'CSV row data' }),
+    el('pre', { textContent: data.columns.map((c) => `${c}: ${data.investor[c]}`).join('\n') }),
+  ]);
+
+  $('#detail').replaceChildren(head, ...answers, raw);
 }
 
 function button(text, cls, onClick) {
@@ -155,30 +268,11 @@ $('#search').addEventListener('input', (e) => {
   renderTable();
 });
 
-$('#import').addEventListener('change', async (e) => {
-  const f = e.target.files[0];
-  if (!f) return;
-  await api('/api/investors/import', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ csv: await f.text(), name: f.name }),
-  });
-  e.target.value = '';
-  state.selected = null;
-  $('#detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select an investor.' }));
-  await loadInvestors();
-  renderTokens();
-});
-
-// --------------------------------------------------------------------- run
+// ---------------------------------------------------------------------- run
 
 async function run(body) {
   try {
-    await api('/api/run', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    await post(`/api/lists/${state.listId}/run`, body);
     poll();
   } catch (err) {
     alert(err.message);
@@ -186,10 +280,10 @@ async function run(body) {
 }
 
 $('#run-all').addEventListener('click', () => {
-  if (confirm(`Run the playbook on all ${state.investors.rows.length} investors?`)) run({ scope: 'all' });
+  if (confirm(`Run the playbook on all ${state.investors.rows.length} rows?`)) run({ scope: 'all' });
 });
 $('#run-unanswered').addEventListener('click', () => run({ scope: 'unanswered' }));
-$('#cancel').addEventListener('click', () => api('/api/run/cancel', { method: 'POST' }));
+$('#cancel').addEventListener('click', () => post('/api/run/cancel'));
 
 let polling = false;
 let wasRunning = false;
@@ -204,10 +298,10 @@ async function poll() {
 
     if (s.running) {
       pill.className = 'pill running';
-      pill.textContent = `${s.completed}/${s.total} · ${s.current?.join(', ') || 'working…'}`;
+      pill.textContent = `${s.listName}: ${s.completed}/${s.total} · ${s.current?.join(', ') || 'working…'}`;
     } else if (s.status) {
       pill.className = 'pill done';
-      pill.textContent = `${s.status} — ${s.completed}/${s.total}${s.failed ? `, ${s.failed} failed` : ''}`;
+      pill.textContent = `${s.status} — ${s.completed}/${s.total}${s.stepErrors ? `, ${s.stepErrors} step error${s.stepErrors === 1 ? '' : 's'}` : ''}`;
     } else {
       pill.className = 'pill idle';
       pill.textContent = 'Idle';
@@ -216,15 +310,18 @@ async function poll() {
     if (s.log) {
       const log = $('#log');
       const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
-      log.replaceChildren(
-        ...s.log.map((l) => el('div', { textContent: `${l.t.slice(11, 19)}  ${l.msg}` }))
-      );
+      log.replaceChildren(...s.log.map((l) => el('div', { textContent: `${l.t.slice(11, 19)}  ${l.msg}` })));
       if (atBottom) log.scrollTop = log.scrollHeight;
     }
 
-    if (s.running || wasRunning) {
-      await loadInvestors();
-      if (state.selected) await selectInvestor(state.selected);
+    // Refresh whatever is on screen while a run touches this list.
+    if ((s.running || wasRunning) && s.listId) {
+      if (s.listId === state.listId) {
+        await loadInvestors();
+        if (state.selected) await selectInvestor(state.selected);
+      } else if (parseHash().view === 'lists') {
+        await loadLists();
+      }
     }
     wasRunning = !!s.running;
   } catch {
@@ -236,18 +333,19 @@ async function poll() {
 
 setInterval(poll, 2000);
 
-// ---------------------------------------------------------------- playbook
+// ----------------------------------------------------------------- playbook
 
 async function loadPlaybook() {
-  state.playbook = await api('/api/playbook');
+  state.playbook = await api(`/api/lists/${state.listId}/playbook`);
   $('#system').value = state.playbook.system || '';
   $('#mode').value = state.playbook.mode || 'conversation';
   renderSteps();
 }
 
+let activePrompt = null;
+
 function renderSteps() {
-  const wrap = $('#steps');
-  wrap.replaceChildren(
+  $('#steps').replaceChildren(
     ...state.playbook.steps.map((s, i) => {
       const node = el('div', { className: 'step' + (s.enabled === false ? ' disabled' : '') });
       const name = el('input', { type: 'text', value: s.name, placeholder: 'Step name' });
@@ -255,7 +353,11 @@ function renderSteps() {
         s.name = name.value;
       });
 
-      const prompt = el('textarea', { rows: 5, value: s.prompt, placeholder: 'Ask the LLM… use {{Lead Investor}} to insert CSV values' });
+      const prompt = el('textarea', {
+        rows: 5,
+        value: s.prompt,
+        placeholder: 'Ask the LLM… use {{Column Name}} to insert values from this list',
+      });
       prompt.addEventListener('input', () => {
         s.prompt = prompt.value;
         preview(prompt.value);
@@ -298,8 +400,6 @@ function renderSteps() {
   );
 }
 
-let activePrompt = null;
-
 function move(i, d) {
   const j = i + d;
   if (j < 0 || j >= state.playbook.steps.length) return;
@@ -325,13 +425,38 @@ $('#add-step').addEventListener('click', () => {
 $('#save-playbook').addEventListener('click', async () => {
   state.playbook.system = $('#system').value;
   state.playbook.mode = $('#mode').value;
-  state.playbook = await api('/api/playbook', {
+  state.playbook = await api(`/api/lists/${state.listId}/playbook`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(state.playbook),
   });
   renderSteps();
+  renderTokens();
   $('#playbook-status').textContent = 'Saved ' + new Date().toLocaleTimeString();
+  await loadInvestors();
+});
+
+async function fillCopyMenu() {
+  const lists = await api('/api/lists');
+  const sel = $('#copy-playbook');
+  sel.replaceChildren(
+    el('option', { value: '', textContent: 'Copy playbook from…' }),
+    ...lists
+      .filter((l) => l.id !== state.listId && l.stepCount)
+      .map((l) => el('option', { value: l.id, textContent: `${l.name} (${l.stepCount} steps)` }))
+  );
+}
+
+$('#copy-playbook').addEventListener('change', async (e) => {
+  const sourceId = e.target.value;
+  e.target.value = '';
+  if (!sourceId) return;
+  if (!confirm('Replace this list’s playbook with that one? Existing answers are kept but will no longer line up with the new steps.')) return;
+  state.playbook = await post(`/api/lists/${state.listId}/playbook/copy-from/${sourceId}`);
+  $('#system').value = state.playbook.system || '';
+  $('#mode').value = state.playbook.mode || 'conversation';
+  renderSteps();
+  renderTokens();
   await loadInvestors();
 });
 
@@ -362,10 +487,9 @@ function preview(tpl) {
   clearTimeout(previewTimer);
   previewTimer = setTimeout(async () => {
     try {
-      const r = await api('/api/playbook/preview', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt: tpl, investorId: state.selected }),
+      const r = await post(`/api/lists/${state.listId}/playbook/preview`, {
+        prompt: tpl,
+        investorId: state.selected,
       });
       $('#preview').textContent =
         r.text + (r.missing.length ? `\n\n⚠ unknown variables: ${[...new Set(r.missing)].join(', ')}` : '');
@@ -375,7 +499,7 @@ function preview(tpl) {
   }, 250);
 }
 
-// ---------------------------------------------------------------- settings
+// ----------------------------------------------------------------- settings
 
 async function loadSettings() {
   const s = await api('/api/settings');
@@ -416,10 +540,7 @@ $('#clear-key').addEventListener('click', async () => {
   loadSettings();
 });
 
-// -------------------------------------------------------------------- boot
+// --------------------------------------------------------------------- boot
 
-await loadInvestors();
-await loadPlaybook();
-await loadSettings();
-renderTokens();
+await route();
 poll();

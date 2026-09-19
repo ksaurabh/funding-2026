@@ -8,26 +8,38 @@
 </head>
 <body>
 <header>
-  <h1>Investor Playbook</h1>
-  <nav>
-    <button class="tab active" data-view="investors">Investors</button>
-    <button class="tab" data-view="playbook">Playbook</button>
-    <button class="tab" data-view="settings">Settings</button>
+  <a href="#/lists" class="brand">Investor Playbook</a>
+  <span id="crumb" class="crumb"></span>
+  <nav id="list-tabs" class="hidden">
+    <a class="tab" data-view="investors">Investors</a>
+    <a class="tab" data-view="playbook">Playbook</a>
   </nav>
+  <span class="spacer"></span>
+  <a href="#/settings" class="tab" id="settings-tab">Settings</a>
   <div id="runpill" class="pill idle">Idle</div>
 </header>
 
-<!-- ------------------------------------------------------------ investors -->
-<main id="view-investors" class="view">
+<!-- ----------------------------------------------------------------- lists -->
+<main id="view-lists" class="view hidden">
   <div class="toolbar">
-    <input id="search" type="search" placeholder="Filter investors…" />
-    <span id="count" class="muted"></span>
+    <label class="btn primary">Import CSV list<input id="import-new" type="file" accept=".csv,text/csv" hidden /></label>
+    <span class="muted small">Each list gets its own playbook and answers.</span>
+  </div>
+  <div class="scroll pad">
+    <div id="list-grid" class="grid"></div>
+  </div>
+</main>
+
+<!-- ------------------------------------------------------------- investors -->
+<main id="view-investors" class="view hidden">
+  <div class="toolbar">
+    <input id="search" type="search" placeholder="Filter rows…" />
+    <span id="count" class="muted small"></span>
     <span class="spacer"></span>
     <button id="run-all">Run all</button>
     <button id="run-unanswered">Run unanswered</button>
     <button id="cancel" class="danger" disabled>Cancel</button>
-    <a href="/api/export.csv" class="btn">Export CSV</a>
-    <label class="btn">Import CSV<input id="import" type="file" accept=".csv" hidden /></label>
+    <a id="export" href="#" class="btn">Export CSV</a>
   </div>
   <div class="split">
     <div class="listpane">
@@ -37,18 +49,19 @@
       </table>
     </div>
     <aside id="detail" class="detail">
-      <p class="muted pad">Select an investor to see its answers.</p>
+      <p class="muted pad">Select a row to see its answers.</p>
     </aside>
   </div>
   <div id="log" class="log"></div>
 </main>
 
-<!-- ------------------------------------------------------------- playbook -->
+<!-- -------------------------------------------------------------- playbook -->
 <main id="view-playbook" class="view hidden">
   <div class="toolbar">
     <button id="add-step" class="primary">+ Add step</button>
     <button id="save-playbook">Save playbook</button>
-    <span id="playbook-status" class="muted"></span>
+    <select id="copy-playbook"><option value="">Copy playbook from…</option></select>
+    <span id="playbook-status" class="muted small"></span>
   </div>
   <div class="split">
     <div class="listpane pad">
@@ -67,18 +80,18 @@
     </div>
     <aside class="detail pad">
       <h3>Template variables</h3>
-      <p class="muted">Click to copy. Use them anywhere in a step prompt.</p>
+      <p class="muted small">Click to insert into the prompt you last edited.</p>
       <div id="tokens" class="tokens"></div>
       <h3>Preview</h3>
-      <p class="muted">Rendered against the first investor in the list.</p>
+      <p class="muted small">Rendered against a real row from this list.</p>
       <pre id="preview" class="preview"></pre>
     </aside>
   </div>
 </main>
 
-<!-- ------------------------------------------------------------- settings -->
+<!-- -------------------------------------------------------------- settings -->
 <main id="view-settings" class="view hidden">
-  <div class="pad narrow">
+  <div class="scroll pad narrow">
     <h2>Anthropic API</h2>
     <label class="field">
       <span>API key <em id="keyhint"></em></span>
@@ -108,14 +121,14 @@
         <input id="maxTokens" type="number" min="512" max="64000" step="512" />
       </label>
       <label class="field">
-        <span>Investors in parallel</span>
+        <span>Rows in parallel</span>
         <input id="concurrency" type="number" min="1" max="8" />
       </label>
     </div>
     <button id="save-settings" class="primary">Save settings</button>
     <button id="clear-key" class="danger">Clear stored key</button>
     <p id="settings-status" class="muted"></p>
-    <p class="muted small">The key is stored in <code>data/settings.json</code> on this machine only.</p>
+    <p class="muted small">Settings are global. The key is stored in <code>data/settings.json</code> on this machine only.</p>
   </div>
 </main>
 
