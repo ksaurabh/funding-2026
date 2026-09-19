@@ -36,6 +36,18 @@ different CSV over a list silently drops columns. Create a throwaway list
 first and point destructive tests at that. This has already cost the user's
 main list once (recovered from `data/investors.json.migrated`).
 
+## Verify after a slice edit to public/app.js
+
+Replacing a span of that file between two function-name anchors has
+silently deleted the functions that happened to sit in between —
+`renderTable`, `rangeSelect` and `editableCell` were all lost this way in
+one edit, and the page died with "renderTable is not defined". `node
+--check` does not catch it, because the file is still valid JavaScript.
+
+After any such edit, check that every function called is still defined,
+and that every `$('#id')` the script binds exists in the HTML. Prefer
+targeted `Edit` calls over slicing between anchors.
+
 ## Their data lives in `data/` and is gitignored
 
 `data/` holds the API key, the imported lists, manual cell edits and every
