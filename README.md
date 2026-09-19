@@ -54,21 +54,26 @@ in the environment the first boot picks it up automatically.
 ### Columns (per list)
 
 **Columns…** on a list's toolbar controls how the list behaves as a table.
-Every column — imported or added — is **editable free text by default**; click
-a cell and type. Per column you can:
+Imported columns are **shown but read-only** — they are the data you brought
+in. Per column you can:
 
+- Set what it is: **Read-only** (the default for imported columns), **Free
+  text**, or **Dropdown**. Only an editable column can be typed into or filled
+  in by a playbook step.
+- Give a dropdown its **choices**, seeded from the values already in that
+  column; you can add or remove them, and picking a value that isn't in the
+  list yet adds it. (Columns with more than 200 distinct values are too
+  free-text for this.) Choices are kept if you switch back to read-only, so
+  the round trip is lossless.
 - **Rename** it. The imported rows, your cell values and the column settings
   all move with it, and playbook steps belonging only to this list have their
   `{{Old Name}}` tokens and fill targets updated. A playbook shared with
   another list is left alone and reported, rather than rewritten behind your
   back.
-- Switch it to a **dropdown**. The choices are seeded from the values already
-  in that column, and you can add or remove them; picking a value that isn't
-  in the list yet adds it. (Columns with more than 200 distinct values are too
-  free-text for this.)
 - **Show or hide** it in the table. The first four imported columns show by
   default; everything else is available but out of the way.
-- **Add** a column of your own, free text or dropdown, and remove it again.
+- **Add** a column of your own, free text or dropdown. Added columns are
+  editable from the start.
 
 Cell values are stored separately from the imported rows, so `investors.json`
 stays exactly as imported and a re-import keeps your values for every row that

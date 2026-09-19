@@ -244,6 +244,9 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
       if (step.writeTo && !field) {
         record.writeError = `Column "${step.writeTo}" no longer exists.`;
         log(`⚠ ${label} · ${step.name}: ${record.writeError}`);
+      } else if (field && !field.editable) {
+        record.writeError = `Column "${step.writeTo}" is read-only. Make it editable to let a step fill it.`;
+        log(`⚠ ${label} · ${step.name}: ${record.writeError}`);
       } else if (field) {
         const column = step.writeTo; // the field map is keyed by name
         try {

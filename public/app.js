@@ -210,7 +210,8 @@ const fields = () => {
 const fieldFor = (col) => fields()[col];
 // In the list's own column order, not the object's.
 const columnsWhere = (pred) => (state.investors.columns || []).filter((c) => fields()[c] && pred(fields()[c]));
-const enumColumns = () => columnsWhere((f) => f.type === 'enum');
+const enumColumns = () => columnsWhere((f) => f.editable && f.type === 'enum');
+const editableColumns = () => columnsWhere((f) => f.editable);
 const shownColumns = () => columnsWhere((f) => f.show);
 const cellValue = (row, col) => String(row[col] ?? '').trim();
 
@@ -327,7 +328,12 @@ function renderTable() {
         className:
           (r.__id === state.selected ? 'selected ' : '') + (active ? 'active' : queued ? 'queued' : ''),
       }, [
-        ...shown.map((c) => el('td', { className: 'cell-edit' }, editableCell(r, c, fieldFor(c)))),
+        ...shown.map((c) => {
+          const f = fieldFor(c);
+          return f?.editable
+            ? el('td', { className: 'cell-edit' }, editableCell(r, c, f))
+            : el('td', { textContent: r[c] ?? '', title: r[c] ?? '' });
+        }),
         el('td', {}, status),
       ]);
       tr.addEventListener('click', () => selectInvestor(r.__id));
@@ -710,24 +716,30 @@ async function renderColumnConfig() {
   const all = info.fields;
 
   const rows = info.columns.map((c) => {
-    const field = all[c.name] || { type: 'text', values: [], custom: !c.imported, show: true };
+    const field = all[c.name] || { editable: !c.imported, type: 'text', values: [], custom: !c.imported, show: true };
     const update = (patch) => saveSchema({ ...all, [c.name]: { ...field, ...patch } });
 
     const show = el('input', { type: 'checkbox', checked: field.show });
     show.addEventListener('change', () => update({ show: show.checked }));
 
+    const current = !field.editable ? 'readonly' : field.type === 'enum' ? 'enum' : 'text';
     const type = el('select', { className: 'type-pick' }, [
-      el('option', { value: 'text', textContent: 'Free text', selected: field.type === 'text' }),
+      el('option', { value: 'readonly', textContent: 'Read-only', selected: current === 'readonly' }),
+      el('option', { value: 'text', textContent: 'Free text', selected: current === 'text' }),
       el('option', {
         value: 'enum',
-        textContent: c.tooMany && field.type !== 'enum' ? 'Dropdown (too many values)' : 'Dropdown',
-        selected: field.type === 'enum',
-        disabled: c.tooMany && field.type !== 'enum',
+        textContent: c.tooMany && current !== 'enum' ? 'Dropdown (too many values)' : 'Dropdown',
+        selected: current === 'enum',
+        disabled: c.tooMany && current !== 'enum',
       }),
     ]);
     // Switching to a dropdown seeds the choices from what is already in the column.
     type.addEventListener('change', () =>
-      update({ type: type.value, values: type.value === 'enum' && !field.values.length ? c.distinct : field.values })
+      update({
+        editable: type.value !== 'readonly',
+        type: type.value === 'enum' ? 'enum' : 'text',
+        values: type.value === 'enum' && !field.values.length ? c.distinct : field.values,
+      })
     );
 
     const rename = button('Rename', '', async () => {
@@ -764,10 +776,11 @@ async function renderColumnConfig() {
           }),
     ]);
 
+    const isDropdown = field.editable && field.type === 'enum';
     return el(
       'div',
-      { className: 'col-row' + (field.type === 'enum' ? ' open' : '') },
-      field.type === 'enum' ? [head, ...valueEditor(c.name, field, all)] : [head]
+      { className: 'col-row' + (isDropdown ? ' open' : '') },
+      isDropdown ? [head, ...valueEditor(c.name, field, all)] : [head]
     );
   });
 
@@ -788,6 +801,7 @@ async function renderColumnConfig() {
     saveSchema({
       ...all,
       [name]: {
+        editable: true,
         type: newType.value,
         values: newType.value === 'enum' ? newValues.value.split(',') : [],
         custom: true,
@@ -804,9 +818,9 @@ async function renderColumnConfig() {
     el('p', {
       className: 'muted small',
       textContent:
-        'Every column is editable free text unless you make it a dropdown. A playbook step can fill any of them in ' +
-        'automatically — pick the column on the step. Removing a choice only takes it out of the dropdown; rows ' +
-        'already set to it keep their value.',
+        'Imported columns are read-only until you make them editable; columns you add start editable. Only an ' +
+        'editable column can be typed into or filled in by a playbook step. Removing a choice only takes it out of ' +
+        'the dropdown; rows already set to it keep their value.',
     })
   );
 }
@@ -933,7 +947,7 @@ let activePrompt = null;
 function writeToSelect(step) {
   const sel = el('select', { className: 'writeto' }, [
     el('option', { value: '', textContent: '— none —', selected: !step.writeTo }),
-    ...(state.investors.columns || []).map((name) =>
+    ...editableColumns().map((name) =>
       el('option', {
         value: name,
         textContent: `${name} (${fieldFor(name)?.type === 'enum' ? 'dropdown' : 'text'})`,
@@ -941,8 +955,14 @@ function writeToSelect(step) {
       })
     ),
   ]);
-  if (step.writeTo && !fieldFor(step.writeTo)) {
-    sel.append(el('option', { value: step.writeTo, textContent: `${step.writeTo} (missing)`, selected: true }));
+  if (step.writeTo && !editableColumns().includes(step.writeTo)) {
+    sel.append(
+      el('option', {
+        value: step.writeTo,
+        textContent: `${step.writeTo} (${fieldFor(step.writeTo) ? 'read-only' : 'missing'})`,
+        selected: true,
+      })
+    );
   }
   sel.addEventListener('change', () => {
     step.writeTo = sel.value;

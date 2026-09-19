@@ -72,17 +72,17 @@ export function listFile(id, kind) {
 export const playbookFile = (id) => path.posix.join('playbooks', safeId(id));
 
 // A list's column settings, keyed by column name:
-//   { type: 'text' | 'enum', values: string[], custom: boolean, show: boolean }
+//   { editable, type: 'text' | 'enum', values: string[], custom, show }
 //
-// Every column is plain editable text unless it says otherwise, so a list with
-// no saved settings still behaves sensibly. `custom` marks a column added here
-// rather than imported; `show` picks what the table displays.
+// Imported columns are shown but read-only until you say otherwise; a column
+// added here is editable from the start, since it would be useless read-only.
+// `type` only matters once a column is editable, and defaults to free text.
 export const DEFAULT_SCHEMA = { fields: {} };
 
 const DEFAULT_SHOWN = 4;
 
 export function defaultField(custom = false, show = true) {
-  return { type: 'text', values: [], custom, show };
+  return { editable: custom, type: 'text', values: [], custom, show };
 }
 
 /**
@@ -95,13 +95,20 @@ export function readSchema(listId, columns) {
 
   let saved = raw.fields || {};
   // Migrate the two earlier shapes: { enums: {col: values} } and a fields array.
+  // Anything configured back then was deliberately made editable.
   if (Array.isArray(saved)) {
     saved = Object.fromEntries(
-      saved.map((f) => [f.name, { type: f.type || 'enum', values: f.values || [], custom: !!f.custom, show: true }])
+      saved.map((f) => [
+        f.name,
+        { editable: true, type: f.type || 'enum', values: f.values || [], custom: !!f.custom, show: true },
+      ])
     );
   } else if (!raw.fields && raw.enums) {
     saved = Object.fromEntries(
-      Object.entries(raw.enums).map(([name, values]) => [name, { type: 'enum', values, custom: false, show: true }])
+      Object.entries(raw.enums).map(([name, values]) => [
+        name,
+        { editable: true, type: 'enum', values, custom: false, show: true },
+      ])
     );
   }
 
@@ -109,6 +116,8 @@ export function readSchema(listId, columns) {
   cols.forEach((name, i) => {
     const f = saved[name] || {};
     fields[name] = {
+      // Imported data is reference material until you opt it in.
+      editable: !!f.editable,
       type: f.type === 'enum' ? 'enum' : 'text',
       values: f.values || [],
       custom: false,
@@ -119,7 +128,13 @@ export function readSchema(listId, columns) {
   // Columns added here, in the order they were added.
   for (const [name, f] of Object.entries(saved)) {
     if (fields[name] || !f.custom) continue;
-    fields[name] = { type: f.type === 'enum' ? 'enum' : 'text', values: f.values || [], custom: true, show: f.show !== false };
+    fields[name] = {
+      editable: f.editable !== false,
+      type: f.type === 'enum' ? 'enum' : 'text',
+      values: f.values || [],
+      custom: true,
+      show: f.show !== false,
+    };
   }
   return { fields };
 }

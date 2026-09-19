@@ -456,8 +456,11 @@ app.put('/api/lists/:listId/schema', (req, res) => {
       if (!imported.has(name) && !name) continue;
       const custom = !imported.has(name);
       const type = TYPES.has(f?.type) ? f.type : 'text';
+      const editable = custom ? f?.editable !== false : !!f?.editable;
       fields[name] = {
+        editable,
         type,
+        // Choices are kept even while read-only, so toggling back is lossless.
         values: type === 'enum' ? cleanValues(f?.values) : [],
         custom,
         show: f?.show !== false,
@@ -587,6 +590,7 @@ app.patch('/api/lists/:listId/investors/:id', (req, res) => {
     const field = findField(schema, column);
 
     if (!field) return res.status(400).json({ error: 'Unknown column.' });
+    if (!field.editable) return res.status(400).json({ error: `"${column}" is not an editable column.` });
     if (!rows.some((r) => r.__id === req.params.id)) {
       return res.status(404).json({ error: 'Row not found.' });
     }
