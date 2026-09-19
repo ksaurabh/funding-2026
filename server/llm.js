@@ -125,5 +125,12 @@ export async function chooseValue(client, { system, messages, settings, column, 
     throw new Error(`Could not read a value for "${column}" from the model.`);
   }
   if (!values.includes(value)) throw new Error(`Model returned "${value}", which is not an allowed value.`);
-  return value;
+  return {
+    value,
+    usage: {
+      input: response.usage.input_tokens,
+      output: response.usage.output_tokens,
+      cacheRead: response.usage.cache_read_input_tokens ?? 0,
+    },
+  };
 }

@@ -291,3 +291,17 @@ h4.section:first-child { margin-top: 4px; }
 .col-head .badge { margin-left: 4px; }
 .col-head > span.muted { margin-left: auto; }
 .col-head button { font-size: 12px; padding: 3px 8px; }
+
+.inline { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.inline select { width: auto; max-width: 260px; color: var(--text); font-size: 13px; }
+.notice {
+  padding: 7px 16px;
+  background: var(--accent-soft);
+  border-bottom: 1px solid #eccdbd;
+  color: var(--accent);
+  font-size: 12px;
+}
+#playbook-grid .card h3 { font-size: 15px; }
+
+.pill.cost { text-decoration: none; color: var(--muted); font-variant-numeric: tabular-nums; }
+.pill.cost:hover { color: var(--accent); border-color: #eccdbd; }

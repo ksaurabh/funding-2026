@@ -13,8 +13,14 @@ const api = async (url, opts) => {
 const post = (url, body) =>
   api(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
 
+/** $0.0043 and $12.40 should both read sensibly. */
+const money = (n) =>
+  n >= 1 ? `$${n.toFixed(2)}` : n >= 0.01 ? `$${n.toFixed(3)}` : n > 0 ? `$${n.toFixed(4)}` : '$0.00';
+
 const state = {
   lists: [],
+  cost: null,
+  playbooks: [],
   listId: null,
   list: null,
   investors: { columns: [], csvColumns: [], rows: [], stepCount: 0 },
@@ -31,7 +37,8 @@ const state = {
 function parseHash() {
   const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
   if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
-  return { view: parts[0] === 'settings' ? 'settings' : 'lists', listId: null };
+  const top = ['settings', 'playbooks'].includes(parts[0]) ? parts[0] : 'lists';
+  return { view: top, listId: null };
 }
 
 async function route() {
@@ -62,13 +69,16 @@ async function route() {
     t.classList.toggle('active', t.dataset.view === view);
   }
   $('#settings-tab').classList.toggle('active', view === 'settings');
+  $('#playbooks-tab').classList.toggle('active', view === 'playbooks');
   $('#export').href = `/api/lists/${listId}/export.csv`;
 
+  await loadCost();
   if (view === 'lists') await loadLists();
+  if (view === 'playbooks') await loadPlaybookIndex();
   if (view === 'playbook') {
     renderSteps(); // the column dropdowns depend on the current schema
     renderTokens();
-    await fillCopyMenu();
+    await fillPlaybookPicker();
   }
   if (view === 'settings') await loadSettings();
 }
@@ -77,8 +87,25 @@ window.addEventListener('hashchange', route);
 
 // -------------------------------------------------------------------- lists
 
+async function loadCost() {
+  try {
+    state.cost = await api('/api/cost');
+  } catch {
+    return;
+  }
+  const c = state.cost;
+  $('#spend').textContent = `${money(c.total)}${c.unknown ? '+' : ''} spent`;
+  $('#spend').title =
+    `${c.calls} model call${c.calls === 1 ? '' : 's'} across all lists` +
+    (c.unknown ? ' — some used a model with no price on file, so the real total is higher.' : '');
+
+  const list = c.byList.find((l) => l.id === state.listId);
+  $('#list-spend').textContent = list && list.calls ? `· ${money(list.cost)} spent on this list` : '';
+}
+
 async function loadLists() {
   state.lists = await api('/api/lists');
+  await loadCost();
   const grid = $('#list-grid');
 
   if (!state.lists.length) {
@@ -96,7 +123,8 @@ async function loadLists() {
         el('div', {
           className: 'muted small',
           textContent:
-            `${l.rowCount} rows · ${l.columns.length} columns · ${l.stepCount} playbook step${l.stepCount === 1 ? '' : 's'}` +
+            `${l.rowCount} rows · ${l.columns.length} columns · ` +
+            (l.playbookName ? `${l.playbookName} (${l.stepCount} steps)` : 'no playbook') +
             (l.source ? ` · ${l.source}` : ''),
         }),
         el('div', { className: 'bar' }, el('i', { style: `width:${pct}%` })),
@@ -105,8 +133,11 @@ async function loadLists() {
           textContent: l.stepCount
             ? `${l.answered} of ${l.rowCount} fully researched` +
               (l.errors ? ` · ${l.errors} with errors` : '') +
+              (l.calls ? ` · ${money(l.cost)}${l.costUnknown ? '+' : ''} spent` : '') +
               (l.lastRun ? ` · last run ${new Date(l.lastRun).toLocaleString()}` : '')
-            : 'No playbook steps yet',
+            : l.playbookName
+            ? 'That playbook has no enabled steps yet'
+            : 'No playbook attached yet',
         }),
         el('div', { className: 'card-actions' }, [
           el('a', { className: 'btn primary', href: `#/list/${l.id}/investors`, textContent: 'Research' }),
@@ -393,6 +424,16 @@ async function selectInvestor(id) {
         ])
       );
     }
+    if (a?.cost || a?.usage) {
+      parts.push(
+        el('div', {
+          className: 'muted small',
+          textContent:
+            `${money(a.cost || 0)}${a.costUnknown ? '+' : ''} · ` +
+            `${a.usage?.input ?? 0} in / ${a.usage?.output ?? 0} out tokens · ${a.model || ''}`,
+        })
+      );
+    }
     if (a?.wroteTo) {
       parts.push(
         el('div', { className: 'wrote' }, [
@@ -587,7 +628,12 @@ async function run(body) {
 }
 
 $('#run-all').addEventListener('click', () => {
-  if (confirm(`Run the playbook on all ${state.investors.rows.length} rows?`)) run({ scope: 'all' });
+  const n = state.investors.rows.length;
+  const done = state.cost?.byList.find((l) => l.id === state.listId);
+  // Project from what this list has actually cost per researched row.
+  const per = done?.calls && state.investors.stepCount ? done.cost / (done.calls / state.investors.stepCount) : null;
+  const estimate = per ? `\n\nRoughly ${money(per * n)} at this list's average of ${money(per)} per row.` : '';
+  if (confirm(`Run the playbook on all ${n} rows?${estimate}`)) run({ scope: 'all' });
 });
 $('#run-unanswered').addEventListener('click', () => run({ scope: 'unanswered' }));
 $('#cancel').addEventListener('click', () => post('/api/run/cancel'));
@@ -605,10 +651,14 @@ async function poll() {
 
     if (s.running) {
       pill.className = 'pill running';
-      pill.textContent = `${s.listName}: ${s.completed}/${s.total} · ${s.current?.join(', ') || 'working…'}`;
+      pill.textContent =
+        `${s.listName}: ${s.completed}/${s.total} · ${money(s.cost || 0)} · ` +
+        (s.current?.join(', ') || 'working…');
     } else if (s.status) {
       pill.className = 'pill done';
-      pill.textContent = `${s.status} — ${s.completed}/${s.total}${s.stepErrors ? `, ${s.stepErrors} step error${s.stepErrors === 1 ? '' : 's'}` : ''}`;
+      pill.textContent =
+        `${s.status} — ${s.completed}/${s.total}, ${money(s.cost || 0)}` +
+        (s.stepErrors ? `, ${s.stepErrors} step error${s.stepErrors === 1 ? '' : 's'}` : '');
     } else {
       pill.className = 'pill idle';
       pill.textContent = 'Idle';
@@ -623,6 +673,7 @@ async function poll() {
 
     // Refresh whatever is on screen while a run touches this list.
     if ((s.running || wasRunning) && s.listId) {
+      await loadCost();
       if (s.listId === state.listId) {
         await loadInvestors();
         if (state.selected) await selectInvestor(state.selected);
@@ -673,6 +724,15 @@ function writeToSelect(step) {
 }
 
 function renderSteps() {
+  if (!state.playbook?.id) {
+    $('#steps').replaceChildren(
+      el('p', {
+        className: 'muted',
+        textContent: 'No playbook attached to this list. Pick a saved one above, or create one with “Save as new…”.',
+      })
+    );
+    return;
+  }
   $('#steps').replaceChildren(
     ...state.playbook.steps.map((s, i) => {
       const node = el('div', { className: 'step' + (s.enabled === false ? ' disabled' : '') });
@@ -742,6 +802,7 @@ function slug(s) {
 }
 
 $('#add-step').addEventListener('click', () => {
+  if (!state.playbook?.id) return alert('Attach or create a playbook first.');
   state.playbook.steps.push({
     name: `Step ${state.playbook.steps.length + 1}`,
     prompt: '',
@@ -752,41 +813,158 @@ $('#add-step').addEventListener('click', () => {
 });
 
 $('#save-playbook').addEventListener('click', async () => {
+  if (!state.playbook?.id) {
+    return alert('Attach a playbook first, or use “Save as new…” to create one.');
+  }
   state.playbook.system = $('#system').value;
   state.playbook.mode = $('#mode').value;
-  state.playbook = await api(`/api/lists/${state.listId}/playbook`, {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(state.playbook),
-  });
+  try {
+    state.playbook = await api(`/api/lists/${state.listId}/playbook`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(state.playbook),
+    });
+  } catch (err) {
+    return alert(err.message);
+  }
   renderSteps();
   renderTokens();
-  $('#playbook-status').textContent = 'Saved ' + new Date().toLocaleTimeString();
+  await fillPlaybookPicker();
+  $('#playbook-status').textContent = `Saved “${state.playbook.name}” at ` + new Date().toLocaleTimeString();
   await loadInvestors();
 });
 
-async function fillCopyMenu() {
-  const lists = await api('/api/lists');
-  const sel = $('#copy-playbook');
+async function fillPlaybookPicker() {
+  state.playbooks = await api('/api/playbooks');
+  const sel = $('#playbook-pick');
   sel.replaceChildren(
-    el('option', { value: '', textContent: 'Copy playbook from…' }),
-    ...lists
-      .filter((l) => l.id !== state.listId && l.stepCount)
-      .map((l) => el('option', { value: l.id, textContent: `${l.name} (${l.stepCount} steps)` }))
+    el('option', { value: '', textContent: '— none —', selected: !state.playbook?.id }),
+    ...state.playbooks.map((p) =>
+      el('option', {
+        value: p.id,
+        textContent: `${p.name} (${p.stepCount} step${p.stepCount === 1 ? '' : 's'})`,
+        selected: p.id === state.playbook?.id,
+      })
+    )
   );
+
+  // Warn when editing here changes another list's playbook too.
+  const mine = state.playbooks.find((p) => p.id === state.playbook?.id);
+  const others = (mine?.usedBy || []).filter((l) => l.id !== state.listId);
+  const notice = $('#playbook-shared');
+  notice.classList.toggle('hidden', !others.length);
+  notice.textContent = others.length
+    ? `Also used by ${others.map((l) => l.name).join(', ')} — edits here apply there too. Use “Save as new…” to branch off instead.`
+    : '';
 }
 
-$('#copy-playbook').addEventListener('change', async (e) => {
-  const sourceId = e.target.value;
-  e.target.value = '';
-  if (!sourceId) return;
-  if (!confirm('Replace this list’s playbook with that one? Existing answers are kept but will no longer line up with the new steps.')) return;
-  state.playbook = await post(`/api/lists/${state.listId}/playbook/copy-from/${sourceId}`);
+async function attachPlaybook(playbookId) {
+  state.playbook = await post(`/api/lists/${state.listId}/playbook/attach`, { playbookId });
   $('#system').value = state.playbook.system || '';
   $('#mode').value = state.playbook.mode || 'conversation';
   renderSteps();
   renderTokens();
+  await fillPlaybookPicker();
   await loadInvestors();
+}
+
+$('#playbook-pick').addEventListener('change', (e) => attachPlaybook(e.target.value || null));
+
+$('#fork-playbook').addEventListener('click', async () => {
+  const name = prompt('Name for the new playbook', `${state.playbook?.name || 'Playbook'} (copy)`);
+  if (!name) return;
+  // Fork whatever is on screen, including unsaved edits.
+  state.playbook = await post('/api/playbooks', {
+    name,
+    system: $('#system').value,
+    mode: $('#mode').value,
+    steps: state.playbook?.steps || [],
+    attachTo: state.listId,
+  });
+  renderSteps();
+  renderTokens();
+  await fillPlaybookPicker();
+  await loadInvestors();
+  $('#playbook-status').textContent = 'Saved as “' + name + '”';
+});
+
+// ------------------------------------------------------- playbooks index
+
+async function loadPlaybookIndex() {
+  state.playbooks = await api('/api/playbooks');
+  const grid = $('#playbook-grid');
+
+  if (!state.playbooks.length) {
+    grid.replaceChildren(
+      el('p', { className: 'muted', textContent: 'No playbooks yet. Create one here, or from a list’s Playbook tab.' })
+    );
+    return;
+  }
+
+  grid.replaceChildren(
+    ...state.playbooks.map((p) =>
+      el('div', { className: 'card' }, [
+        el('h3', { textContent: p.name }),
+        el('div', {
+          className: 'muted small',
+          textContent:
+            `${p.stepCount} step${p.stepCount === 1 ? '' : 's'} · ` +
+            (p.mode === 'independent' ? 'independent steps' : 'one conversation'),
+        }),
+        el('div', { className: 'muted small' }, [
+          p.usedBy.length
+            ? el('span', {}, [
+                document.createTextNode('Used by '),
+                ...p.usedBy.map((l, i) =>
+                  el('span', {}, [
+                    i ? document.createTextNode(', ') : null,
+                    el('a', { href: `#/list/${l.id}/playbook`, textContent: l.name }),
+                  ])
+                ),
+              ])
+            : el('span', { textContent: 'Not attached to any list' }),
+        ]),
+        el('div', { className: 'card-actions' }, [
+          ...(p.usedBy.length
+            ? [el('a', { className: 'btn primary', href: `#/list/${p.usedBy[0].id}/playbook`, textContent: 'Edit' })]
+            : []),
+          button('Duplicate', '', async () => {
+            const name = prompt('Name for the copy', `${p.name} (copy)`);
+            if (!name) return;
+            await post('/api/playbooks', { name, copyFrom: p.id });
+            loadPlaybookIndex();
+          }),
+          button('Rename', '', async () => {
+            const name = prompt('Playbook name', p.name);
+            if (!name) return;
+            const full = await api(`/api/playbooks/${p.id}`);
+            await api(`/api/playbooks/${p.id}`, {
+              method: 'PUT',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ ...full, name }),
+            });
+            loadPlaybookIndex();
+          }),
+          button('Delete', 'danger', async () => {
+            if (!confirm(`Delete the playbook "${p.name}"?`)) return;
+            try {
+              await api(`/api/playbooks/${p.id}`, { method: 'DELETE' });
+            } catch (err) {
+              return alert(err.message);
+            }
+            loadPlaybookIndex();
+          }),
+        ]),
+      ])
+    )
+  );
+}
+
+$('#new-playbook').addEventListener('click', async () => {
+  const name = prompt('Name the playbook', 'New playbook');
+  if (!name) return;
+  await post('/api/playbooks', { name });
+  loadPlaybookIndex();
 });
 
 function renderTokens() {

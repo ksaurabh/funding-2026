@@ -5,9 +5,29 @@ each list a playbook of LLM questions, run it over every row, and browse the
 answers.
 
 ```bash
+./run.sh start              # installs deps if needed, then serves on :4000
+./run.sh start --port 4100  # any other port
+./run.sh status
+./run.sh logs -f
+./run.sh stop
+```
+
+`run.sh start` detaches the server: it keeps running after you close the
+terminal, and its command line carries `--instance=<name>` so it is easy to
+tell apart from a foreground dev server. State (pid, port, log) lives in
+`.run/`, which is gitignored.
+
+For a foreground server instead — logs in your terminal, Ctrl-C to stop:
+
+```bash
 npm install
 npm start          # http://localhost:4000   (PORT=xxxx to change)
+npm run dev        # same, restarting on file changes
 ```
+
+To run two copies at once, use **two checkouts**. Each directory has its own
+`data/`, so they stay independent; two servers in one directory would write the
+same files and corrupt them (`run.sh` warns if you try).
 
 ## How it works
 
@@ -51,16 +71,26 @@ Every dropdown column also becomes a **filter** above the table: click values to
 narrow the list, with counts and a `(blank)` bucket. Several values in one
 column widen the match; values in different columns narrow it.
 
-### Playbook (per list)
+### Playbooks
 
-An ordered list of *ask an LLM* steps. Each step has a name, a prompt, a
-"let the model search the web" toggle (Anthropic's server-side web search --
-sources are captured and shown with the answer), and optionally a column to
-**fill in** from its answer. Prompts are templates:
+A playbook is **saved once, named, and attached to any number of lists** — the
+**Playbooks** page lists them all with the lists using each one, and lets you
+duplicate, rename or delete. A list's **Playbook** tab picks which one it uses
+and edits it in place, with the tokens and preview of that list for context.
+
+Editing a shared playbook changes it for every list using it; the tab says so
+when that is the case, and **Save as new…** branches off a private copy
+instead. A duplicate gets fresh step ids, so its answers stay separate from the
+original's.
+
+A playbook is an ordered list of *ask an LLM* steps. Each step has a name, a
+prompt, a "let the model search the web" toggle (Anthropic's server-side web
+search — sources are captured and shown with the answer), and optionally a
+column to **fill in** from its answer. Prompts are templates:
 
 | Token | Fills in with |
 |---|---|
-| `{{Lead Investor}}`, `{{Deals}}`, ... | the matching column from the row, including edited and added columns (names are case-insensitive) |
+| `{{Lead Investor}}`, `{{Deals}}`, … | the matching column from the row, including edited and added columns (names are case-insensitive) |
 | `{{steps.thesis}}` | the answer an earlier step in the same run produced |
 
 The right-hand pane lists every token available *for this list* (click one to
@@ -75,14 +105,27 @@ and 2; **Independent** sends each step as a fresh call.
 - a **free text** column gets the answer verbatim;
 - a **dropdown** column gets exactly one of its allowed values. A short
   follow-up call constrained by a JSON schema (`output_config.format`) picks
-  it, so the model cannot return anything outside the list -- it costs one
+  it, so the model cannot return anything outside the list — it costs one
   extra small call per row, and only for dropdown columns.
 
 The answer is kept in full either way, so the column holds the verdict and the
-row detail still shows the reasoning behind it.
+row detail still shows the reasoning behind it. Reusing a playbook on a list
+that lacks a column it fills is not an error: those steps still run, and the
+row notes that the column is missing.
 
-**Copy playbook from...** clones another list's steps into this one -- handy
-when two lists share column names.
+### What it costs
+
+Every call's token usage is priced as it happens, at the published rate for the
+model that made it, and stored with the answer. The header shows the **running
+total across all lists**; each list card and the list toolbar show that list's
+share; the run pill counts up live; and each answer shows its own cost and
+token counts. **Run all** projects the bill from what that list has actually
+averaged per row, when it has been run before.
+
+Prices live in `server/pricing.js` — update them there if Anthropic's change.
+Costs already recorded keep the figure they were computed with, and a model
+with no price on file shows the total as a floor (`$1.23+`) rather than
+silently undercounting.
 
 ### Researching a list
 
@@ -104,8 +147,11 @@ holding each step's full answer.
 ## Layout
 
 ```
+run.sh        start/stop/status/logs for a detached server
 server/
   index.js    HTTP API + static hosting
+  serve.js    entry point used by run.sh
+  pricing.js  per-model token prices
   runner.js   template rendering, job queue, per-step persistence
   llm.js      Anthropic call (adaptive thinking, effort, web search, pause_turn)
   csv.js      RFC-4180 parse/serialize
@@ -117,14 +163,14 @@ data/                          (gitignored)
   lists/<id>/investors.json    rows, exactly as imported
   lists/<id>/edits.json        cell values you or a step wrote
   lists/<id>/schema.json       editable and added columns
-  lists/<id>/playbook.json     steps
-  lists/<id>/answers.json      answers
+  lists/<id>/answers.json      answers, with per-step cost
+  playbooks.json               the playbook index
+  playbooks/<id>.json          one reusable playbook
 ```
 
-## Cost note
+## Before you run the whole thing
 
 A run is `rows × enabled steps` API calls, plus one small extra call per step
-that fills a dropdown column. The bundled list has 529 rows, so a
-3-step playbook over all of it is ~1,600 Opus calls. Try a single row first,
-then scale up — or switch the model to Sonnet 5 or
-Haiku 4.5 on the Settings page.
+that fills a dropdown column. A 529-row list with a 3-step playbook is ~1,600
+Opus calls. Run a single row first, read what it cost in the header, then
+decide — or switch to Sonnet 5 or Haiku 4.5 on the Settings page.

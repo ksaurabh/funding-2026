@@ -3,6 +3,8 @@
 // Layout:
 //   data/settings.json            global (API key, model, …)
 //   data/lists.json               the index of lists
+//   data/playbooks.json           the index of saved playbooks
+//   data/playbooks/<id>.json      one playbook, usable by any number of lists
 //   data/lists/<id>/investors.json   pristine rows as imported
 //   data/lists/<id>/edits.json       cell values you (or a step) have written
 //   data/lists/<id>/schema.json      editable columns: CSV ones plus added ones
@@ -18,6 +20,7 @@ export const DATA_DIR = path.join(ROOT, 'data');
 const LISTS_DIR = path.join(DATA_DIR, 'lists');
 
 fs.mkdirSync(LISTS_DIR, { recursive: true });
+fs.mkdirSync(path.join(DATA_DIR, 'playbooks'), { recursive: true });
 
 function resolveFile(name) {
   // `name` is either "settings" or "<listId>/answers".
@@ -52,11 +55,21 @@ export function removeList(id) {
   fs.rmSync(path.join(LISTS_DIR, id), { recursive: true, force: true });
 }
 
+export function removeFile(name) {
+  fs.rmSync(path.join(DATA_DIR, name + '.json'), { force: true });
+}
+
+const safeId = (id) => {
+  if (!/^[A-Za-z0-9_-]+$/.test(id || '')) throw new Error('Invalid id');
+  return id;
+};
+
 // Per-list file names, e.g. listFile('abc', 'answers') -> 'lists/abc/answers'.
 export function listFile(id, kind) {
-  if (!/^[A-Za-z0-9_-]+$/.test(id)) throw new Error('Invalid list id');
-  return path.posix.join('lists', id, kind);
+  return path.posix.join('lists', safeId(id), kind);
 }
+
+export const playbookFile = (id) => path.posix.join('playbooks', safeId(id));
 
 // A list's editable columns. Each field is either a CSV column made editable
 // (custom: false) or a column added here (custom: true, values live in edits).
@@ -130,6 +143,7 @@ export const DEFAULT_SYSTEM =
   'rather than inventing details.';
 
 export const DEFAULT_PLAYBOOK = {
+  name: 'Untitled playbook',
   system: DEFAULT_SYSTEM,
   mode: 'conversation', // 'conversation' = steps share one thread | 'independent' = each step is its own call
   steps: [],

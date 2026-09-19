@@ -12,13 +12,16 @@ import {
   findField,
   writeCell,
   removeList,
+  removeFile,
   listFile,
+  playbookFile,
   ROOT,
   DEFAULT_SETTINGS,
   DEFAULT_PLAYBOOK,
   SAMPLE_STEPS,
 } from './store.js';
 import { startRun, jobStatus, cancelJob, renderTemplate, slugify } from './runner.js';
+import { costOf, knownModel } from './pricing.js';
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
@@ -36,6 +39,47 @@ function findList(id) {
     throw err;
   }
   return list;
+}
+
+const getPlaybooks = () => read('playbooks', []);
+
+/** The playbook a list is pointing at, or an empty one if it has none. */
+function playbookOf(listId) {
+  const list = getLists().find((l) => l.id === listId);
+  if (!list?.playbookId) return { ...DEFAULT_PLAYBOOK, id: null, steps: [] };
+  const pb = read(playbookFile(list.playbookId), null);
+  if (!pb) return { ...DEFAULT_PLAYBOOK, id: null, steps: [] };
+  return pb;
+}
+
+function normaliseSteps(steps) {
+  return (steps || []).map((s, i) => ({
+    id: s.id || crypto.randomUUID(),
+    name: (s.name || `Step ${i + 1}`).trim(),
+    key: slugify(s.key || s.name || `step_${i + 1}`),
+    prompt: s.prompt || '',
+    webSearch: !!s.webSearch,
+    enabled: s.enabled !== false,
+    // Column this step's answer fills in, if any.
+    writeTo: String(s.writeTo || '').trim(),
+  }));
+}
+
+function savePlaybook(id, body) {
+  const pb = {
+    id,
+    name: (body.name || 'Untitled playbook').trim() || 'Untitled playbook',
+    system: body.system ?? DEFAULT_PLAYBOOK.system,
+    mode: body.mode === 'independent' ? 'independent' : 'conversation',
+    steps: normaliseSteps(body.steps),
+  };
+  write(playbookFile(id), pb);
+  const index = getPlaybooks();
+  const row = index.find((p) => p.id === id);
+  if (row) row.name = pb.name;
+  else index.push({ id, name: pb.name, createdAt: new Date().toISOString() });
+  write('playbooks', index);
+  return pb;
 }
 
 function rowId(row, columns, index) {
@@ -59,16 +103,26 @@ function parseInvestors(text) {
   return { columns, rows };
 }
 
-function createList({ name, csv, source, steps }) {
+function createList({ name, csv, source, steps, playbookName }) {
   const id = crypto.randomUUID().slice(0, 8);
   const investors = parseInvestors(csv);
   write(listFile(id, 'investors'), investors);
-  write(listFile(id, 'playbook'), { ...DEFAULT_PLAYBOOK, steps: steps || [] });
   write(listFile(id, 'answers'), {});
+
+  // A new list starts with no playbook unless one is seeded alongside it.
+  let playbookId = null;
+  if (steps?.length) {
+    playbookId = savePlaybook(crypto.randomUUID().slice(0, 8), {
+      name: playbookName || `${name || source || 'Untitled'} playbook`,
+      steps,
+    }).id;
+  }
+
   const entry = {
     id,
     name: (name || source || 'Untitled list').trim(),
     source: source || null,
+    playbookId,
     columns: investors.columns,
     rowCount: investors.rows.length,
     createdAt: new Date().toISOString(),
@@ -79,21 +133,40 @@ function createList({ name, csv, source, steps }) {
 
 /** Answered/total counts for a list, used on the lists index. */
 function listStats(id) {
-  const playbook = read(listFile(id, 'playbook'), DEFAULT_PLAYBOOK);
+  const playbook = playbookOf(id);
   const answers = read(listFile(id, 'answers'), {});
   const investors = read(listFile(id, 'investors'), { rows: [] });
   const enabled = playbook.steps.filter((s) => s.enabled !== false);
   let answered = 0;
   let errors = 0;
   let lastRun = null;
+  let cost = 0;
+  let costUnknown = false;
+  let calls = 0;
   for (const r of investors.rows) {
     const entry = answers[r.__id];
     if (!entry) continue;
     if (enabled.length && enabled.every((s) => entry.steps?.[s.id]?.text)) answered++;
     if (enabled.some((s) => entry.steps?.[s.id]?.error)) errors++;
     if (entry.updatedAt && (!lastRun || entry.updatedAt > lastRun)) lastRun = entry.updatedAt;
+    // Every step ever run counts, including ones from a playbook since changed.
+    for (const rec of Object.values(entry.steps || {})) {
+      if (!rec.usage) continue;
+      calls++;
+      cost += rec.cost || 0;
+      if (rec.costUnknown) costUnknown = true;
+    }
   }
-  return { stepCount: enabled.length, answered, errors, lastRun };
+  return {
+    stepCount: enabled.length,
+    playbookName: playbook.id ? playbook.name : null,
+    answered,
+    errors,
+    lastRun,
+    cost,
+    costUnknown,
+    calls,
+  };
 }
 
 // -------------------------------------------------------------------- lists
@@ -185,57 +258,114 @@ app.put('/api/settings', (req, res) => {
   res.json({ ok: true });
 });
 
-// ----------------------------------------------------------------- playbook
+// ---------------------------------------------------------------- playbooks
+// Playbooks are named and saved once, then attached to any number of lists.
 
+app.get('/api/playbooks', (_req, res) => {
+  const lists = getLists();
+  res.json(
+    getPlaybooks().map((p) => {
+      const pb = read(playbookFile(p.id), { steps: [] });
+      return {
+        ...p,
+        mode: pb.mode,
+        stepCount: pb.steps.length,
+        usedBy: lists.filter((l) => l.playbookId === p.id).map((l) => ({ id: l.id, name: l.name })),
+      };
+    })
+  );
+});
+
+app.post('/api/playbooks', (req, res) => {
+  try {
+    const body = req.body || {};
+    const source = body.copyFrom ? read(playbookFile(body.copyFrom), null) : null;
+    const pb = savePlaybook(crypto.randomUUID().slice(0, 8), {
+      name: body.name || (source ? `${source.name} (copy)` : 'New playbook'),
+      system: body.system ?? source?.system,
+      mode: body.mode ?? source?.mode,
+      // A copy gets fresh step ids so its answers stay separate from the original's.
+      steps: (body.steps ?? source?.steps ?? []).map((s) => ({ ...s, id: undefined })),
+    });
+    // Optionally attach it to a list in the same call.
+    if (body.attachTo) {
+      const lists = getLists();
+      const list = lists.find((l) => l.id === body.attachTo);
+      if (list) {
+        list.playbookId = pb.id;
+        write('lists', lists);
+      }
+    }
+    res.json(pb);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.get('/api/playbooks/:id', (req, res) => {
+  const pb = read(playbookFile(req.params.id), null);
+  if (!pb) return res.status(404).json({ error: 'Playbook not found.' });
+  res.json(pb);
+});
+
+app.put('/api/playbooks/:id', (req, res) => {
+  try {
+    if (!read(playbookFile(req.params.id), null)) {
+      return res.status(404).json({ error: 'Playbook not found.' });
+    }
+    res.json(savePlaybook(req.params.id, req.body || {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/playbooks/:id', (req, res) => {
+  const used = getLists().filter((l) => l.playbookId === req.params.id);
+  if (used.length) {
+    return res.status(409).json({
+      error: `Still in use by ${used.map((l) => `"${l.name}"`).join(', ')}. Switch those lists to another playbook first.`,
+    });
+  }
+  write('playbooks', getPlaybooks().filter((p) => p.id !== req.params.id));
+  removeFile(playbookFile(req.params.id));
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------- a list and its playbook
+
+// The playbook this list is using (resolved), plus what else is available.
 app.get('/api/lists/:listId/playbook', (req, res) => {
   try {
-    findList(req.params.listId);
-    res.json(read(listFile(req.params.listId, 'playbook'), DEFAULT_PLAYBOOK));
+    const list = findList(req.params.listId);
+    res.json(playbookOf(list.id));
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
 });
 
+// Edits write through to the saved playbook, so every list using it sees them.
 app.put('/api/lists/:listId/playbook', (req, res) => {
   try {
-    findList(req.params.listId);
-    const body = req.body || {};
-    const steps = (body.steps || []).map((s, i) => ({
-      id: s.id || crypto.randomUUID(),
-      name: (s.name || `Step ${i + 1}`).trim(),
-      key: slugify(s.key || s.name || `step_${i + 1}`),
-      prompt: s.prompt || '',
-      webSearch: !!s.webSearch,
-      enabled: s.enabled !== false,
-      // Column this step's answer fills in, if any.
-      writeTo: String(s.writeTo || '').trim(),
-    }));
-    const playbook = {
-      system: body.system ?? DEFAULT_PLAYBOOK.system,
-      mode: body.mode === 'independent' ? 'independent' : 'conversation',
-      steps,
-    };
-    write(listFile(req.params.listId, 'playbook'), playbook);
-    res.json(playbook);
+    const list = findList(req.params.listId);
+    if (!list.playbookId) return res.status(400).json({ error: 'This list has no playbook attached.' });
+    res.json(savePlaybook(list.playbookId, { ...req.body, name: req.body?.name || playbookOf(list.id).name }));
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
   }
 });
 
-// Copy another list's playbook into this one (fresh step ids, no answers move).
-app.post('/api/lists/:listId/playbook/copy-from/:sourceId', (req, res) => {
+app.post('/api/lists/:listId/playbook/attach', (req, res) => {
   try {
-    findList(req.params.listId);
-    findList(req.params.sourceId);
-    const source = read(listFile(req.params.sourceId, 'playbook'), DEFAULT_PLAYBOOK);
-    const playbook = {
-      ...source,
-      steps: source.steps.map((s) => ({ ...s, id: crypto.randomUUID() })),
-    };
-    write(listFile(req.params.listId, 'playbook'), playbook);
-    res.json(playbook);
+    const lists = getLists();
+    const list = lists.find((l) => l.id === req.params.listId);
+    if (!list) return res.status(404).json({ error: 'List not found.' });
+    const id = req.body?.playbookId || null;
+    if (id && !read(playbookFile(id), null)) return res.status(404).json({ error: 'Playbook not found.' });
+    list.playbookId = id;
+    write('lists', lists);
+    res.json(playbookOf(list.id));
   } catch (err) {
-    res.status(err.status || 400).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 
@@ -378,7 +508,7 @@ app.get('/api/lists/:listId/investors', (req, res) => {
     const list = findList(req.params.listId);
     const investors = readRowsMerged(list.id);
     const answers = read(listFile(list.id, 'answers'), {});
-    const playbook = read(listFile(list.id, 'playbook'), DEFAULT_PLAYBOOK);
+    const playbook = playbookOf(list.id);
     const enabled = playbook.steps.filter((s) => s.enabled !== false);
 
     const rows = investors.rows.map((r) => {
@@ -408,7 +538,7 @@ app.get('/api/lists/:listId/investors/:id', (req, res) => {
   const investors = readRowsMerged(req.params.listId);
   const row = investors.rows.find((r) => r.__id === req.params.id);
   if (!row) return res.status(404).json({ error: 'Investor not found.' });
-  const playbook = read(listFile(req.params.listId, 'playbook'), DEFAULT_PLAYBOOK);
+  const playbook = playbookOf(req.params.listId);
   const entry = read(listFile(req.params.listId, 'answers'), {})[req.params.id] || { steps: {} };
   res.json({
     investor: row,
@@ -439,7 +569,7 @@ app.post('/api/lists/:listId/run', (req, res) => {
     if (body.scope === 'all' || !ids) ids = investors.rows.map((r) => r.__id);
     if (body.scope === 'unanswered') {
       const answers = read(listFile(list.id, 'answers'), {});
-      const playbook = read(listFile(list.id, 'playbook'), DEFAULT_PLAYBOOK);
+      const playbook = playbookOf(list.id);
       const enabled = playbook.steps.filter((s) => s.enabled !== false);
       ids = investors.rows
         .filter((r) => enabled.some((s) => !answers[r.__id]?.steps?.[s.id]?.text))
@@ -452,6 +582,22 @@ app.post('/api/lists/:listId/run', (req, res) => {
   }
 });
 
+// What has been spent so far, overall and per list.
+app.get('/api/cost', (_req, res) => {
+  const byList = getLists().map((l) => {
+    const { cost, costUnknown, calls } = listStats(l.id);
+    return { id: l.id, name: l.name, cost, costUnknown, calls };
+  });
+  res.json({
+    total: byList.reduce((n, l) => n + l.cost, 0),
+    calls: byList.reduce((n, l) => n + l.calls, 0),
+    unknown: byList.some((l) => l.costUnknown),
+    byList,
+    model: { ...DEFAULT_SETTINGS, ...read('settings', DEFAULT_SETTINGS) }.model,
+    modelPriced: knownModel({ ...DEFAULT_SETTINGS, ...read('settings', DEFAULT_SETTINGS) }.model),
+  });
+});
+
 app.get('/api/run/status', (_req, res) => res.json(jobStatus()));
 app.post('/api/run/cancel', (_req, res) => res.json({ cancelled: cancelJob() }));
 
@@ -462,7 +608,7 @@ app.get('/api/lists/:listId/export.csv', (req, res) => {
     const list = findList(req.params.listId);
     const investors = readRowsMerged(list.id);
     const answers = read(listFile(list.id, 'answers'), {});
-    const playbook = read(listFile(list.id, 'playbook'), DEFAULT_PLAYBOOK);
+    const playbook = playbookOf(list.id);
     // The list itself, then the raw answer text of each step alongside it.
     const stepColumns = playbook.steps.map((s) => `${s.name} (answer)`);
     const columns = [...investors.allColumns, ...stepColumns];
@@ -488,6 +634,7 @@ function bootstrap() {
     write('settings', { ...DEFAULT_SETTINGS, apiKey: process.env.ANTHROPIC_API_KEY || '' });
   }
   if (!exists('lists')) write('lists', []);
+  if (!exists('playbooks')) write('playbooks', []);
 
   // Migrate the pre-multi-list layout (data/{investors,playbook,answers}.json).
   if (exists('investors') && !getLists().length) {
@@ -498,7 +645,15 @@ function bootstrap() {
         source: old.source,
         csv: toCsv(old.columns, old.rows),
       });
-      if (exists('playbook')) write(listFile(entry.id, 'playbook'), read('playbook', DEFAULT_PLAYBOOK));
+      if (exists('playbook')) {
+        const lists = getLists();
+        const row = lists.find((l) => l.id === entry.id);
+        row.playbookId = savePlaybook(crypto.randomUUID().slice(0, 8), {
+          ...read('playbook', DEFAULT_PLAYBOOK),
+          name: `${entry.name} playbook`,
+        }).id;
+        write('lists', lists);
+      }
       if (exists('answers')) write(listFile(entry.id, 'answers'), read('answers', {}));
       console.log(`Migrated existing data into list "${entry.name}".`);
     }
@@ -506,6 +661,25 @@ function bootstrap() {
       const p = path.join(ROOT, 'data', f + '.json');
       if (fs.existsSync(p)) fs.renameSync(p, p + '.migrated');
     }
+  }
+
+  // Playbooks used to live inside each list; lift them out into saved ones.
+  {
+    const lists = getLists();
+    let changed = false;
+    for (const l of lists) {
+      if (l.playbookId || !exists(listFile(l.id, 'playbook'))) continue;
+      const old = read(listFile(l.id, 'playbook'), DEFAULT_PLAYBOOK);
+      l.playbookId = savePlaybook(crypto.randomUUID().slice(0, 8), {
+        ...old,
+        name: `${l.name} playbook`,
+      }).id;
+      write(listFile(l.id, 'playbook.migrated'), old);
+      removeFile(listFile(l.id, 'playbook'));
+      changed = true;
+      console.log(`Saved "${l.name}" playbook as a reusable playbook.`);
+    }
+    if (changed) write('lists', lists);
   }
 
   // First run with nothing at all: seed from the CSV shipped next to the app.
@@ -517,6 +691,7 @@ function bootstrap() {
         source: 'funding-round-investors.csv',
         csv: fs.readFileSync(seed, 'utf8'),
         steps: SAMPLE_STEPS,
+        playbookName: 'Investor research',
       });
       console.log(`Seeded list "${entry.name}" from funding-round-investors.csv`);
     }

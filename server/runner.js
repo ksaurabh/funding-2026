@@ -1,5 +1,15 @@
-import { read, write, listFile, readRowsMerged, readSchema, findField, writeCell } from './store.js';
+import {
+  read,
+  write,
+  listFile,
+  playbookFile,
+  readRowsMerged,
+  readSchema,
+  findField,
+  writeCell,
+} from './store.js';
 import { makeClient, askLLM, chooseValue } from './llm.js';
+import { costOf, addUsage } from './pricing.js';
 
 /**
  * Fill {{Column Name}} from the investor row and {{steps.key}} (or
@@ -45,6 +55,13 @@ export function slugify(s) {
   );
 }
 
+/** The saved playbook the list is attached to. */
+function resolvePlaybook(listId) {
+  const list = read('lists', []).find((l) => l.id === listId);
+  if (!list?.playbookId) return { id: null, steps: [] };
+  return read(playbookFile(list.playbookId), { steps: [] });
+}
+
 // ---------------------------------------------------------------- job state
 
 let job = null;
@@ -59,6 +76,8 @@ export function jobStatus() {
     total: job.total,
     completed: job.completed,
     stepErrors: job.stepErrors,
+    cost: job.cost,
+    costUnknown: job.costUnknown,
     current: job.current,
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
@@ -88,11 +107,12 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
   if (job && job.status === 'running') throw new Error('A run is already in progress.');
 
   const settings = read('settings', {});
-  const playbook = read(listFile(listId, 'playbook'), { steps: [] });
+  const playbook = resolvePlaybook(listId);
   const investors = readRowsMerged(listId);
 
   let steps = playbook.steps.filter((s) => s.enabled !== false);
   if (stepIds && stepIds.length) steps = steps.filter((s) => stepIds.includes(s.id));
+  if (!playbook.id) throw new Error('This list has no playbook attached. Pick one on the Playbook tab.');
   if (!steps.length) throw new Error('The playbook has no enabled steps to run.');
 
   const byId = new Map(investors.rows.map((r) => [r.__id, r]));
@@ -108,6 +128,8 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
     total: targets.length,
     completed: 0,
     stepErrors: 0,
+    cost: 0,
+    costUnknown: false,
     current: [],
     startedAt: new Date().toISOString(),
     finishedAt: null,
@@ -197,9 +219,9 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
         text: result.text,
         citations: result.citations,
         truncated: result.truncated,
-        usage: result.usage,
         error: null,
       });
+      bill(record, settings.model, result.usage);
       priorByKey[slugify(step.key || step.name)] = result.text;
       log(`✓ ${label} · ${step.name} (${result.usage.output} out tokens)`);
 
@@ -213,7 +235,7 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
           let value;
           if (field.type === 'enum') {
             if (!field.values.length) throw new Error(`Column "${field.name}" has no allowed values.`);
-            value = await chooseValue(client, {
+            const picked = await chooseValue(client, {
               system: playbook.system,
               messages: thread,
               settings,
@@ -221,6 +243,8 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
               values: field.values,
               signal,
             });
+            value = picked.value;
+            bill(record, settings.model, picked.usage);
           } else {
             value = result.text;
           }
@@ -246,6 +270,19 @@ async function runOne({ listId, client, settings, playbook, steps, row, label })
     }
 
     saveAnswer(listId, row.__id, step, record, priorByKey);
+  }
+}
+
+/** Fold one call's usage and dollar cost into the step's record and the job. */
+function bill(record, model, usage) {
+  record.usage = addUsage(record.usage, usage);
+  const cost = costOf(model, usage);
+  if (cost === null) {
+    record.costUnknown = true;
+    job.costUnknown = true;
+  } else {
+    record.cost = (record.cost || 0) + cost;
+    job.cost += cost;
   }
 }
 

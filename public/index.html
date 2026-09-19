@@ -15,7 +15,9 @@
     <a class="tab" data-view="playbook">Playbook</a>
   </nav>
   <span class="spacer"></span>
+  <a href="#/playbooks" class="tab" id="playbooks-tab">Playbooks</a>
   <a href="#/settings" class="tab" id="settings-tab">Settings</a>
+  <a href="#/lists" id="spend" class="pill cost" title="Total spent on research so far">—</a>
   <div id="runpill" class="pill idle">Idle</div>
 </header>
 
@@ -35,6 +37,7 @@
   <div class="toolbar">
     <input id="search" type="search" placeholder="Filter rows…" />
     <span id="count" class="muted small"></span>
+    <span id="list-spend" class="muted small"></span>
     <button id="columns-btn">Editable columns…</button>
     <span class="spacer"></span>
     <button id="run-all">Run all</button>
@@ -72,11 +75,13 @@
 <!-- -------------------------------------------------------------- playbook -->
 <main id="view-playbook" class="view hidden">
   <div class="toolbar">
-    <button id="add-step" class="primary">+ Add step</button>
-    <button id="save-playbook">Save playbook</button>
-    <select id="copy-playbook"><option value="">Copy playbook from…</option></select>
+    <label class="inline">Playbook <select id="playbook-pick"></select></label>
+    <button id="add-step">+ Add step</button>
+    <button id="save-playbook" class="primary">Save</button>
+    <button id="fork-playbook">Save as new…</button>
     <span id="playbook-status" class="muted small"></span>
   </div>
+  <div id="playbook-shared" class="notice hidden"></div>
   <div class="split">
     <div class="listpane pad">
       <label class="field">
@@ -100,6 +105,17 @@
       <p class="muted small">Rendered against a real row from this list.</p>
       <pre id="preview" class="preview"></pre>
     </aside>
+  </div>
+</main>
+
+<!-- ------------------------------------------------------------- playbooks -->
+<main id="view-playbooks" class="view hidden">
+  <div class="toolbar">
+    <button id="new-playbook" class="primary">+ New playbook</button>
+    <span class="muted small">A playbook is saved once and can be attached to any number of lists.</span>
+  </div>
+  <div class="scroll pad">
+    <div id="playbook-grid" class="grid"></div>
   </div>
 </main>
 

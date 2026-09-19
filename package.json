@@ -6,7 +6,12 @@
   "description": "Run an LLM playbook against a CSV list of investors",
   "scripts": {
     "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "dev": "node --watch server/index.js",
+    "serve": "./run.sh start",
+    "stop": "./run.sh stop",
+    "restart": "./run.sh restart",
+    "status": "./run.sh status",
+    "logs": "./run.sh logs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.127.0",
