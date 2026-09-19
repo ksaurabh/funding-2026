@@ -24,6 +24,8 @@ const state = {
   cost: null,
   playbooks: [],
   running: false,
+  // Which rows the current run is working on / still has queued.
+  job: { listId: null, current: new Set(), pending: new Set() },
   listId: null,
   list: null,
   investors: { columns: [], csvColumns: [], rows: [], stepCount: 0 },
@@ -199,7 +201,12 @@ async function loadInvestors() {
   renderTable();
 }
 
-const fields = () => state.schema.fields || {};
+// Keyed by column name. Tolerates the older array shape in case a stale page
+// and a new server (or the reverse) ever meet.
+const fields = () => {
+  const f = state.schema?.fields;
+  return Array.isArray(f) ? Object.fromEntries(f.map((x) => [x.name, x])) : f || {};
+};
 const fieldFor = (col) => fields()[col];
 // In the list's own column order, not the object's.
 const columnsWhere = (pred) => (state.investors.columns || []).filter((c) => fields()[c] && pred(fields()[c]));
@@ -301,11 +308,25 @@ function renderTable() {
 
   $('#investor-table tbody').replaceChildren(
     ...rows.map((r) => {
-      const status = el('span', {
-        className: 'badge ' + (r.__errors ? 'err' : stepCount && r.__done >= stepCount ? 'full' : ''),
-        textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
-      });
-      const tr = el('tr', { className: r.__id === state.selected ? 'selected' : '' }, [
+      const active = state.job.listId === state.listId && state.job.current.has(r.__id);
+      const queued = state.job.listId === state.listId && state.job.pending.has(r.__id);
+
+      const status = active
+        ? el('span', { className: 'badge running', title: 'Running now' }, [
+            el('i', { className: 'spinner' }),
+            document.createTextNode(stepCount ? `${r.__done}/${stepCount}` : 'running'),
+          ])
+        : el('span', {
+            className:
+              'badge ' +
+              (queued ? 'queued' : r.__errors ? 'err' : stepCount && r.__done >= stepCount ? 'full' : ''),
+            title: queued ? 'Queued in this run' : '',
+            textContent: stepCount ? `${r.__done}/${stepCount}` : '—',
+          });
+      const tr = el('tr', {
+        className:
+          (r.__id === state.selected ? 'selected ' : '') + (active ? 'active' : queued ? 'queued' : ''),
+      }, [
         ...shown.map((c) => el('td', { className: 'cell-edit' }, editableCell(r, c, fieldFor(c)))),
         el('td', {}, status),
       ]);
@@ -407,10 +428,15 @@ async function selectInvestor(id) {
 
   const head = el('div', { className: 'detail-head' }, [
     el('h2', { textContent: name }),
-    el('div', {
-      className: 'meta',
-      textContent: data.updatedAt ? 'Last run ' + new Date(data.updatedAt).toLocaleString() : 'Never run',
-    }),
+    state.job.listId === state.listId && state.job.current.has(id)
+      ? el('div', { className: 'meta running' }, [
+          el('i', { className: 'spinner' }),
+          document.createTextNode('Running now…'),
+        ])
+      : el('div', {
+          className: 'meta',
+          textContent: data.updatedAt ? 'Last run ' + new Date(data.updatedAt).toLocaleString() : 'Never run',
+        }),
     el('div', { className: 'actions' }, [
       button('Run playbook on this row', 'primary', () => run({ investorIds: [id] })),
       button('Clear answers', 'danger', async () => {
@@ -833,9 +859,21 @@ async function poll() {
     const s = await api('/api/run/status');
     const pill = $('#runpill');
     $('#cancel').disabled = !s.running;
+
+    const before = [...state.job.current].join(',');
+    state.job = {
+      listId: s.running ? s.listId : null,
+      current: new Set(s.running ? s.currentIds || [] : []),
+      pending: new Set(s.running ? s.pendingIds || [] : []),
+    };
+    const changed = before !== [...state.job.current].join(',');
+
     if (state.running !== !!s.running) {
       state.running = !!s.running;
       renderRunButtons(visibleRows());
+      renderTable();
+    } else if (changed && s.listId === state.listId) {
+      renderTable();
     }
 
     if (s.running) {

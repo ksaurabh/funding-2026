@@ -417,3 +417,40 @@ h4.section:first-child { margin-top: 4px; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ------------------------------------------------------ in-flight rows */
+.spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 2.4s; }
+}
+
+.badge.running {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--accent);
+  border-color: #eccdbd;
+  background: var(--accent-soft);
+}
+.badge.queued { color: var(--muted); border-style: dashed; }
+
+tbody tr.active { background: var(--accent-soft); }
+tbody tr.active:hover { background: #fbe8dd; }
+tbody tr.queued td:last-child { opacity: .85; }
+
+.detail-head .meta.running {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+}

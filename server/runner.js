@@ -78,7 +78,10 @@ export function jobStatus() {
     stepErrors: job.stepErrors,
     cost: job.cost,
     costUnknown: job.costUnknown,
-    current: job.current,
+    // Row ids, so the table can mark what is in flight and what is queued.
+    currentIds: job.current.map((c) => c.id),
+    pendingIds: [...job.pending],
+    current: job.current.map((c) => c.label),
     startedAt: job.startedAt,
     finishedAt: job.finishedAt,
     log: job.log.slice(-200),
@@ -131,6 +134,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
     cost: 0,
     costUnknown: false,
     current: [],
+    pending: new Set(targets.map((r) => r.__id)),
     startedAt: new Date().toISOString(),
     finishedAt: null,
     log: [],
@@ -146,7 +150,8 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
       if (job.controller.signal.aborted) return;
       const row = queue.shift();
       const label = row[investors.columns[0]] || row.__id;
-      job.current = [...job.current.filter((c) => c !== label), label];
+      job.pending.delete(row.__id);
+      job.current = [...job.current, { id: row.__id, label }];
       try {
         await runOne({ listId, client, settings, playbook, steps, row, label });
       } catch (err) {
@@ -154,7 +159,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
         job.stepErrors++;
         log(`✗ ${label}: ${err.message}`);
       }
-      job.current = job.current.filter((c) => c !== label);
+      job.current = job.current.filter((c) => c.id !== row.__id);
       job.completed++;
     }
   };
@@ -171,6 +176,7 @@ export function startRun({ listId, listName, investorIds, stepIds }) {
     .finally(() => {
       job.finishedAt = new Date().toISOString();
       job.current = [];
+      job.pending.clear();
     });
 
   // Fire and forget; progress is polled via /api/run/status.

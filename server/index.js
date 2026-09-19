@@ -26,7 +26,15 @@ import { costOf, knownModel } from './pricing.js';
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(ROOT, 'public')));
+// Always revalidate: a browser holding an old app.js against a new server is
+// a confusing class of bug, and locally a 304 costs nothing.
+app.use(
+  express.static(path.join(ROOT, 'public'), {
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  })
+);
 
 // ------------------------------------------------------------------ helpers
 
@@ -441,8 +449,11 @@ app.put('/api/lists/:listId/schema', (req, res) => {
 
     const fields = {};
     for (const [rawName, f] of Object.entries(req.body?.fields || {})) {
-      const name = String(rawName).trim();
-      if (!name) continue;
+      // An imported column keeps its name verbatim, even a blank one — some
+      // spreadsheets export those, and dropping it here would lose its
+      // settings on every save. A column added here must be named.
+      const name = imported.has(rawName) ? rawName : String(rawName).trim();
+      if (!imported.has(name) && !name) continue;
       const custom = !imported.has(name);
       const type = TYPES.has(f?.type) ? f.type : 'text';
       fields[name] = {
