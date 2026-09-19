@@ -470,6 +470,8 @@ app.put('/api/lists/:listId/schema', (req, res) => {
         values,
         filter:
           f?.filter === undefined ? type === 'enum' && values.length <= MAX_AUTO_FILTER : !!f.filter,
+        // Pixels, clamped to something a person can actually drag back.
+        width: f?.width ? Math.max(60, Math.min(800, Math.round(Number(f.width)))) || null : null,
         custom,
         show: f?.show !== false,
       };

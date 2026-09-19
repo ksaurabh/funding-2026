@@ -75,6 +75,9 @@ in. Per column you can:
 - **Reorder** it with ↑ / ↓. One order drives the table, the **Fields** block
   in the row detail, and the download, so what you arrange is what you get
   everywhere. It survives renames and re-imports.
+- **Resize** it by dragging the right edge of its header in the table.
+  Double-click that edge to go back to the default, or **Reset all widths** in
+  **Columns…** to clear every one. Widths are saved with the list.
 - **Add** a column of your own, free text or dropdown. Added columns are
   editable from the start.
 

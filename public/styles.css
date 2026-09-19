@@ -551,3 +551,32 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .step-pick input { margin: 0; }
 .gap-top { margin-top: 12px; }
 .dialog-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+/* ------------------------------------------------------- column resizing */
+#investor-table { table-layout: fixed; }
+#investor-table th { position: sticky; top: 0; }
+.th-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-resize {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 9px;
+  height: 100%;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+.col-resize::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  background: transparent;
+  border-radius: 1px;
+}
+#investor-table th:hover .col-resize::after,
+.col-resize.dragging::after { background: var(--accent); }
+.reset-widths { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.reset-widths button { font-size: 12px; padding: 3px 8px; }

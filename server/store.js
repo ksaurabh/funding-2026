@@ -87,7 +87,7 @@ export const MAX_AUTO_FILTER = 10;
 const autoFilter = (f) => f.type === 'enum' && (f.values || []).length <= MAX_AUTO_FILTER;
 
 export function defaultField(custom = false, show = true) {
-  return { editable: custom, type: 'text', values: [], custom, show, filter: false };
+  return { editable: custom, type: 'text', values: [], custom, show, filter: false, width: null };
 }
 
 /**
@@ -128,6 +128,8 @@ export function readSchema(listId, columns) {
       // Any column can be filtered on; a short dropdown is the one case worth
       // putting on the bar without being asked.
       filter: f.filter === undefined ? autoFilter(f) : !!f.filter,
+      // Column width in pixels; null means "use the default for its position".
+      width: Number(f.width) || null,
       custom: false,
       // Imported columns past the first few stay out of the table until asked for.
       show: f.show === undefined ? i < DEFAULT_SHOWN : !!f.show,
@@ -141,6 +143,7 @@ export function readSchema(listId, columns) {
       type: f.type === 'enum' ? 'enum' : 'text',
       values: f.values || [],
       filter: f.filter === undefined ? autoFilter(f) : !!f.filter,
+      width: Number(f.width) || null,
       custom: true,
       show: f.show !== false,
     };

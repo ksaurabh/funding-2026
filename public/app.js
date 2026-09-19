@@ -455,6 +455,64 @@ $('#clear-filters').addEventListener('click', () => {
   renderTable();
 });
 
+const TICK_W = 30;
+const STATUS_W = 92;
+/** Unset columns get a sensible default: the first one wider, the rest even. */
+const defaultWidth = (index) => (index === 0 ? 240 : 160);
+const widthOf = (col, index) => fieldFor(col)?.width || defaultWidth(index);
+
+/** Rebuild the <colgroup> so every column honours its width. */
+function applyWidths(shown) {
+  const cols = [
+    el('col', { style: `width:${TICK_W}px` }),
+    ...shown.map((c, i) => el('col', { style: `width:${widthOf(c, i)}px` })),
+    el('col', { style: `width:${STATUS_W}px` }),
+  ];
+  let group = $('#investor-table colgroup');
+  if (!group) {
+    group = el('colgroup');
+    $('#investor-table').prepend(group);
+  }
+  group.replaceChildren(...cols);
+  return group;
+}
+
+/** Drag the right edge of a header cell to resize that column. */
+function resizeHandle(col, index, group) {
+  const handle = el('div', { className: 'col-resize', title: 'Drag to resize' });
+
+  handle.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = widthOf(col, index);
+    const target = group.children[index + 1]; // +1 for the tick column
+    handle.setPointerCapture(e.pointerId);
+    handle.classList.add('dragging');
+
+    let latest = startW;
+    const onMove = (ev) => {
+      latest = Math.max(60, Math.min(800, Math.round(startW + ev.clientX - startX)));
+      target.style.width = `${latest}px`;
+    };
+    const onUp = async () => {
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', onUp);
+      handle.classList.remove('dragging');
+      if (latest !== startW) await patchField(col, { width: latest });
+    };
+    handle.addEventListener('pointermove', onMove);
+    handle.addEventListener('pointerup', onUp);
+  });
+
+  // Double-click clears the width back to the default.
+  handle.addEventListener('dblclick', (e) => {
+    e.stopPropagation();
+    patchField(col, { width: null });
+  });
+  return handle;
+}
+
 /** Shift-click: apply the clicked state across the visible span. */
 function rangeSelect(fromId, toId, checked) {
   const rows = visibleRows();
@@ -550,10 +608,13 @@ function renderTable() {
     renderTable();
   });
 
+  const group = applyWidths(shown);
   $('#investor-table thead').replaceChildren(
     el('tr', {}, [
       el('th', { className: 'tick' }, selectAll),
-      ...shown.map((c) => el('th', { textContent: c })),
+      ...shown.map((c, i) =>
+        el('th', {}, [el('span', { className: 'th-text', textContent: c, title: c }), resizeHandle(c, i, group)])
+      ),
       el('th', { textContent: 'Answers' }),
     ])
   );
@@ -1089,8 +1150,22 @@ async function renderColumnConfig() {
   };
   newName.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), addColumn()));
 
+  const anyWidth = Object.values(all).some((f) => f.width);
   $('#column-config').replaceChildren(
     ...rows,
+    anyWidth
+      ? el('p', { className: 'muted small reset-widths' }, [
+          document.createTextNode('Column widths are dragged from the table header. '),
+          button('Reset all widths', '', () => {
+            const next = {};
+            for (const [name, f] of Object.entries(all)) next[name] = { ...f, width: null };
+            saveSchema(next, order);
+          }),
+        ])
+      : el('p', {
+          className: 'muted small',
+          textContent: 'Drag the right edge of a column header in the table to resize it; double-click it to reset.',
+        }),
     el('h4', { className: 'section', textContent: 'Add a column' }),
     el('div', { className: 'add-column' }, [newName, newType, newValues, button('Add column', 'primary', addColumn)]),
     el('p', {
