@@ -269,6 +269,15 @@ firm scores about 65% and is rejected, recorded as "not found" with the reason,
 rather than guessed at. It then opens the profile and reads the connection
 degree from the page itself.
 
+It remembers the last person you searched for: **Search again: <name>** sits
+next to the lookup box and repeats that path search in one click.
+
+After each page it reads, it keeps a **screenshot** — the search results, the
+mutual connections, the profile — cached under `data/linkedin-shots/` and
+attached to the contact. They are hidden by default; **Show screenshots**
+reveals them and the choice is remembered. It is the way to check what
+LinkedIn actually showed when a result looks wrong.
+
 The right-hand pane shows the work as it happens: the search it ran, the **top
 three results it scraped** with each one's name and company score and whether
 it cleared the bar, the profile it opened and what that page said, and the
@@ -278,8 +287,12 @@ found", where the near-misses explain why. Selecting a contact shows its
 record; **Watch live** goes back to the running commentary.
 
 - **1st degree** — you already know them; it is labelled and done.
-- **2nd degree** — it follows through to the shared connections and records
-  everyone you could be introduced through, with links.
+- **2nd degree** — it follows the *"…and 10 other mutual connections"* link on
+  the result card itself and records everyone you could be introduced through,
+  with links. If that link opens an overlay rather than navigating, it reads
+  the overlay; if clicking it does nothing at all, it reports no paths rather
+  than mistaking the search results for mutual connections. A profile-side
+  shared-connections link is the fallback.
 - **3rd** — recorded as out of reach for now.
 
 Each contact keeps name, company, headline, LinkedIn URL, degree, the paths in,

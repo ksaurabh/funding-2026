@@ -1994,7 +1994,13 @@ $('#find-paths').addEventListener('click', () => {
 // Finds the warmest path to a person: who they are on LinkedIn, how far away
 // they are, and — for a 2nd-degree contact — who you both know.
 
-const li = { contacts: [], selected: null, filter: '', session: { open: false, loggedIn: false } };
+const li = {
+  contacts: [],
+  selected: null,
+  filter: '',
+  last: null, // the person searched for most recently
+  session: { open: false, loggedIn: false },
+};
 
 const DEGREE_LABEL = { '1st': 'You know them', '2nd': 'One hop away', '3rd': 'Three degrees out' };
 
@@ -2120,6 +2126,15 @@ $('#li-from-list').addEventListener('click', async () => {
     });
     alert(`Queued ${r.queued} lookup(s).${r.skipped ? ` ${r.skipped} skipped — already looked up or blank.` : ''}`);
     pollLinkedIn();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$('#li-again').addEventListener('click', async () => {
+  if (!li.last) return;
+  try {
+    await queueLookup({ name: li.last.name, company: li.last.company });
   } catch (err) {
     alert(err.message);
   }
@@ -2305,6 +2320,11 @@ function selectContact(id) {
     );
   }
 
+  const shots = shotBlock(c.shots);
+  if (shots) {
+    parts.push(el('div', { className: 'answer' }, [el('h4', { textContent: 'Pages the agent saw' }), shots]));
+  }
+
   // Relationship strength and a place for what you know about them.
   const strength = el('input', {
     type: 'range',
@@ -2349,6 +2369,53 @@ function selectContact(id) {
   $('#li-detail').replaceChildren(...parts);
 }
 
+
+const shotsShown = () => {
+  try {
+    return localStorage.getItem('liShots') === '1';
+  } catch {
+    return false;
+  }
+};
+
+/** A cached picture of the page the agent read, revealed on request. */
+function shotBlock(shots) {
+  if (!shots?.length) return null;
+  const wrap = el('div', { className: 'shots' });
+
+  const toggle = button('', 'shot-toggle', () => {
+    const now = !wrap.classList.contains('open');
+    wrap.classList.toggle('open', now);
+    try {
+      localStorage.setItem('liShots', now ? '1' : '0');
+    } catch {
+      /* private window; the choice just will not stick */
+    }
+    label();
+  });
+  const label = () =>
+    (toggle.textContent = wrap.classList.contains('open')
+      ? `Hide screenshot${shots.length === 1 ? '' : 's'}`
+      : `Show screenshot${shots.length === 1 ? '' : 's'} (${shots.length})`);
+
+  wrap.classList.toggle('open', shotsShown());
+  label();
+
+  wrap.append(
+    toggle,
+    el(
+      'div',
+      { className: 'shot-list' },
+      shots.map((sh) =>
+        el('figure', { className: 'shot' }, [
+          el('img', { src: `/api/linkedin/shots/${sh.file}`, alt: sh.label, loading: 'lazy' }),
+          el('figcaption', { className: 'muted small', textContent: `${sh.label} — ${sh.url || ''}` }),
+        ])
+      )
+    )
+  );
+  return wrap;
+}
 
 /** One scraped search result, scored, as the agent saw it. */
 function candidateCard(c, rank) {
@@ -2469,6 +2536,9 @@ function renderActivity(q) {
           ]
         )
       );
+    } else if (e.type === 'shot') {
+      const block = shotBlock([e]);
+      if (block) nodes.push(step(`Captured the ${e.label.toLowerCase()} page`, '', e.t, [block]));
     } else if (e.type === 'error') {
       nodes.push(step('Stopped', e.message, e.t, [], 'bad'));
     }
@@ -2502,6 +2572,19 @@ async function pollLinkedIn() {
       : q.pending.length
       ? `${q.pending.length} waiting`
       : '';
+
+    // The last person searched for, repeatable in one click.
+    li.last = q.last || null;
+    const again = $('#li-again');
+    again.classList.toggle('hidden', !li.last);
+    if (li.last) {
+      const when = new Date(li.last.at).toLocaleString();
+      again.textContent = `Search again: ${li.last.name}`;
+      again.title =
+        `Last searched ${when}` +
+        (li.last.company ? ` — ${li.last.name} at ${li.last.company}` : '') +
+        '. Runs the LinkedIn path search again.';
+    }
 
     const log = $('#li-log');
     const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;

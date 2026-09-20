@@ -3,10 +3,15 @@ import crypto from 'node:crypto';
 import { read, write } from '../store.js';
 import * as agent from './agent.js';
 
+const LAST_KEY = 'linkedin-last';
+
 const KEY = 'contacts';
 const keyOf = (name, company) => `${name}|${company}`.toLowerCase().replace(/\s+/g, ' ').trim();
 
 export const all = () => read(KEY, []);
+
+/** The person most recently searched for, so it can be repeated in one click. */
+export const lastSearch = () => read(LAST_KEY, null);
 
 export function upsert(record) {
   const list = all();
@@ -73,6 +78,7 @@ export const queueStatus = () => ({
   pending: queue.map((q) => ({ name: q.name, company: q.company })),
   log: log.slice(-200),
   activity: activity.slice(-30),
+  last: lastSearch(),
 });
 
 export function enqueue(items) {
@@ -109,6 +115,7 @@ async function drain() {
       const item = queue.shift();
       current = item;
       note(`Looking up ${item.name}${item.company ? ` · ${item.company}` : ''}…`);
+      write(LAST_KEY, { ...item, at: new Date().toISOString() });
       // Each lookup gets its own slate; the previous one stays on the contact.
       activity = [];
       record({ type: 'start', name: item.name, company: item.company });
@@ -127,6 +134,7 @@ async function drain() {
             via: [],
             // Kept so the near-misses can be reviewed later.
             candidates: result.candidates || [],
+            shots: result.shots || [],
           });
         } else {
           const p = result.person;
@@ -137,11 +145,13 @@ async function drain() {
             url: p.url,
             degree: p.degree,
             via: p.via,
+            mutualText: p.mutualText || null,
             confidence: result.confidence,
             status: 'found',
             reason: null,
             queriedAs: item.name,
             candidates: result.candidates || [],
+            shots: result.shots || [],
           });
           note(
             `✓ ${p.name} — ${p.degree || 'degree unknown'}` +

@@ -5,6 +5,9 @@ import { readRowsMerged } from '../store.js';
 
 export const linkedinRoutes = express.Router();
 
+// The cached page screenshots, served as ordinary images.
+linkedinRoutes.use('/shots', express.static(agent.SHOTS_DIR, { maxAge: '1h' }));
+
 const fail = (res, err) => res.status(400).json({ error: err.message });
 
 // ----------------------------------------------------------------- session

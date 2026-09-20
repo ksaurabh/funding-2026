@@ -48,8 +48,15 @@ export const SELECTORS = {
     'ul.pv-top-card--experience-list li',
   ],
 
-  // Shared ("mutual") connections
+  // Shared ("mutual") connections.
+  //
+  // On a search result card the link reads like "Chris Mutual, Dana Bridge,
+  // and 10 other mutual connections" — matched on that trailing text rather
+  // than a class, since the wording is the stable part.
+  mutualText: /mutual connections?$/i,
   sharedLink: ['a[href*="facetConnectionOf"]', 'a[href*="/search/results/people/?facetNetwork"]'],
+  // Where an overlay-style mutual-connections list lands, if it does not navigate.
+  overlay: ['div[role="dialog"]', '.artdeco-modal', '.artdeco-modal__content'],
   sharedCard: [
     'div[data-chameleon-result-urn]',
     'ul.reusable-search__entity-result-list > li',
