@@ -295,6 +295,25 @@ nobody new, capped at 40 pages. The trail reports each page as it lands
 (*"page 3 — 4 new, 12 so far. Next page in 5s."*) and the count is shown
 against what LinkedIn claims.
 
+### My network
+
+The people you know directly, gathered as you go. In a contact's **mutual
+connections** section, tick the people who could introduce you and **Add to my
+network**; they land on the **My network** tab, remembering which contacts
+they are a path to. Adding someone twice merges rather than duplicates, and
+records the extra path.
+
+Each person carries two things you set:
+
+- **Strength**, one to five stars — how well you actually know them.
+- **Rank**, a plain number — the order you would ask in. **Renumber 1…n**
+  closes the gaps that accumulate, in whatever order is on screen.
+
+The list filters by strength (including *Unrated*) and by text, and sorts by
+rank, strength, name or when they were added. Sorting by rank puts unranked
+people at the bottom rather than treating them as zero. **Download CSV**
+exports it, each row carrying who they can introduce you to.
+
 ### Replaying a saved page
 
 ```bash

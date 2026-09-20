@@ -62,7 +62,7 @@ const state = {
 function parseHash() {
   const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
   if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
-  const top = ['settings', 'playbooks', 'linkedin'].includes(parts[0]) ? parts[0] : 'lists';
+  const top = ['settings', 'playbooks', 'linkedin', 'network'].includes(parts[0]) ? parts[0] : 'lists';
   return { view: top, listId: null };
 }
 
@@ -99,6 +99,7 @@ async function route() {
   $('#settings-tab').classList.toggle('active', view === 'settings');
   $('#playbooks-tab').classList.toggle('active', view === 'playbooks');
   $('#linkedin-tab').classList.toggle('active', view === 'linkedin');
+  $('#network-tab').classList.toggle('active', view === 'network');
   $('#export').href = `/api/lists/${listId}/export.csv`;
 
   await loadCost();
@@ -108,6 +109,7 @@ async function route() {
     await fillLiListPickers();
     await pollLinkedIn();
   }
+  if (view === 'network') await loadNetwork();
   if (view === 'playbook') {
     renderSteps(); // the column dropdowns depend on the current schema
     renderTokens();
@@ -2290,6 +2292,68 @@ function renderLiTable() {
   );
 }
 
+/**
+ * The mutual connections, tickable, with the one action worth taking on
+ * them: adding them to the people you know.
+ */
+function mutualPicker(contact) {
+  const chosen = new Map();
+  const wrap = el('div', { className: 'picker' });
+
+  const addBtn = button('Add to my network', 'primary', async () => {
+    const people = [...chosen.values()];
+    if (!people.length) return;
+    let r;
+    try {
+      r = await post('/api/linkedin/network', {
+        people: people.map((p) => ({ name: p.name, url: p.url, headline: p.headline, photo: p.photo })),
+        source: { id: contact.id, name: contact.name },
+      });
+    } catch (err) {
+      return alert(err.message);
+    }
+    const bits = [r.added ? `${r.added} added` : '', r.merged ? `${r.merged} already there` : ''].filter(Boolean);
+    if (confirm(`${bits.join(', ')}. Open My network?`)) location.hash = '#/network';
+    chosen.clear();
+    selectContact(contact.id);
+  });
+
+  const all = el('label', { className: 'inline' }, [
+    (() => {
+      const box = el('input', { type: 'checkbox' });
+      box.addEventListener('change', () => {
+        for (const cb of wrap.querySelectorAll('.person-tick')) {
+          if (cb.checked !== box.checked) cb.click();
+        }
+      });
+      return box;
+    })(),
+    document.createTextNode('Select all'),
+  ]);
+
+  const count = el('span', { className: 'muted small' });
+  const sync = () => {
+    count.textContent = chosen.size ? `${chosen.size} selected` : '';
+    addBtn.disabled = !chosen.size;
+  };
+
+  wrap.append(
+    el('div', { className: 'picker-bar' }, [all, count, addBtn]),
+    el(
+      'div',
+      { className: 'people' },
+      contact.via.map((v) =>
+        personCard(v, (person, on) => {
+          on ? chosen.set(person.url || person.name, person) : chosen.delete(person.url || person.name);
+          sync();
+        })
+      )
+    )
+  );
+  sync();
+  return wrap;
+}
+
 /** Forget a set of lookups, and everything cached for them. */
 async function deleteContacts(ids, { all: everything } = {}) {
   try {
@@ -2439,8 +2503,9 @@ function selectContact(id) {
             ),
           ]),
           pageLinks({ ...(c.mutualPage || {}), text: c.mutualPage?.text || c.mutualText }),
+          read ? mutualPicker(c) : null,
           read
-            ? el('div', { className: 'people' }, c.via.map(personCard))
+            ? null
             : el('div', {
                 className: 'body empty',
                 textContent: c.mutualPage
@@ -2568,7 +2633,7 @@ function shotBlock(shots) {
 }
 
 /** Picture, name, then title or company — one connection at a glance. */
-function personCard(p) {
+function personCard(p, onPick) {
   const initials = (p.name || '?')
     .split(/\s+/)
     .slice(0, 2)
@@ -2586,7 +2651,14 @@ function personCard(p) {
     );
   }
 
+  let tick = null;
+  if (onPick) {
+    tick = el('input', { type: 'checkbox', className: 'person-tick' });
+    tick.addEventListener('change', () => onPick(p, tick.checked));
+  }
+
   return el('div', { className: 'person' }, [
+    tick,
     avatar,
     el('div', { className: 'person-text' }, [
       p.url
@@ -2870,6 +2942,192 @@ async function pollLinkedIn() {
 setInterval(() => {
   if (parseHash().view === 'linkedin') pollLinkedIn();
 }, 3000);
+
+
+// ============================================================== my network
+// The people you know directly, gathered from the mutual connections of the
+// contacts you look up. Strength is how well you know them; rank is the order
+// you would actually ask them in.
+
+const nw = { people: [], filter: '', strengths: new Set(), sort: 'rank', picked: new Set() };
+
+/** Five clickable stars. Clicking the current rating clears it. */
+function stars(value, onPick) {
+  const box = el('span', { className: 'stars' });
+  for (let i = 1; i <= 5; i++) {
+    const star = el('button', {
+      className: 'star' + (value >= i ? ' on' : ''),
+      textContent: value >= i ? '★' : '☆',
+      title: `${i} of 5`,
+    });
+    star.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onPick(value === i ? null : i);
+    });
+    box.append(star);
+  }
+  return box;
+}
+
+async function loadNetwork() {
+  nw.people = await api('/api/linkedin/network');
+  renderNetwork();
+}
+
+async function patchPerson(id, fields) {
+  const updated = await api(`/api/linkedin/network/${id}`, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+  const i = nw.people.findIndex((p) => p.id === id);
+  if (i >= 0) nw.people[i] = updated;
+  renderNetwork();
+}
+
+function networkVisible() {
+  const q = nw.filter.trim().toLowerCase();
+  let rows = nw.people.filter((p) => {
+    if (nw.strengths.size) {
+      const key = p.strength ? String(p.strength) : 'none';
+      if (!nw.strengths.has(key)) return false;
+    }
+    if (!q) return true;
+    return [p.name, p.headline, ...(p.sources || []).map((s) => s.name)].some((v) =>
+      String(v ?? '').toLowerCase().includes(q)
+    );
+  });
+
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  rows = [...rows].sort((a, b) => {
+    if (nw.sort === 'name') return byName(a, b);
+    if (nw.sort === 'strength') return (b.strength ?? -1) - (a.strength ?? -1) || byName(a, b);
+    if (nw.sort === 'added') return (b.addedAt || '').localeCompare(a.addedAt || '');
+    // by rank: unranked sink to the bottom rather than sorting as zero
+    const ar = a.rank ?? Infinity;
+    const br = b.rank ?? Infinity;
+    return ar - br || byName(a, b);
+  });
+  return rows;
+}
+
+function renderNetwork() {
+  const rows = networkVisible();
+  $('#nw-count').textContent =
+    `${rows.length} of ${nw.people.length} ${nw.people.length === 1 ? 'person' : 'people'}` +
+    (nw.picked.size ? ` · ${nw.picked.size} selected` : '');
+  $('#nw-delete').classList.toggle('hidden', !nw.picked.size);
+  $('#nw-delete').textContent = `Remove ${nw.picked.size} selected`;
+  $('#nw-sort').value = nw.sort;
+
+  // Strength filter, with counts.
+  const buckets = [
+    ['5', '★★★★★'], ['4', '★★★★'], ['3', '★★★'], ['2', '★★'], ['1', '★'], ['none', 'Unrated'],
+  ];
+  $('#nw-strength').replaceChildren(
+    ...buckets.map(([key, label]) => {
+      const n = nw.people.filter((p) => (p.strength ? String(p.strength) : 'none') === key).length;
+      const chip = el('button', {
+        className: 'chip' + (nw.strengths.has(key) ? ' on' : ''),
+        textContent: `${label} ${n}`,
+      });
+      chip.addEventListener('click', () => {
+        nw.strengths.has(key) ? nw.strengths.delete(key) : nw.strengths.add(key);
+        renderNetwork();
+      });
+      return chip;
+    }),
+    nw.strengths.size
+      ? (() => {
+          const b = el('button', { className: 'chip clear', textContent: 'Clear' });
+          b.addEventListener('click', () => {
+            nw.strengths = new Set();
+            renderNetwork();
+          });
+          return b;
+        })()
+      : null
+  );
+
+  if (!nw.people.length) {
+    $('#nw-list').replaceChildren(
+      el('p', {
+        className: 'muted',
+        textContent:
+          'Nobody here yet. Open a second-degree contact on the LinkedIn page, tick the mutual connections ' +
+          'who could introduce you, and add them.',
+      })
+    );
+    return;
+  }
+
+  $('#nw-list').replaceChildren(
+    ...rows.map((p) => {
+      const tick = el('input', { type: 'checkbox', checked: nw.picked.has(p.id) });
+      tick.addEventListener('change', () => {
+        tick.checked ? nw.picked.add(p.id) : nw.picked.delete(p.id);
+        renderNetwork();
+      });
+
+      const rank = el('input', {
+        type: 'number',
+        className: 'rank-input',
+        value: p.rank ?? '',
+        placeholder: '—',
+        min: '1',
+      });
+      rank.addEventListener('click', (e) => e.stopPropagation());
+      rank.addEventListener('change', () => patchPerson(p.id, { rank: rank.value }));
+
+      const notes = el('input', { type: 'text', className: 'nw-notes', value: p.notes || '', placeholder: 'Notes…' });
+      notes.addEventListener('change', () => patchPerson(p.id, { notes: notes.value }));
+
+      return el('div', { className: 'nw-row' }, [
+        tick,
+        el('span', { className: 'rank-cell' }, rank),
+        personCard(p),
+        el('div', { className: 'nw-meta' }, [
+          stars(p.strength || 0, (v) => patchPerson(p.id, { strength: v })),
+          (p.sources || []).length
+            ? el('div', {
+                className: 'muted small',
+                textContent: 'Path to ' + p.sources.map((s) => s.name).join(', '),
+              })
+            : null,
+        ]),
+        notes,
+      ]);
+    })
+  );
+}
+
+$('#nw-search').addEventListener('input', (e) => {
+  nw.filter = e.target.value;
+  renderNetwork();
+});
+$('#nw-sort').addEventListener('change', (e) => {
+  nw.sort = e.target.value;
+  renderNetwork();
+});
+
+$('#nw-delete').addEventListener('click', async () => {
+  const ids = [...nw.picked];
+  if (!ids.length) return;
+  if (!confirm(`Remove ${ids.length} from your network?`)) return;
+  await post('/api/linkedin/network/delete', { ids });
+  nw.picked.clear();
+  loadNetwork();
+});
+
+// Rank is yours to set, but gaps accumulate; this closes them in the order
+// currently on screen.
+$('#nw-renumber').addEventListener('click', async () => {
+  const rows = networkVisible();
+  if (!rows.length) return;
+  if (!confirm(`Renumber these ${rows.length} as 1…${rows.length}, in the order shown?`)) return;
+  await post('/api/linkedin/network/renumber', { ids: rows.map((p) => p.id) });
+  loadNetwork();
+});
 
 // --------------------------------------------------------------------- boot
 

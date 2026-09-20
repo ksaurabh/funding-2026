@@ -1,6 +1,7 @@
 import express from 'express';
 import * as agent from './agent.js';
 import * as contacts from './contacts.js';
+import * as network from './network.js';
 import { readRowsMerged } from '../store.js';
 
 export const linkedinRoutes = express.Router();
@@ -118,6 +119,45 @@ linkedinRoutes.delete('/contacts/:id', (req, res) => {
 linkedinRoutes.post('/contacts/delete', (req, res) => {
   const ids = req.body?.all ? contacts.all().map((c) => c.id) : req.body?.ids || [];
   res.json({ removed: contacts.remove(ids) });
+});
+
+// ----------------------------------------------------- your own network
+
+linkedinRoutes.get('/network', (_req, res) => res.json(network.all()));
+
+linkedinRoutes.post('/network', (req, res) => {
+  const people = Array.isArray(req.body?.people) ? req.body.people : [];
+  if (!people.length) return res.status(400).json({ error: 'Nobody to add.' });
+  res.json(network.add(people, req.body?.source || null));
+});
+
+linkedinRoutes.patch('/network/:id', (req, res) => {
+  const p = network.patch(req.params.id, req.body || {});
+  if (!p) return res.status(404).json({ error: 'Not in your network.' });
+  res.json(p);
+});
+
+linkedinRoutes.post('/network/delete', (req, res) =>
+  res.json({ removed: network.remove(req.body?.ids || []) })
+);
+
+linkedinRoutes.post('/network/renumber', (req, res) => res.json(network.renumber(req.body?.ids || [])));
+
+linkedinRoutes.get('/network.csv', (_req, res) => {
+  const esc = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const cols = ['rank', 'name', 'headline', 'strength', 'url', 'notes', 'introduces to'];
+  const lines = [cols.join(',')];
+  for (const p of network.all()) {
+    lines.push(
+      [p.rank, p.name, p.headline, p.strength, p.url, p.notes, (p.sources || []).map((s) => s.name).join('; ')]
+        .map(esc)
+        .join(',')
+    );
+  }
+  res.type('text/csv').attachment('my-network.csv').send(lines.join('\n'));
 });
 
 linkedinRoutes.get('/contacts.csv', (_req, res) => {

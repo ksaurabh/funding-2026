@@ -727,3 +727,39 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .meta.running { color: var(--accent); }
 
 #li-table th.tick, #li-table td.tick { width: 28px; padding: 4px 0 4px 10px; }
+
+/* ------------------------------------------------------------ my network */
+.picker-bar { display: flex; align-items: center; gap: 12px; margin: 8px 0 4px; }
+.picker-bar button { font-size: 12px; padding: 4px 10px; }
+.person-tick { margin: 0 2px 0 0; flex: none; }
+
+.nw-row {
+  display: grid;
+  grid-template-columns: 24px 56px minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(120px, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.nw-row .person { border: 0; padding: 0; background: none; }
+.rank-cell { text-align: center; }
+.rank-input { width: 52px; text-align: center; font-variant-numeric: tabular-nums; }
+.nw-notes { font-size: 12px; }
+.nw-meta { min-width: 0; }
+.stars { display: inline-flex; gap: 1px; }
+.star {
+  border: 0;
+  background: none;
+  padding: 0 1px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--line);
+  cursor: pointer;
+}
+.star.on { color: #d79a2b; }
+.star:hover { background: none; color: #d79a2b; }
+#nw-filters .filters-head { gap: 12px; }
+@media (max-width: 860px) {
+  .nw-row { grid-template-columns: 24px 48px 1fr; }
+  .nw-row .nw-notes { grid-column: 3; }
+}

@@ -17,6 +17,7 @@
   <span class="spacer"></span>
   <a href="#/playbooks" class="tab" id="playbooks-tab">Playbooks</a>
   <a href="#/linkedin" class="tab" id="linkedin-tab">LinkedIn</a>
+  <a href="#/network" class="tab" id="network-tab">My network</a>
   <a href="#/settings" class="tab" id="settings-tab">Settings</a>
   <a href="#/lists" id="spend" class="pill cost" title="Total spent on research so far">—</a>
   <div id="runpill" class="pill idle">Idle</div>
@@ -227,6 +228,32 @@
     </aside>
   </div>
   <div id="li-log" class="log"></div>
+</main>
+
+<!-- --------------------------------------------------------------- network -->
+<main id="view-network" class="view hidden">
+  <div class="toolbar">
+    <input id="nw-search" type="search" placeholder="Filter people…" />
+    <span id="nw-count" class="muted small"></span>
+    <span class="spacer"></span>
+    <label class="inline">Sort
+      <select id="nw-sort">
+        <option value="rank">by rank</option>
+        <option value="strength">by strength</option>
+        <option value="name">by name</option>
+        <option value="added">by when added</option>
+      </select>
+    </label>
+    <button id="nw-renumber">Renumber 1…n</button>
+    <button id="nw-delete" class="danger hidden"></button>
+    <a href="/api/linkedin/network.csv" class="btn">Download CSV</a>
+  </div>
+  <div id="nw-filters" class="filters">
+    <div class="filters-head"><span class="filter-label">Strength</span><div id="nw-strength" class="chips"></div></div>
+  </div>
+  <div class="scroll pad">
+    <div id="nw-list"></div>
+  </div>
 </main>
 
 <!-- -------------------------------------------------------------- settings -->
