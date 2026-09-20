@@ -17,6 +17,15 @@ const post = (url, body) =>
 
 /** $0.0043 and $12.40 should both read sensibly. */
 /** Clock time in the viewer's own zone — the stored stamps are UTC. */
+/** Mirrors the server's duration format, for the status pill. */
+const humanMs = (ms) => {
+  const total = Math.round(ms / 1000);
+  if (total < 90) return `${total}s`;
+  const m = Math.floor(total / 60);
+  if (m < 60) return `${m}m ${String(total % 60).padStart(2, '0')}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
+};
+
 const clock = (iso) =>
   new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 
@@ -1391,13 +1400,18 @@ async function poll() {
     if (s.running) {
       pill.className = 'pill running';
       pill.textContent =
-        `${s.listName}: ${s.completed}/${s.total} · ${money(s.cost || 0)} · ` +
+        `${s.listName}: ${s.completed}/${s.total} · ${money(s.cost || 0)}` +
+        (s.etaMs ? ` · ~${humanMs(s.etaMs)} left` : '') +
+        ' · ' +
         (s.current?.join(', ') || 'working…');
+      pill.title = s.avgMs ? `Averaging ${humanMs(s.avgMs)} per investor` : '';
     } else if (s.status) {
       pill.className = 'pill done';
       pill.textContent =
         `${s.status} — ${s.completed}/${s.total}, ${money(s.cost || 0)}` +
+        (s.avgMs ? `, ${humanMs(s.avgMs)}/investor` : '') +
         (s.stepErrors ? `, ${s.stepErrors} step error${s.stepErrors === 1 ? '' : 's'}` : '');
+      pill.title = '';
     } else {
       pill.className = 'pill idle';
       pill.textContent = 'Idle';

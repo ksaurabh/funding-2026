@@ -78,6 +78,11 @@ export function jobStatus() {
     stepErrors: job.stepErrors,
     cost: job.cost,
     costUnknown: job.costUnknown,
+    avgMs: job.rowsTimed ? Math.round(job.rowMsTotal / job.rowsTimed) : null,
+    etaMs:
+      job.rowsTimed && job.status === 'running'
+        ? Math.round(((job.total - job.completed) * (job.rowMsTotal / job.rowsTimed)) / job.concurrency)
+        : null,
     // Row ids, so the table can mark what is in flight and what is queued.
     currentIds: job.current.map((c) => c.id),
     pendingIds: [...job.pending],
@@ -95,6 +100,16 @@ export function cancelJob() {
     return true;
   }
   return false;
+}
+
+/** Durations read at a glance: "45s", "3m 20s", "1h 04m". */
+function humanMs(ms) {
+  const total = Math.round(ms / 1000);
+  if (total < 90) return `${total}s`;
+  const m = Math.floor(total / 60);
+  const sec = total % 60;
+  if (m < 60) return `${m}m ${String(sec).padStart(2, '0')}s`;
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
 function log(msg) {
@@ -136,6 +151,10 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
     // How rows were chosen ('selected', 'filtered', or ''), for the log.
     scopeLabel: (scopeLabel || '').trim(),
     started: 0,
+    // Per-row timings, for the running average and the estimate of what is left.
+    rowMsTotal: 0,
+    rowsTimed: 0,
+    concurrency: 1,
     current: [],
     pending: new Set(targets.map((r) => r.__id)),
     startedAt: new Date().toISOString(),
@@ -152,6 +171,7 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
   );
 
   const concurrency = Math.max(1, Math.min(8, Number(settings.concurrency) || 1));
+  job.concurrency = concurrency;
   const queue = targets.slice();
 
   const worker = async () => {
@@ -166,6 +186,7 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
       job.pending.delete(row.__id);
       job.current = [...job.current, { id: row.__id, label: name }];
       log(`[${label}] ${name}`);
+      const startedAt = Date.now();
       try {
         await runOne({ listId, client, settings, playbook, steps, row, label, name, onlyMissing });
       } catch (err) {
@@ -175,13 +196,27 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
       }
       job.current = job.current.filter((c) => c.id !== row.__id);
       job.completed++;
+
+      // Running average, and what it implies for the rows still queued.
+      const ms = Date.now() - startedAt;
+      job.rowMsTotal += ms;
+      job.rowsTimed++;
+      const avg = job.rowMsTotal / job.rowsTimed;
+      const left = job.total - job.completed;
+      const eta = left ? ` · ~${humanMs((left * avg) / job.concurrency)} left` : '';
+      log(`[${label}] ${name} done in ${humanMs(ms)} · average ${humanMs(avg)} per investor${eta}`);
     }
   };
 
   const run = Promise.all(Array.from({ length: concurrency }, worker))
     .then(() => {
       job.status = job.controller.signal.aborted ? 'cancelled' : 'done';
-      log(job.status === 'cancelled' ? 'Run cancelled.' : 'Run finished.');
+      const elapsed = Date.now() - new Date(job.startedAt).getTime();
+      const avg = job.rowsTimed ? ` Average ${humanMs(job.rowMsTotal / job.rowsTimed)} per investor.` : '';
+      log(
+        `${job.status === 'cancelled' ? 'Run cancelled' : 'Run finished'} — ` +
+          `${job.completed}/${job.total} in ${humanMs(elapsed)}.${avg}`
+      );
     })
     .catch((err) => {
       job.status = 'error';

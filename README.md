@@ -218,7 +218,10 @@ A run streams progress into the log strip at the bottom and can be cancelled
 mid-flight. Every line is stamped in your own time zone and prefixed with the
 row's place in the run — `[15/30 selected]` — so a long run tells you how far
 along it is at a glance, and lines stay readable when several rows are being
-worked at once. Answers are written to disk after every step, so nothing is lost if
+worked at once. Each row reports how long it took, the running average per
+investor, and an estimate of the time left (which accounts for how many rows
+run in parallel); the closing line gives the totals. The status pill carries
+the estimate too. Answers are written to disk after every step, so nothing is lost if
 you stop. One run happens at a time across the whole app.
 
 **Download CSV** gives you the whole list -- imported columns, your edits, and
