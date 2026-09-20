@@ -298,10 +298,16 @@ and the count is shown against what LinkedIn claims.
 
 The people you know directly, gathered as you go. In a contact's **mutual
 connections** section, tick the people who could introduce you and **Add to my
-network** — or **Add all N to my network** to take everyone that investor is
-connected through in one click. To do it across several investors at once,
-tick them in the contacts table and use **Add N mutual connections to my
-network**.
+network** — or **Add N new to my network** to take everyone that investor is
+connected through who is not already there. The bar says how many that is
+(*"26 of 36 not in your network yet · 10 already there"*), and each card's
+last line shows where that person stands: their rank and strength as stars,
+or *not in your network*. The list is ordered the way you would work it —
+**by rank, then by strength**, with people you have not added yet at the end.
+
+To do it across several investors at once, tick them in the contacts table
+and use **Add N new mutual connections to my network**, which likewise counts
+and sends only the ones missing.
 
 They land on the **My network** tab, remembering which contacts they are a
 path to. Adding someone twice merges rather than duplicates and records the

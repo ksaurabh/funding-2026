@@ -2003,11 +2003,48 @@ const li = {
   selected: null,
   filter: '',
   last: null, // the person searched for most recently
+  network: [], // who is already in My network, to avoid re-adding them
   picked: new Set(), // contacts ticked for deletion
   session: { open: false, loggedIn: false },
 };
 
 const DEGREE_LABEL = { '1st': 'You know them', '2nd': 'One hop away', '3rd': 'Three degrees out' };
+
+/** Matches the key the network store dedupes on, so the counts agree. */
+const networkKey = (p) => String(p.url || `name:${p.name}`).toLowerCase().replace(/\/+$/, '');
+const inNetwork = (p) => li.networkKeys?.has(networkKey(p));
+
+/** People from `via` who are not in the network yet. */
+const notYetInNetwork = (via) => (via || []).filter((p) => !inNetwork(p));
+
+async function loadNetworkKeys() {
+  try {
+    li.network = await api('/api/linkedin/network');
+  } catch {
+    return;
+  }
+  li.networkKeys = new Set(li.network.map(networkKey));
+  li.networkBy = new Map(li.network.map((p) => [networkKey(p), p]));
+}
+
+/** What your network already records about this person, if anything. */
+const networkEntry = (p) => li.networkBy?.get(networkKey(p)) || null;
+
+/**
+ * Best path first: by the rank you gave them, then by how well you know
+ * them. Anyone not in your network yet sorts to the end — they have neither.
+ */
+function byRankThenStrength(a, b) {
+  const A = networkEntry(a);
+  const B = networkEntry(b);
+  const ar = A?.rank ?? Infinity;
+  const br = B?.rank ?? Infinity;
+  if (ar !== br) return ar - br;
+  const as = A?.strength ?? -1;
+  const bs = B?.strength ?? -1;
+  if (as !== bs) return bs - as;
+  return String(a.name).localeCompare(String(b.name));
+}
 
 async function liSession(action) {
   try {
@@ -2225,10 +2262,14 @@ function renderLiTable() {
 
   const pickedContacts = li.contacts.filter((c) => li.picked.has(c.id));
   const picked = pickedContacts.length;
-  const mutuals = pickedContacts.reduce((n, c) => n + (c.via?.length || 0), 0);
+  // Count only the people who are not in the network yet — adding the rest
+  // would just re-record paths already known.
+  const fresh = new Set();
+  for (const c of pickedContacts) for (const p of notYetInNetwork(c.via)) fresh.add(networkKey(p));
+  const mutuals = fresh.size;
 
   $('#li-add-mutuals').classList.toggle('hidden', !mutuals);
-  $('#li-add-mutuals').textContent = `Add ${mutuals} mutual connection${mutuals === 1 ? '' : 's'} to my network`;
+  $('#li-add-mutuals').textContent = `Add ${mutuals} new mutual connection${mutuals === 1 ? '' : 's'} to my network`;
 
   $('#li-delete').classList.toggle('hidden', !picked);
   $('#li-delete').textContent = `Delete ${picked} selected`;
@@ -2305,30 +2346,44 @@ function renderLiTable() {
  * contact they are a path to, so someone reachable via two investors records
  * both.
  */
-async function addMutualsFrom(contacts, describe) {
-  const groups = contacts
-    .filter((c) => c.via?.length)
-    .map((c) => ({
-      source: { id: c.id, name: c.name },
-      people: c.via.map((p) => ({ name: p.name, url: p.url, headline: p.headline, photo: p.photo })),
-    }));
+async function addPeople(groups, describe) {
+  const live = groups.filter((g) => g.people.length);
+  if (!live.length) return alert('Everyone there is already in your network.');
 
-  if (!groups.length) {
-    return alert('None of those have any mutual connections recorded yet.');
-  }
-
-  const people = groups.reduce((n, g) => n + g.people.length, 0);
-  if (!confirm(`Add ${describe || `${people} people from ${groups.length} contact(s)`} to my network?`)) return;
+  const count = live.reduce((n, g) => n + g.people.length, 0);
+  if (!confirm(`Add ${describe || `${count} people`} to my network?`)) return;
 
   let r;
   try {
-    r = await post('/api/linkedin/network', { groups });
+    r = await post('/api/linkedin/network', {
+      groups: live.map((g) => ({
+        source: g.source,
+        people: g.people.map((p) => ({ name: p.name, url: p.url, headline: p.headline, photo: p.photo })),
+      })),
+    });
   } catch (err) {
     return alert(err.message);
   }
 
   const bits = [r.added ? `${r.added} added` : '', r.merged ? `${r.merged} already there` : ''].filter(Boolean);
+  await loadNetworkKeys();
   if (confirm(`${bits.join(', ') || 'Nothing to add'}. Open My network?`)) location.hash = '#/network';
+}
+
+/**
+ * Add everyone a set of contacts is connected through who is not already in
+ * the network. Each person keeps the contact they are a path to, so someone
+ * reachable via two investors records both.
+ */
+async function addMutualsFrom(contacts, describe) {
+  const groups = contacts
+    .map((c) => ({ source: { id: c.id, name: c.name }, people: notYetInNetwork(c.via) }))
+    .filter((g) => g.people.length);
+
+  if (!groups.length) {
+    return alert('Nothing new — everyone they are connected through is already in your network.');
+  }
+  await addPeople(groups, describe);
 }
 
 /**
@@ -2357,10 +2412,15 @@ function mutualPicker(contact) {
     selectContact(contact.id);
   });
 
-  const addAll = button(`Add all ${contact.via.length} to my network`, '', async () => {
-    await addMutualsFrom([contact], `everyone ${contact.name} is connected through`);
+  const missing = notYetInNetwork(contact.via);
+  const already = contact.via.length - missing.length;
+
+  const addAll = button(`Add ${missing.length} new to my network`, '', async () => {
+    await addPeople([{ source: { id: contact.id, name: contact.name }, people: missing }], `${missing.length} new`);
+    await loadNetworkKeys();
     selectContact(contact.id);
   });
+  addAll.disabled = !missing.length;
 
   const all = el('label', { className: 'inline' }, [
     (() => {
@@ -2382,15 +2442,31 @@ function mutualPicker(contact) {
   };
 
   wrap.append(
-    el('div', { className: 'picker-bar' }, [all, count, addBtn, addAll]),
+    el('div', { className: 'picker-bar' }, [
+      all,
+      count,
+      addBtn,
+      addAll,
+      el('span', {
+        className: 'muted small',
+        textContent: missing.length
+          ? `${missing.length} of ${contact.via.length} not in your network yet` +
+            (already ? ` · ${already} already there` : '')
+          : 'All of them are already in your network',
+      }),
+    ]),
     el(
       'div',
       { className: 'people' },
-      contact.via.map((v) =>
-        personCard(v, (person, on) => {
-          on ? chosen.set(person.url || person.name, person) : chosen.delete(person.url || person.name);
-          sync();
-        })
+      [...contact.via].sort(byRankThenStrength).map((v) =>
+        personCard(
+          v,
+          (person, on) => {
+            on ? chosen.set(person.url || person.name, person) : chosen.delete(person.url || person.name);
+            sync();
+          },
+          true
+        )
       )
     )
   );
@@ -2677,7 +2753,8 @@ function shotBlock(shots) {
 }
 
 /** Picture, name, then title or company — one connection at a glance. */
-function personCard(p, onPick) {
+function personCard(p, onPick, showKnown) {
+  const known = showKnown ? networkEntry(p) : null;
   const initials = (p.name || '?')
     .split(/\s+/)
     .slice(0, 2)
@@ -2709,6 +2786,23 @@ function personCard(p, onPick) {
         ? el('a', { href: p.url, target: '_blank', rel: 'noreferrer', className: 'person-name', textContent: p.name })
         : el('span', { className: 'person-name', textContent: p.name }),
       el('div', { className: 'person-sub', textContent: p.headline || p.company || '', title: p.headline || '' }),
+      // Third line: where they stand in your network, which is what the
+      // ordering above is based on.
+      showKnown
+        ? el('div', { className: 'person-rank' }, known
+            ? [
+                el('span', {
+                  className: 'rank-tag' + (known.rank ? '' : ' none'),
+                  textContent: known.rank ? `#${known.rank}` : 'unranked',
+                }),
+                el('span', {
+                  className: 'stars-static',
+                  textContent: '★'.repeat(known.strength || 0) + '☆'.repeat(5 - (known.strength || 0)),
+                  title: known.strength ? `${known.strength} of 5` : 'Not rated yet',
+                }),
+              ]
+            : [el('span', { className: 'muted small', textContent: 'not in your network' })])
+        : null,
     ]),
   ]);
 }
@@ -2965,6 +3059,7 @@ async function pollLinkedIn() {
     if (atBottom) log.scrollTop = log.scrollHeight;
 
     await liSession();
+    await loadNetworkKeys();
     await loadContacts();
 
     // The pane shows the work while it is happening, and the selected contact

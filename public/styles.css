@@ -766,3 +766,18 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
   .nw-row { grid-template-columns: 24px 48px 1fr; }
   .nw-row .nw-notes { grid-column: 3; }
 }
+
+.person-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.badge.tiny { font-size: 10px; padding: 0 5px; flex: none; }
+
+.person-rank { display: flex; align-items: center; gap: 7px; margin-top: 2px; font-size: 12px; }
+.rank-tag {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+.rank-tag.none { color: var(--muted); background: var(--bg); font-weight: 400; }
+.stars-static { color: #d79a2b; letter-spacing: -1px; }
