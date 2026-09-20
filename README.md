@@ -222,8 +222,12 @@ last chose. The run's log header records what was used — *"6 rows × 1 step �
 More rows in parallel finishes sooner at the same cost; lower effort is faster
 and cheaper per answer. Both are worth trying on a handful of rows before
 committing to a long list.
-A queue can be emptied at any time with **Clear the queue** on the status
-bar; whatever is already in flight finishes.
+**Clear queue** sits in the LinkedIn toolbar with the number waiting.
+Whatever is already in flight finishes; the rest is dropped, and the rows
+those lookups were going to fill are put back the way they were — a
+placeholder that never ran disappears rather than sitting at *queued*
+forever. The same reconciliation runs at startup, since the queue lives in
+memory and does not survive a restart.
 
 A run streams progress into the log strip at the bottom and can be cancelled
 mid-flight. Every line is stamped in your own time zone and prefixed with the

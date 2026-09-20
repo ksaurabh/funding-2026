@@ -2135,6 +2135,19 @@ $('#li-recheck').addEventListener('click', async () => {
   }
 });
 
+// Whatever is in flight finishes; this drops what has not started, and puts
+// the rows it was going to fill back the way it found them.
+$('#li-clear-queue').addEventListener('click', async () => {
+  let r;
+  try {
+    r = await post('/api/linkedin/queue/clear');
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  toast(r.dropped ? `${r.dropped} dropped from the queue` : 'Nothing was waiting');
+  pollLinkedIn();
+});
+
 $('#li-stop').addEventListener('click', () => liSession('stop'));
 
 async function queueLookup(people) {
@@ -3078,25 +3091,17 @@ async function pollLinkedIn() {
   liPolling = true;
   try {
     const q = await api('/api/linkedin/queue');
-    const bar = $('#li-queue');
     const waiting = q.pending.length;
+    const clear = $('#li-clear-queue');
+    clear.disabled = !waiting;
+    clear.textContent = waiting ? `Clear queue (${waiting})` : 'Clear queue';
+
+    const bar = $('#li-queue');
     bar.classList.toggle('hidden', !q.running && !waiting);
     if (q.running || waiting) {
-      bar.replaceChildren(
-        el('span', {
-          textContent: q.running
-            ? `Looking up ${q.current?.name || '…'}${waiting ? ` · ${waiting} waiting` : ''}`
-            : `${waiting} waiting`,
-        }),
-        waiting
-          ? button(`Clear the queue (${waiting})`, '', async () => {
-              // Whatever is in flight finishes; this drops what has not started.
-              const r = await post('/api/linkedin/queue/clear');
-              toast(r.dropped ? `${r.dropped} dropped from the queue` : 'Nothing was waiting');
-              pollLinkedIn();
-            })
-          : null
-      );
+      bar.textContent = q.running
+        ? `Looking up ${q.current?.name || '…'}${waiting ? ` · ${waiting} waiting` : ''}`
+        : `${waiting} waiting`;
     }
 
     // The last person searched for, repeatable in one click.

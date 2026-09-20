@@ -167,12 +167,51 @@ export function resumeQueue() {
   return queueStatus();
 }
 
-export function clearQueue() {
-  const n = queue.length;
-  queue = [];
-  if (n) note(`Dropped ${n} queued lookup${n === 1 ? '' : 's'}.`);
-  return n;
+/**
+ * A row left saying "queued" when nothing is queued is a lie. Put it back to
+ * whatever it was before, or drop it if the lookup never produced anything.
+ */
+function settleRow(id) {
+  if (!id) return;
+  const list = all();
+  const c = list.find((x) => x.id === id);
+  if (!c || (c.status !== 'queued' && c.status !== 'running')) return;
+
+  // Not c.url: a queued placeholder is given one up front when the lookup
+  // is by profile link, so it proves nothing about whether anything ran.
+  const hasResult = c.degree || c.candidates?.length || c.via?.length;
+  if (hasResult) {
+    c.status = 'found';
+  } else if (c.reason) {
+    c.status = 'not found';
+  } else {
+    // Never ran, never will: the row was only ever a placeholder.
+    write(KEY, list.filter((x) => x.id !== id));
+    return;
+  }
+  c.stage = null;
+  c.updatedAt = new Date().toISOString();
+  write(KEY, list);
 }
+
+export function clearQueue() {
+  const dropped = queue;
+  queue = [];
+  for (const item of dropped) settleRow(item.contactId);
+  if (dropped.length) note(`Dropped ${dropped.length} queued lookup${dropped.length === 1 ? '' : 's'}.`);
+  return dropped.length;
+}
+
+/**
+ * The queue lives in memory, so a restart leaves rows claiming to be queued
+ * or running with nothing behind them. Settle those at startup.
+ */
+function reconcileOnStart() {
+  for (const c of all()) {
+    if (c.status === 'queued' || c.status === 'running') settleRow(c.id);
+  }
+}
+reconcileOnStart();
 
 /**
  * Walk a contact's mutual connections on their own, from the link a previous
@@ -239,7 +278,11 @@ async function drain() {
         note(`Paused — no signed-in LinkedIn session. ${queue.length} lookup${queue.length === 1 ? '' : 's'} waiting.`);
         break;
       }
+      // The queue can be emptied while the await above is pending, so the
+      // length the loop checked may no longer hold.
       const item = queue.shift();
+      if (!item) break;
+
       current = item;
       note(
         `Looking up ${item.name}` +
