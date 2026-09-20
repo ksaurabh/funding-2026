@@ -264,8 +264,8 @@ async function loadLinkedInIndex() {
 
 /** The LinkedIn contact matching this row, via the list's column mapping. */
 function contactForRow(row) {
-  const map = state.list?.linkedin;
-  if (!map?.nameColumn || !state.liByPair) return null;
+  const map = linkedinMapping();
+  if (!map || !state.liByPair) return null;
   const norm = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   const person = norm(row[map.nameColumn]);
   if (!person) return null;
@@ -769,7 +769,7 @@ function renderTable() {
     renderTable();
   });
 
-  const linked = !!state.list?.linkedin?.nameColumn;
+  const linked = !!linkedinMapping();
   const group = applyWidths(shown, linked);
   $('#investor-table thead').replaceChildren(
     el('tr', {}, [
@@ -874,8 +874,9 @@ function renderRunButtons(rows) {
   const paths = $('#find-paths');
   paths.textContent = scope ? `Find LinkedIn paths (${target.rows.length} ${scope})` : 'Find LinkedIn paths';
   paths.disabled = !target.rows.length;
-  paths.title = state.list?.linkedin?.nameColumn
-    ? `Queue the people in "${state.list.linkedin.nameColumn}" for a LinkedIn path lookup`
+  const liMap = linkedinMapping();
+  paths.title = liMap
+    ? `Queue the people in "${liMap.nameColumn}" for a LinkedIn path lookup`
     : 'Queue these rows for a LinkedIn path lookup — you pick the name column once';
 
   const rest = $('#run-unanswered');
@@ -1325,7 +1326,29 @@ async function renderColumnConfig() {
   newName.addEventListener('keydown', (e) => e.key === 'Enter' && (e.preventDefault(), addColumn()));
 
   const anyWidth = Object.values(all).some((f) => f.width);
+  // Which columns the LinkedIn lookup reads a person out of, changeable
+  // here rather than only on first use.
+  const liMap = state.list?.linkedin || {};
+  const liLine = el('p', { className: 'muted small reset-widths' }, [
+    document.createTextNode(
+      liMap.nameColumn
+        ? `LinkedIn lookups read the person from “${liMap.nameColumn}”` +
+          (liMap.companyColumn ? ` and their firm from “${liMap.companyColumn}”. ` : '. ')
+        : 'LinkedIn lookups do not know which column holds the person yet. '
+    ),
+    button(liMap.nameColumn ? 'Change' : 'Choose columns', '', () => {
+      $('#columns-dialog').close();
+      askColumnMapping(null);
+    }),
+  ]);
+  if (liMap.nameColumn && !(state.investors.columns || []).includes(liMap.nameColumn)) {
+    liLine.prepend(
+      el('span', { className: 'muted small warn', textContent: `“${liMap.nameColumn}” no longer exists. ` })
+    );
+  }
+
   $('#column-config').replaceChildren(
+    liLine,
     ...rows,
     anyWidth
       ? el('p', { className: 'muted small reset-widths' }, [
@@ -2025,10 +2048,22 @@ const guessColumn = (columns, hints) =>
   columns.find((c) => hints.some((h) => c.toLowerCase().includes(h))) ||
   '';
 
+/** The saved mapping, but only while the columns it names still exist. */
+function linkedinMapping() {
+  const map = state.list?.linkedin;
+  if (!map?.nameColumn) return null;
+  const columns = state.investors.columns || [];
+  if (!columns.includes(map.nameColumn)) return null; // renamed or removed
+  return {
+    nameColumn: map.nameColumn,
+    companyColumn: columns.includes(map.companyColumn) ? map.companyColumn : '',
+  };
+}
+
 /** Queue one row's person for a LinkedIn path lookup. */
 async function findPathForRow(row) {
-  const map = state.list?.linkedin;
-  if (!map?.nameColumn) return askColumnMapping(row);
+  const map = linkedinMapping();
+  if (!map) return askColumnMapping(row);
   await queueRowLookups([row], map);
 }
 
@@ -2059,6 +2094,7 @@ async function queueRowLookups(rows, map) {
 /** Asked once per list; the answer is saved on the list. */
 function askColumnMapping(rowToQueueAfter) {
   const columns = state.investors.columns || [];
+  const saved = state.list?.linkedin || {};
   const fill = (sel, guess, blank) =>
     sel.replaceChildren(
       el('option', { value: '', textContent: blank }),
@@ -2067,8 +2103,10 @@ function askColumnMapping(rowToQueueAfter) {
       )
     );
 
-  fill($('#li-map-name'), guessColumn(columns, PERSON_HINTS), '— choose —');
-  fill($('#li-map-company'), guessColumn(columns, COMPANY_HINTS), '— none —');
+  // Start from what is set, if those columns still exist; otherwise guess.
+  const keep = (c) => (columns.includes(c) ? c : '');
+  fill($('#li-map-name'), keep(saved.nameColumn) || guessColumn(columns, PERSON_HINTS), '— choose —');
+  fill($('#li-map-company'), keep(saved.companyColumn) || guessColumn(columns, COMPANY_HINTS), '— none —');
 
   $('#li-map-save').onclick = async (e) => {
     e.preventDefault();
@@ -2092,8 +2130,8 @@ function askColumnMapping(rowToQueueAfter) {
 $('#find-paths').addEventListener('click', () => {
   const target = runTarget();
   if (!target.rows.length) return;
-  const map = state.list?.linkedin;
-  if (!map?.nameColumn) return askColumnMapping(target.rows);
+  const map = linkedinMapping();
+  if (!map) return askColumnMapping(target.rows);
   queueRowLookups(target.rows, map);
 });
 

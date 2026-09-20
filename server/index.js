@@ -569,6 +569,21 @@ app.post('/api/lists/:listId/columns/rename', (req, res) => {
       order: schema.order.map((n) => (n === from ? to : n)),
     });
 
+    // The LinkedIn lookup remembers which columns hold the person and their
+    // firm by name, so a rename has to move those too.
+    const lists2 = getLists();
+    const row = lists2.find((l) => l.id === list.id);
+    if (row?.linkedin) {
+      let moved = false;
+      for (const key of ['nameColumn', 'companyColumn']) {
+        if (row.linkedin[key] === from) {
+          row.linkedin[key] = to;
+          moved = true;
+        }
+      }
+      if (moved) write('lists', lists2);
+    }
+
     res.json({ ok: true, warnings: renamePlaybookRefs(list, from, to) });
   } catch (err) {
     res.status(err.status || 400).json({ error: err.message });
