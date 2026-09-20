@@ -389,6 +389,11 @@ async function readProfile(url) {
   }
 
   // Fall back to the class-name selectors if the top card could not be read.
+  //
+  // Note what is *not* here: a scan of the page's raw text for a degree. A
+  // profile carries other people's degrees, and this page even holds an
+  // unrendered "· 1st" ahead of the real "· 2nd" — textContent sees hidden
+  // nodes, so that scan read a second-degree contact as first-degree.
   if (!read?.name) {
     read = {
       name: await textOf(page, SELECTORS.profileName),

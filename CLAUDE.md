@@ -56,8 +56,17 @@ opens a window on their machine, and automated traffic risks their account
 being rate-limited or blocked. Point `LINKEDIN_BASE` at a local stand-in
 instead; there is a fixture pattern in the git history of this feature.
 
-Selectors live only in `server/linkedin/selectors.js`. When lookups come back
-empty, that file is the fix, not the agent.
+Selectors live only in `server/linkedin/selectors.js`, and people are read
+structurally in `server/linkedin/extract.js`. When lookups come back empty or
+wrong, replay the saved page with `node tools/parse-saved.mjs` and fix against
+that, rather than guessing at markup.
+
+Read rendered text, never raw text. `page.textContent()` and `.innerHTML`
+include nodes the browser does not display: a real profile page carries an
+unrendered `· 1st` ahead of the visible `· 2nd`, so a scan of raw text
+reported a second-degree contact as first-degree. Use `innerText`, and take a
+value from the element it belongs to — a profile lists a dozen other people's
+degrees further down the page.
 
 ## Their data lives in `data/` and is gitignored
 

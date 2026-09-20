@@ -130,7 +130,11 @@ export function extractProfileInPage() {
   const lines = (main.innerText || '').split('\n').map(clean).filter(Boolean);
 
   const name = lines[0] || '';
-  const degreeAt = lines.findIndex((l) => DEGREE_LINE.test(l));
+
+  // The degree belongs to the top card, so it sits directly under the name.
+  // Anything further down is someone else — a profile page carries a dozen
+  // other people's degrees in "people also viewed" and similar.
+  const degreeAt = lines.findIndex((l, i) => i <= 3 && DEGREE_LINE.test(l));
   const degree = degreeAt >= 0 ? DEGREE_LINE.exec(lines[degreeAt])[1].toLowerCase().replace('3rd+', '3rd') : null;
 
   // The headline is the first real line after the name/degree.
