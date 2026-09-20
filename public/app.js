@@ -899,12 +899,14 @@ function renderRunButtons(rows) {
     : filtered
     ? `Run ${rows.length} filtered`
     : `Run all ${rows.length}`;
-  all.disabled = !target.rows.length || state.running;
+  all.disabled = !target.rows.length;
+  const queues = state.running ? ' A run is already going, so this one waits its turn.' : '';
   all.title = target.selected
     ? 'Run the playbook on the ticked rows, wherever they are in the list'
     : filtered
     ? 'Run the playbook on the rows matching the current filter'
     : 'Run the playbook on every row in this list';
+  all.title += queues;
 
   // Name the set these act on, so the selection is visible in the button.
   const scope = target.selected ? 'selected' : filtered ? 'filtered' : '';
@@ -914,11 +916,12 @@ function renderRunButtons(rows) {
   // Fill gaps never redoes finished work: per row, only its missing steps run.
   const gaps = $('#fill-gaps');
   gaps.textContent = scope ? `Fill gaps in ${unanswered.length} ${scope}` : `Fill gaps (${unanswered.length})`;
-  gaps.disabled = !unanswered.length || state.running;
+  gaps.disabled = !unanswered.length;
   gaps.title =
     `Run only the steps with no answer yet, on the ${unanswered.length} row(s)${of} that are missing any` +
     (partial.length ? ` — ${partial.length} part-way through` : '') +
-    '. Steps already evaluated are skipped, not re-asked.';
+    '. Steps already evaluated are skipped, not re-asked.' +
+    queues;
 
   const paths = $('#find-paths');
   paths.textContent = scope ? `Find LinkedIn paths (${target.rows.length} ${scope})` : 'Find LinkedIn paths';
@@ -930,10 +933,11 @@ function renderRunButtons(rows) {
 
   const rest = $('#run-unanswered');
   rest.textContent = scope ? `Run unanswered ${scope} (${unanswered.length})` : `Run unanswered (${unanswered.length})`;
-  rest.disabled = !unanswered.length || state.running;
+  rest.disabled = !unanswered.length;
   rest.title =
     `Re-run the whole playbook on the ${unanswered.length} row(s)${of} missing any answer, ` +
-    'replacing the answers already there.';
+    'replacing the answers already there.' +
+    queues;
 }
 
 /**
@@ -1432,7 +1436,9 @@ async function renderColumnConfig() {
 
 async function run(body) {
   try {
-    await post(`/api/lists/${state.listId}/run`, body);
+    const res = await post(`/api/lists/${state.listId}/run`, body);
+    // A run already going does not block this one; it waits its turn.
+    if (res?.queuedRun) toast('A run is already going — this one starts when it finishes.');
     poll();
   } catch (err) {
     alert(err.message);
@@ -1679,9 +1685,14 @@ async function poll() {
       pill.textContent =
         `${s.listName}: ${s.completed}/${s.total} · ${money(s.cost || 0)}` +
         (s.etaMs ? ` · ~${humanMs(s.etaMs)} left` : '') +
+        (s.queuedRuns ? ` · +${s.queuedRuns} waiting` : '') +
         ' · ' +
         (s.current?.join(', ') || 'working…');
-      pill.title = s.avgMs ? `Averaging ${humanMs(s.avgMs)} per investor` : '';
+      pill.title =
+        (s.avgMs ? `Averaging ${humanMs(s.avgMs)} per investor` : '') +
+        (s.queuedRuns
+          ? `${s.avgMs ? '. ' : ''}${s.queuedRuns} more run${s.queuedRuns === 1 ? '' : 's'} start when this one finishes`
+          : '');
     } else if (s.status) {
       pill.className = 'pill done';
       pill.textContent =

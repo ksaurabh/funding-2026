@@ -65,6 +65,8 @@ function resolvePlaybook(listId) {
 // ---------------------------------------------------------------- job state
 
 let job = null;
+// Requests waiting for the current run to finish. One run at a time.
+let pendingRuns = [];
 
 export function jobStatus() {
   if (!job) return { running: false };
@@ -78,6 +80,7 @@ export function jobStatus() {
     stepErrors: job.stepErrors,
     cost: job.cost,
     costUnknown: job.costUnknown,
+    queuedRuns: pendingRuns.length,
     avgMs: job.rowsTimed ? Math.round(job.rowMsTotal / job.rowsTimed) : null,
     etaMs:
       job.rowsTimed && job.status === 'running'
@@ -93,13 +96,30 @@ export function jobStatus() {
   };
 }
 
+/** Take the next waiting request, skipping any that no longer make sense. */
+function startNextRun() {
+  while (pendingRuns.length) {
+    const next = pendingRuns.shift();
+    try {
+      beginRun(next);
+      return;
+    } catch (err) {
+      // The list may have changed while it waited.
+      log(`Skipped a queued run: ${err.message}`);
+    }
+  }
+}
+
 export function cancelJob() {
+  const dropped = pendingRuns.length;
+  pendingRuns = [];
   if (job && job.status === 'running') {
+    if (dropped) log(`Dropped ${dropped} waiting run${dropped === 1 ? '' : 's'}.`);
     job.status = 'cancelling';
     job.controller.abort();
     return true;
   }
-  return false;
+  return dropped > 0;
 }
 
 /** Durations read at a glance: "45s", "3m 20s", "1h 04m". */
@@ -121,7 +141,52 @@ function log(msg) {
  * Run the playbook over the given investor ids. Steps run sequentially per
  * investor; investors run `concurrency` at a time.
  */
-export function startRun({
+/**
+ * Work out what a request would actually do, and object now if it cannot.
+ * Called both when a run is asked for and again when it finally starts, so a
+ * run that waited reflects the list as it is then, not as it was.
+ */
+function prepare(req) {
+  const settings = read('settings', {});
+  const playbook = resolvePlaybook(req.listId);
+  const investors = readRowsMerged(req.listId);
+
+  let steps = playbook.steps.filter((s) => s.enabled !== false);
+  if (req.stepIds && req.stepIds.length) steps = steps.filter((s) => req.stepIds.includes(s.id));
+  else steps = steps.filter((s) => !s.manual);
+
+  if (!playbook.id) throw new Error('This list has no playbook attached. Pick one on the Playbook tab.');
+  if (!steps.length) throw new Error('The playbook has no enabled steps to run.');
+
+  const byId = new Map(investors.rows.map((r) => [r.__id, r]));
+  const targets = (req.investorIds || []).map((id) => byId.get(id)).filter(Boolean);
+  if (!targets.length) throw new Error('No matching investors to run.');
+
+  makeClient(settings.apiKey); // fails fast when there is no key
+  return { steps, targets };
+}
+
+/**
+ * Ask for a run. One runs at a time, so a request made while another is going
+ * waits its turn rather than being refused — asking for a single step in the
+ * middle of a long run should not mean watching for the run to end.
+ */
+export function startRun(req) {
+  const { steps, targets } = prepare(req);
+
+  if (job && job.status === 'running') {
+    pendingRuns.push(req);
+    log(
+      `Queued another run: ${targets.length} row${targets.length === 1 ? '' : 's'} × ` +
+        `${steps.length} step${steps.length === 1 ? '' : 's'}. It starts when this one finishes.`
+    );
+    return { ...jobStatus(), queuedRun: true };
+  }
+
+  return beginRun(req);
+}
+
+function beginRun({
   listId,
   listName,
   investorIds,
@@ -131,8 +196,6 @@ export function startRun({
   concurrency: concurrencyOverride,
   effort: effortOverride,
 }) {
-  if (job && job.status === 'running') throw new Error('A run is already in progress.');
-
   const settings = read('settings', {});
   const playbook = resolvePlaybook(listId);
   const investors = readRowsMerged(listId);
@@ -245,6 +308,7 @@ export function startRun({
       job.finishedAt = new Date().toISOString();
       job.current = [];
       job.pending.clear();
+      startNextRun();
     });
 
   // Fire and forget; progress is polled via /api/run/status.

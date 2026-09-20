@@ -251,7 +251,15 @@ worked at once. Each row reports how long it took, the running average per
 investor, and an estimate of the time left (which accounts for how many rows
 run in parallel); the closing line gives the totals. The status pill carries
 the estimate too. Answers are written to disk after every step, so nothing is lost if
-you stop. One run happens at a time across the whole app.
+you stop.
+
+One run happens at a time across the whole app, but asking for another while
+one is going does not cost you the request: it waits in line and starts by
+itself the moment the current run finishes. The status pill says how many are
+waiting (`+1 waiting`), and the audit log notes each one as it is parked and
+again as it starts. This is what makes an *on request* step usable mid-run —
+press its button and it simply goes after whatever is in flight. **Cancel**
+stops the run in progress and drops everything waiting behind it.
 
 **Download CSV** gives you the whole list -- imported columns, your edits, and
 the columns the playbook filled in -- plus one `<step name> (answer)` column
