@@ -154,7 +154,7 @@ export function enqueue(items) {
 
   queue.push(...added);
   if (added.length) note(`Queued ${added.length} lookup${added.length === 1 ? '' : 's'}.`);
-  void drain();
+  drain().catch((err) => note(`Queue stopped: ${err.message}`));
   return added.length;
 }
 
@@ -162,7 +162,7 @@ export function enqueue(items) {
 export function resumeQueue() {
   if (!running && queue.length) {
     note(`Resuming ${queue.length} queued lookup${queue.length === 1 ? '' : 's'}.`);
-    void drain();
+    drain().catch((err) => note(`Queue stopped: ${err.message}`));
   }
   return queueStatus();
 }
@@ -419,6 +419,12 @@ async function drain() {
       current = null;
       if (queue.length) await agent.pauseBetweenLookups();
     }
+  } catch (err) {
+    // Anything outside a single lookup's own handling — opening the browser,
+    // a navigation that fails outright. Without this it escapes `void drain()`
+    // as an unhandled rejection and takes the whole server down.
+    note(`Queue stopped: ${err.message}`);
+    if (current?.contactId) settleRow(current.contactId);
   } finally {
     running = false;
     current = null;

@@ -237,7 +237,44 @@ $('#import-new').addEventListener('change', async (e) => {
 
 // ---------------------------------------------------------------- investors
 
+/**
+ * The LinkedIn contacts, indexed for matching against list rows: by person
+ * and company together, and by person alone as a fallback.
+ */
+async function loadLinkedInIndex() {
+  let contacts = [];
+  try {
+    contacts = await api('/api/linkedin/contacts');
+  } catch {
+    return;
+  }
+  const norm = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  state.liByPair = new Map();
+  state.liByName = new Map();
+  for (const c of contacts) {
+    const person = norm(c.queriedAs || c.name);
+    if (!person) continue;
+    for (const co of [c.queriedCompany, c.company]) {
+      if (co) state.liByPair.set(`${person}|${norm(co)}`, c);
+    }
+    // Only useful while a name is unambiguous.
+    state.liByName.set(person, state.liByName.has(person) ? null : c);
+  }
+}
+
+/** The LinkedIn contact matching this row, via the list's column mapping. */
+function contactForRow(row) {
+  const map = state.list?.linkedin;
+  if (!map?.nameColumn || !state.liByPair) return null;
+  const norm = (v) => String(v ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const person = norm(row[map.nameColumn]);
+  if (!person) return null;
+  const company = norm(map.companyColumn ? row[map.companyColumn] : '');
+  return state.liByPair.get(`${person}|${company}`) || state.liByName.get(person) || null;
+}
+
 async function loadInvestors() {
+  await loadLinkedInIndex();
   state.investors = await api(`/api/lists/${state.listId}/investors`);
   state.list = state.investors.list;
   state.schema = state.investors.schema || { fields: {} };
@@ -536,10 +573,11 @@ const defaultWidth = (index) => (index === 0 ? 240 : 160);
 const widthOf = (col, index) => fieldFor(col)?.width || defaultWidth(index);
 
 /** Rebuild the <colgroup> so every column honours its width. */
-function applyWidths(shown) {
+function applyWidths(shown, linked) {
   const cols = [
     el('col', { style: `width:${TICK_W}px` }),
     ...shown.map((c, i) => el('col', { style: `width:${widthOf(c, i)}px` })),
+    ...(linked ? [el('col', { style: 'width:150px' }), el('col', { style: 'width:190px' })] : []),
     el('col', { style: `width:${STATUS_W}px` }),
   ];
   let group = $('#investor-table colgroup');
@@ -597,6 +635,51 @@ function rangeSelect(fromId, toId, checked) {
     if (checked) state.selection.add(rows[i].__id);
     else state.selection.delete(rows[i].__id);
   }
+}
+
+/** How far away this row's person is, or a way to find out. */
+function connectionCell(row) {
+  const c = contactForRow(row);
+
+  if (c?.degree) {
+    return el('span', {
+      className: `badge deg-${c.degree}`,
+      textContent: c.degree,
+      title: (DEGREE_LABEL[c.degree] || '') + (c.name ? ` — ${c.name}` : ''),
+    });
+  }
+
+  const working = c && (c.status === 'running' || c.status === 'queued');
+  if (working) {
+    return el('span', { className: 'badge running' }, [
+      el('i', { className: 'spinner' }),
+      document.createTextNode('looking'),
+    ]);
+  }
+
+  const look = button('Look up on LinkedIn', 'linkish', (e) => {
+    e?.stopPropagation?.();
+    findPathForRow(row);
+  });
+  look.title = c
+    ? `Looked up as ${c.name}, but no degree was established — run it again`
+    : 'Queue this person for a LinkedIn path lookup';
+  return look;
+}
+
+/** Who could introduce you to this row's person. */
+function viaCell(row) {
+  const c = contactForRow(row);
+  const via = c?.via || [];
+  if (!via.length) return el('span', { className: 'muted', textContent: c?.degree === '1st' ? 'direct' : '—' });
+
+  const names = via.map((v) => v.name);
+  const shown = names.slice(0, 2).join(', ');
+  const more = names.length > 2 ? ` +${names.length - 2}` : '';
+  return el('span', {
+    textContent: shown + more,
+    title: names.join('\n'),
+  });
 }
 
 /** An editable table cell: a dropdown for enum columns, an input for text. */
@@ -686,15 +769,18 @@ function renderTable() {
     renderTable();
   });
 
-  const group = applyWidths(shown);
+  const linked = !!state.list?.linkedin?.nameColumn;
+  const group = applyWidths(shown, linked);
   $('#investor-table thead').replaceChildren(
     el('tr', {}, [
       el('th', { className: 'tick' }, selectAll),
       ...shown.map((c, i) =>
         el('th', {}, [el('span', { className: 'th-text', textContent: c, title: c }), resizeHandle(c, i, group)])
       ),
+      linked ? el('th', { textContent: 'Connection' }) : null,
+      linked ? el('th', { textContent: 'Connected via' }) : null,
       el('th', { textContent: 'Answers' }),
-    ])
+    ].filter(Boolean))
   );
 
   const rows = visibleRows();
@@ -744,8 +830,9 @@ function renderTable() {
             ? el('td', { className: 'cell-edit' }, editableCell(r, c, f))
             : el('td', { textContent: r[c] ?? '', title: r[c] ?? '' });
         }),
+        ...(linked ? [el('td', {}, connectionCell(r)), el('td', {}, viaCell(r))] : []),
         el('td', {}, status),
-      ]);
+      ].filter(Boolean));
       tr.addEventListener('click', () => selectInvestor(r.__id));
       return tr;
     })
@@ -2545,6 +2632,27 @@ $('#li-clear-all').addEventListener('click', () => {
  * result card, and that card is kept — so when the profile page yields
  * nothing, the answer is usually already on record.
  */
+/** Record a search result as the right person, then go and read them. */
+async function acceptCandidate(contact, pick) {
+  const pct = Math.round((pick.confidence ?? 0) * 100);
+  if (
+    !confirm(
+      `Record ${pick.name} as ${contact.queriedAs || contact.name}?` +
+        `\n\nIt scored ${pct}%, below the 90% bar. Their profile will then be opened, ` +
+        'which reads the connection degree and follows the mutual connections.'
+    )
+  ) {
+    return;
+  }
+  try {
+    await post(`/api/linkedin/contacts/${contact.id}/accept`, { url: pick.url });
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  toast(`Accepted ${pick.name} — reading their profile now`, 'good');
+  await pollLinkedIn();
+}
+
 function searchDegree(c) {
   const accepted = (c.candidates || []).find((x) => (x.confidence ?? 0) >= 0.9 && x.degree);
   return accepted?.degree || null;
@@ -2598,7 +2706,9 @@ function selectContact(id) {
     parts.push(
       el('div', { className: 'answer' }, [
         el('h4', { textContent: `What the search turned up (${c.candidates.length})` }),
-        ...c.candidates.map((cand, i) => candidateCard(cand, i + 1)),
+        ...c.candidates.map((cand, i) =>
+          candidateCard(cand, i + 1, cand.url && cand.url !== c.url ? (pick) => acceptCandidate(c, pick) : null)
+        ),
         el('div', {
           className: 'verdict ' + (cleared.length ? 'good' : 'bad'),
           textContent: cleared.length
@@ -2897,7 +3007,7 @@ function personCard(p, onPick, showKnown) {
 }
 
 /** One scraped search result, scored, as the agent saw it. */
-function candidateCard(c, rank) {
+function candidateCard(c, rank, onAccept) {
   const pct = Math.round((c.confidence ?? 0) * 100);
   const verdict = pct >= 90 ? 'match' : 'below bar';
   return el('div', { className: 'cand' + (pct >= 90 ? ' hit' : '') }, [
@@ -2911,14 +3021,18 @@ function candidateCard(c, rank) {
     ]),
     c.headline ? el('div', { className: 'cand-line', textContent: c.headline }) : null,
     c.company && c.company !== c.headline ? el('div', { className: 'cand-line muted', textContent: c.company }) : null,
-    el('div', {
-      className: 'muted small',
-      textContent:
-        `name ${Math.round((c.nameScore ?? 0) * 100)}%` +
-        (c.companyScore === null || c.companyScore === undefined
-          ? ', no company to check'
-          : `, company ${Math.round(c.companyScore * 100)}%`),
-    }),
+    el('div', { className: 'cand-foot' }, [
+      el('span', {
+        className: 'muted small',
+        textContent:
+          `name ${Math.round((c.nameScore ?? 0) * 100)}%` +
+          (c.companyScore === null || c.companyScore === undefined
+            ? ', no company to check'
+            : `, company ${Math.round(c.companyScore * 100)}%`),
+      }),
+      // The bar stops the agent guessing; it should not stop you deciding.
+      onAccept ? button('This is them', '', () => onAccept(c)) : null,
+    ]),
   ]);
 }
 

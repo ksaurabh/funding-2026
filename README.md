@@ -268,6 +268,13 @@ holding those, and it queues the lookups. If you are not signed in when the
 first one runs, the agent opens the window and waits for you rather than
 failing the lookup; the queue picks up where it left off once you are in.
 
+Once a list knows which columns hold the person and their firm, the list view
+carries two more columns: **Connection** — 1st, 2nd or 3rd, matched against
+the LinkedIn contacts by person and company (falling back to the person alone
+when the name is unambiguous) — and **Connected via**, the people who could
+introduce you. A row with no connection established yet shows a **Look up on
+LinkedIn** button in that cell, and one being looked up shows a spinner.
+
 The quickest route in is from the list itself. **Find LinkedIn path** on a row
 queues that investor's contact; **Find LinkedIn paths** in the toolbar does the
 same for the ticked or filtered rows. The first time, it asks which column
@@ -279,6 +286,12 @@ accepts a match at **90% confidence or better** — a right name at the wrong
 firm scores about 65% and is rejected, recorded as "not found" with the reason,
 rather than guessed at. It then opens the profile and reads the connection
 degree from the page itself.
+
+The bar stops the agent guessing; it should not stop you deciding. Every
+result on record carries a **This is them** button, so a match the agent
+refused — the right person at a firm named differently, say — can be accepted
+by hand. Doing so records that person and then opens their profile, which
+reads the degree and follows the mutual connections as usual.
 
 It remembers the last person you searched for: **Search again: <name>** sits
 next to the lookup box and repeats that path search in one click.

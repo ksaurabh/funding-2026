@@ -817,3 +817,13 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .strength-line { display: flex; align-items: center; gap: 8px; }
 #li-queue { display: flex; align-items: center; gap: 12px; }
 #li-queue button { font-size: 12px; padding: 2px 9px; }
+.cand-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 4px; }
+.cand-foot button { font-size: 11px; padding: 2px 8px; }
+
+#investor-table button.linkish {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-style: dashed;
+  color: var(--accent);
+  white-space: nowrap;
+}

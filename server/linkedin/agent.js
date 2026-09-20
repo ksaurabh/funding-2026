@@ -161,7 +161,9 @@ export async function openSession() {
   });
 
   page = ctx.pages()[0] || (await ctx.newPage());
-  await visit(`${BASE}/feed/`);
+  // A failure here means LinkedIn is unreachable, not that the session is
+  // broken; report the state rather than throwing out of the queue.
+  await visit(`${BASE}/feed/`).catch(() => {});
   return status();
 }
 

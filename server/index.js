@@ -895,5 +895,10 @@ function bootstrap() {
 
 bootstrap();
 
+// A stray rejection anywhere should not take the server down mid-run.
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err?.stack || err);
+});
+
 const port = Number(process.env.PORT) || 4000;
 app.listen(port, () => console.log(`Investor playbook running at http://localhost:${port}`));

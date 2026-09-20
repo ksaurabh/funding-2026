@@ -73,6 +73,39 @@ linkedinRoutes.post('/lookup', (req, res) => {
   }
 });
 
+/**
+ * Take one of the search results as the right person, whatever it scored.
+ * The confidence bar exists to stop the agent guessing; it should not stop
+ * you deciding. Accepting records that candidate and then opens their
+ * profile, which reads the degree and follows the mutual connections.
+ */
+linkedinRoutes.post('/contacts/:id/accept', (req, res) => {
+  const c = contacts.all().find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'Contact not found.' });
+
+  const url = req.body?.url;
+  const pick = (c.candidates || []).find((x) => x.url === url);
+  if (!pick) return res.status(400).json({ error: 'That is not one of the results on record.' });
+
+  contacts.upsert({
+    id: c.id,
+    name: pick.name,
+    url: pick.url,
+    headline: pick.headline,
+    company: pick.company || c.company,
+    degree: pick.degree,
+    degreeSource: pick.degree ? 'search result' : null,
+    confidence: pick.confidence,
+    acceptedBy: 'you',
+    status: 'found',
+    reason: null,
+  });
+
+  // Go and read them properly, which also walks the mutual connections.
+  contacts.enqueue([{ name: pick.name, url: pick.url, contactId: c.id }]);
+  res.json(contacts.queueStatus());
+});
+
 /** Run just the mutual-connections walk for a contact, on request. */
 linkedinRoutes.post('/contacts/:id/mutuals', (req, res) => {
   const c = contacts.all().find((x) => x.id === req.params.id);
