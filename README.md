@@ -390,8 +390,13 @@ three results it scraped** with each one's name and company score and whether
 it cleared the bar, the profile it opened and what that page said, and the
 shared connections it then followed. Those listings are kept on the contact
 too, so a decision can be reviewed later — particularly useful for a "not
-found", where the near-misses explain why. Selecting a contact shows its
-record; **Watch live** goes back to the running commentary.
+found", where the near-misses explain why.
+
+Selecting a contact shows its record and keeps it there — the pane does not
+jump to whoever the agent has moved on to. **Watch live** on a contact drops
+the selection and returns to the running commentary, which is also what you
+see when nothing is selected. A selected contact that is itself being worked
+on shows its own progress.
 
 If the profile page yields no degree, the search result usually still states
 one, and that card is kept — so the contact shows **Use 1st from the search
