@@ -589,3 +589,8 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
   white-space: nowrap;
 }
 .filter-count.active { color: var(--accent); font-weight: 600; }
+
+.run-options { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0 4px; }
+.run-options .inline { gap: 6px; font-size: 12px; }
+.run-options select { width: auto; font-size: 13px; color: var(--text); }
+#run-dialog-summary { margin: 0 0 4px; }

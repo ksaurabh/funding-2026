@@ -121,7 +121,16 @@ function log(msg) {
  * Run the playbook over the given investor ids. Steps run sequentially per
  * investor; investors run `concurrency` at a time.
  */
-export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, scopeLabel }) {
+export function startRun({
+  listId,
+  listName,
+  investorIds,
+  stepIds,
+  onlyMissing,
+  scopeLabel,
+  concurrency: concurrencyOverride,
+  effort: effortOverride,
+}) {
   if (job && job.status === 'running') throw new Error('A run is already in progress.');
 
   const settings = read('settings', {});
@@ -136,6 +145,10 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
   const byId = new Map(investors.rows.map((r) => [r.__id, r]));
   const targets = investorIds.map((id) => byId.get(id)).filter(Boolean);
   if (!targets.length) throw new Error('No matching investors to run.');
+
+  // Per-run overrides sit on top of the saved settings without changing them.
+  const runSettings = { ...settings };
+  if (effortOverride) runSettings.effort = effortOverride;
 
   const client = makeClient(settings.apiKey);
 
@@ -163,15 +176,16 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
     controller: new AbortController(),
   };
   const what = job.scopeLabel ? `${job.scopeLabel} row` : 'row';
+
+  const concurrency = Math.max(1, Math.min(8, Number(concurrencyOverride || settings.concurrency) || 1));
+  job.concurrency = concurrency;
   log(
     `Starting run: ${targets.length} ${what}${targets.length === 1 ? '' : 's'} × ` +
       `${steps.length} step${steps.length === 1 ? '' : 's'}` +
       (onlyMissing ? ', filling gaps only' : '') +
-      '.'
+      ` — ${concurrency} at a time, ${runSettings.model} at ${runSettings.effort} effort.`
   );
 
-  const concurrency = Math.max(1, Math.min(8, Number(settings.concurrency) || 1));
-  job.concurrency = concurrency;
   const queue = targets.slice();
 
   const worker = async () => {
@@ -188,7 +202,7 @@ export function startRun({ listId, listName, investorIds, stepIds, onlyMissing, 
       log(`[${label}] ${name}`);
       const startedAt = Date.now();
       try {
-        await runOne({ listId, client, settings, playbook, steps, row, label, name, onlyMissing });
+        await runOne({ listId, client, settings: runSettings, playbook, steps, row, label, name, onlyMissing });
       } catch (err) {
         if (job.controller.signal.aborted) return;
         job.stepErrors++;

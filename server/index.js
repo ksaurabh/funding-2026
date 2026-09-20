@@ -756,6 +756,9 @@ app.post('/api/lists/:listId/run', (req, res) => {
         stepIds: body.stepIds,
         onlyMissing: body.scope === 'gaps' || !!body.onlyMissing,
         scopeLabel: body.scopeLabel,
+        // Per-run overrides; the saved settings are left alone.
+        concurrency: body.concurrency,
+        effort: ['low', 'medium', 'high', 'xhigh', 'max'].includes(body.effort) ? body.effort : undefined,
       })
     );
   } catch (err) {

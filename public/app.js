@@ -37,6 +37,9 @@ const state = {
   cost: null,
   playbooks: [],
   running: false,
+  settings: null, // the saved defaults, for the run dialog to start from
+  runConcurrency: null, // per-run overrides, remembered between runs
+  runEffort: null,
   lastStepPick: null, // remembered tick state of the step picker
   // Which rows the current run is working on / still has queued.
   job: { listId: null, current: new Set(), pending: new Set() },
@@ -1240,27 +1243,95 @@ async function run(body) {
   }
 }
 
-/** Ask before a big run, projecting the bill from this list's own history. */
-function confirmRun(rows, what) {
+const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'];
+
+/**
+ * The two knobs worth changing per run. They default to the saved settings,
+ * remember what you last chose, and never write back to Settings.
+ */
+function runOptions(into) {
+  const saved = state.settings || {};
+  const conc = el('select', {}, [
+    ...Array.from({ length: 8 }, (_, i) =>
+      el('option', {
+        value: String(i + 1),
+        textContent: `${i + 1} at a time`,
+        selected: String(i + 1) === String(state.runConcurrency ?? saved?.concurrency ?? 1),
+      })
+    ),
+  ]);
+  const eff = el('select', {}, [
+    ...EFFORTS.map((e) =>
+      el('option', {
+        value: e,
+        textContent: `${e} effort`,
+        selected: e === (state.runEffort || saved?.effort || 'high'),
+      })
+    ),
+  ]);
+
+  into.replaceChildren(
+    el('div', { className: 'run-options' }, [
+      el('label', { className: 'inline' }, [document.createTextNode('Rows in parallel'), conc]),
+      el('label', { className: 'inline' }, [document.createTextNode('Effort'), eff]),
+    ]),
+    el('p', {
+      className: 'muted small',
+      textContent:
+        'Just for this run — Settings keeps its own values. More in parallel finishes sooner; lower effort is ' +
+        'faster and cheaper per answer.',
+    })
+  );
+
+  return () => {
+    state.runConcurrency = Number(conc.value);
+    state.runEffort = eff.value;
+    return { concurrency: state.runConcurrency, effort: state.runEffort };
+  };
+}
+
+/** What this list has cost per row so far, if it has been run. */
+function perRowCost() {
   const done = state.cost?.byList.find((l) => l.id === state.listId);
-  const per = done?.calls && state.investors.stepCount ? done.cost / (done.calls / state.investors.stepCount) : null;
-  const estimate = per
-    ? `\n\nRoughly ${money(per * rows.length)} at this list's average of ${money(per)} per row.`
-    : '';
-  return confirm(`Run the playbook on ${rows.length} ${what}?${estimate}`);
+  return done?.calls && state.investors.stepCount ? done.cost / (done.calls / state.investors.stepCount) : null;
+}
+
+/** Confirm a run, with the two runtime knobs and a projected bill. */
+function askRun({ title, summary, rowCount, onStart }) {
+  $('#run-dialog-title').textContent = title;
+  $('#run-dialog-summary').textContent = summary;
+
+  const per = perRowCost();
+  $('#run-dialog-cost').textContent = per
+    ? `Roughly ${money(per * rowCount)} at this list's average of ${money(per)} per row.`
+    : 'No cost history for this list yet, so no estimate.';
+
+  const read = runOptions($('#run-dialog-options'));
+  const start = $('#run-dialog-start');
+  start.onclick = (e) => {
+    e.preventDefault();
+    $('#run-dialog').close();
+    onStart(read());
+  };
+  $('#run-dialog').showModal();
 }
 
 $('#run-all').addEventListener('click', () => {
   const target = runTarget();
   if (!target.rows.length) return;
-  const what = target.selected ? 'selected row(s)' : isFiltered() ? 'filtered row(s)' : 'row(s)';
-  if (!confirmRun(target.rows, what)) return;
-  // Send ids for anything but the whole list, so the server runs exactly this set.
-  run(
-    target.selected || isFiltered()
-      ? { investorIds: target.rows.map((r) => r.__id), scopeLabel: target.selected ? 'selected' : 'filtered' }
-      : { scope: 'all' }
-  );
+  const what = target.selected ? 'selected' : isFiltered() ? 'filtered' : '';
+  askRun({
+    title: 'Run the playbook',
+    summary: `${target.rows.length} ${what ? what + ' ' : ''}row(s) × ${state.investors.stepCount} step(s).`,
+    rowCount: target.rows.length,
+    // Send ids for anything but the whole list, so the server runs exactly this set.
+    onStart: (opts) =>
+      run(
+        target.selected || isFiltered()
+          ? { investorIds: target.rows.map((r) => r.__id), scopeLabel: what, ...opts }
+          : { scope: 'all', ...opts }
+      ),
+  });
 });
 
 $('#fill-gaps').addEventListener('click', () => {
@@ -1268,34 +1339,40 @@ $('#fill-gaps').addEventListener('click', () => {
   const rows = target.rows.filter((r) => r.__done < state.investors.stepCount);
   if (!rows.length) return;
   const missingSteps = rows.reduce((n, r) => n + (state.investors.stepCount - r.__done), 0);
-  const what = target.selected ? 'selected row(s)' : isFiltered() ? 'filtered row(s)' : 'row(s)';
-  if (!confirm(`Run ${missingSteps} missing step(s) across ${rows.length} ${what}?\n\nSteps that already have an answer are kept.`)) return;
-  run(
-    target.selected || isFiltered()
-      ? {
-          investorIds: rows.map((r) => r.__id),
-          onlyMissing: true,
-          scopeLabel: target.selected ? 'selected' : 'filtered',
-        }
-      : { scope: 'gaps' }
-  );
+  const what = target.selected ? 'selected' : isFiltered() ? 'filtered' : '';
+  askRun({
+    title: 'Fill gaps',
+    summary:
+      `${missingSteps} missing step(s) across ${rows.length} ${what ? what + ' ' : ''}row(s). ` +
+      'Steps that already have an answer are kept.',
+    rowCount: rows.length,
+    onStart: (opts) =>
+      run(
+        target.selected || isFiltered()
+          ? { investorIds: rows.map((r) => r.__id), onlyMissing: true, scopeLabel: what, ...opts }
+          : { scope: 'gaps', ...opts }
+      ),
+  });
 });
 
 $('#run-unanswered').addEventListener('click', () => {
   const target = runTarget();
   const rows = target.rows.filter((r) => r.__done < state.investors.stepCount);
   if (!rows.length) return;
-  const what = target.selected
-    ? 'selected row(s) with missing answers'
-    : isFiltered()
-    ? 'filtered row(s) with missing answers'
-    : 'row(s) with missing answers';
-  if (!confirmRun(rows, what)) return;
-  run(
-    target.selected || isFiltered()
-      ? { investorIds: rows.map((r) => r.__id), scopeLabel: target.selected ? 'selected' : 'filtered' }
-      : { scope: 'unanswered' }
-  );
+  const what = target.selected ? 'selected' : isFiltered() ? 'filtered' : '';
+  askRun({
+    title: 'Re-run unanswered rows',
+    summary:
+      `The whole playbook again on ${rows.length} ${what ? what + ' ' : ''}row(s) missing any answer. ` +
+      'Answers already there are replaced.',
+    rowCount: rows.length,
+    onStart: (opts) =>
+      run(
+        target.selected || isFiltered()
+          ? { investorIds: rows.map((r) => r.__id), scopeLabel: what, ...opts }
+          : { scope: 'unanswered', ...opts }
+      ),
+  });
 });
 
 // ------------------------------------------------- run a subset of steps
@@ -1326,6 +1403,7 @@ $('#run-steps').addEventListener('click', () => {
       ])
     )
   );
+  state.readStepRunOptions = runOptions($('#steps-options'));
   $('#steps-dialog').showModal();
 });
 
@@ -1353,6 +1431,7 @@ $('#steps-run').addEventListener('click', async (e) => {
     }
   }
 
+  const opts = state.readStepRunOptions ? state.readStepRunOptions() : {};
   if (!confirm(`Run ${stepIds.length} step(s) on ${rows.length} row(s)?`)) return;
   $('#steps-dialog').close();
   run({
@@ -1360,6 +1439,7 @@ $('#steps-run').addEventListener('click', async (e) => {
     stepIds,
     onlyMissing,
     scopeLabel: target.selected ? 'selected' : isFiltered() ? 'filtered' : '',
+    ...opts,
   });
 });
 
@@ -1773,6 +1853,7 @@ function preview(tpl) {
 
 async function loadSettings() {
   const s = await api('/api/settings');
+  state.settings = s;
   $('#model').value = s.model;
   $('#effort').value = s.effort;
   $('#maxTokens').value = s.maxTokens;

@@ -212,8 +212,16 @@ The two run buttons always say what they will actually do:
   last choice.
 
 Every one of them names the set it will act on, so a selection or filter is
-never a surprise, and confirms first with the bill projected from this list's
-own average per row.
+never a surprise. Each opens a short dialog before starting, with the bill
+projected from this list's own average per row and two knobs **for that run
+only**: how many **rows in parallel** (1–8) and the **effort** level. Settings
+keeps its own values; the dialog just starts from them and remembers what you
+last chose. The run's log header records what was used — *"6 rows × 1 step —
+4 at a time, claude-opus-5 at low effort."*
+
+More rows in parallel finishes sooner at the same cost; lower effort is faster
+and cheaper per answer. Both are worth trying on a handful of rows before
+committing to a long list.
 A run streams progress into the log strip at the bottom and can be cancelled
 mid-flight. Every line is stamped in your own time zone and prefixed with the
 row's place in the run — `[15/30 selected]` — so a long run tells you how far

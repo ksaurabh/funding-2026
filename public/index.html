@@ -72,6 +72,19 @@
   </div>
   <div id="log" class="log"></div>
 
+  <dialog id="run-dialog">
+    <form method="dialog" class="dialog-head">
+      <h3 id="run-dialog-title">Start run</h3>
+      <button value="close">Cancel</button>
+    </form>
+    <p id="run-dialog-summary"></p>
+    <p id="run-dialog-cost" class="muted small"></p>
+    <div id="run-dialog-options"></div>
+    <div class="dialog-foot">
+      <button id="run-dialog-start" class="primary">Start</button>
+    </div>
+  </dialog>
+
   <dialog id="steps-dialog">
     <form method="dialog" class="dialog-head">
       <h3>Run selected steps</h3>
@@ -83,6 +96,7 @@
       <input id="steps-only-missing" type="checkbox" />
       Skip rows that already have an answer for these steps
     </label>
+    <div id="steps-options"></div>
     <div class="dialog-foot">
       <button id="steps-run" class="primary">Run</button>
     </div>
