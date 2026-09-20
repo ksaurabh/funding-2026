@@ -39,6 +39,12 @@ function indexOfContact(list, record) {
 export function upsert(record) {
   const list = all();
   const i = indexOfContact(list, record);
+
+  // A key present with the value undefined still wins a spread, so a caller
+  // passing `url: undefined` would erase a url already on the contact. Only
+  // fields actually supplied should overwrite anything.
+  record = Object.fromEntries(Object.entries(record).filter(([, v]) => v !== undefined));
+
   const merged = {
     strength: null,
     notes: '',
@@ -125,6 +131,8 @@ export function enqueue(items) {
       company: String(i.company || '').trim(),
       // A known profile address skips the search entirely.
       url: String(i.url || '').trim() || null,
+      // Just the mutual-connections walk, using a link an earlier lookup kept.
+      mutualsOnly: !!i.mutualsOnly,
       // Set when re-running a contact, so the result updates that row.
       contactId: i.contactId || null,
     }))
@@ -164,6 +172,39 @@ export function clearQueue() {
   queue = [];
   if (n) note(`Dropped ${n} queued lookup${n === 1 ? '' : 's'}.`);
   return n;
+}
+
+/**
+ * Walk a contact's mutual connections on their own, from the link a previous
+ * lookup kept. Returns the shape findPerson returns, so the caller stores it
+ * the same way — everything else about the contact is carried over unchanged.
+ */
+async function mutualsOnlyResult(item, onEvent) {
+  const existing = all().find((c) => c.id === item.contactId);
+  if (!existing) throw new Error('That contact is no longer here.');
+
+  const r = await agent.enumerateMutuals({
+    link: existing.mutualPage?.link,
+    text: existing.mutualPage?.text,
+    onEvent,
+  });
+
+  return {
+    found: true,
+    confidence: existing.confidence,
+    candidates: existing.candidates || [],
+    shots: [...(existing.shots || []), ...r.shots],
+    person: {
+      name: existing.name,
+      company: existing.company,
+      headline: existing.headline,
+      url: existing.url,
+      degree: existing.degree,
+      via: r.via,
+      mutualText: existing.mutualText,
+      mutualPage: r.mutualPage,
+    },
+  };
 }
 
 /**
@@ -214,7 +255,11 @@ async function drain() {
       const patchRow = (fields) =>
         upsert({ id: item.contactId, queriedAs: item.name, queriedCompany: item.company, ...fields });
 
-      patchRow({ status: 'running', ranAt: new Date().toISOString(), stage: 'searching' });
+      patchRow({
+        status: 'running',
+        ranAt: new Date().toISOString(),
+        stage: item.mutualsOnly ? 'reading mutual connections' : 'searching',
+      });
 
       // Each stage lands on the contact as it happens, so its detail fills in
       // while the agent is still working rather than all at the end.
@@ -238,7 +283,9 @@ async function drain() {
       };
 
       try {
-        const result = await agent.findPerson({ ...item, onEvent });
+        const result = item.mutualsOnly
+          ? await mutualsOnlyResult(item, onEvent)
+          : await agent.findPerson({ ...item, onEvent });
         if (!result.found) {
           note(`✗ ${item.name}: ${result.reason}`);
           upsert({
@@ -289,6 +336,7 @@ async function drain() {
               headline: p.headline,
               company: p.company,
               degree: p.degree,
+              shared: p.sharedWithYou,
             });
           }
 

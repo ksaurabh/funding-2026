@@ -73,6 +73,17 @@ linkedinRoutes.post('/lookup', (req, res) => {
   }
 });
 
+/** Run just the mutual-connections walk for a contact, on request. */
+linkedinRoutes.post('/contacts/:id/mutuals', (req, res) => {
+  const c = contacts.all().find((x) => x.id === req.params.id);
+  if (!c) return res.status(404).json({ error: 'Contact not found.' });
+  if (!c.mutualPage?.link) {
+    return res.status(400).json({ error: 'No mutual-connections link was recorded for them.' });
+  }
+  contacts.enqueue([{ name: c.name, contactId: c.id, mutualsOnly: true }]);
+  res.json(contacts.queueStatus());
+});
+
 linkedinRoutes.post('/queue/clear', (_req, res) => res.json({ dropped: contacts.clearQueue() }));
 linkedinRoutes.post('/queue/resume', (_req, res) => res.json(contacts.resumeQueue()));
 
@@ -155,6 +166,13 @@ linkedinRoutes.patch('/network/:id', (req, res) => {
 linkedinRoutes.post('/network/delete', (req, res) =>
   res.json({ removed: network.remove(req.body?.ids || []) })
 );
+
+linkedinRoutes.post('/network/refresh-strength', (req, res) =>
+  res.json(network.refreshStrength({ overwrite: !!req.body?.overwrite, contacts: contacts.all() }))
+);
+
+// Re-derive from lookups already fetched; touches no network.
+linkedinRoutes.post('/network/resync', (_req, res) => res.json(network.resyncFrom(contacts.all())));
 
 linkedinRoutes.post('/network/renumber', (req, res) => res.json(network.renumber(req.body?.ids || [])));
 

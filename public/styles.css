@@ -814,3 +814,6 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .toast.good { background: #235c3c; }
 .toast.bad { background: #8d2a22; }
 .toast.go { opacity: 0; transform: translateY(6px); }
+.strength-line { display: flex; align-items: center; gap: 8px; }
+#li-queue { display: flex; align-items: center; gap: 12px; }
+#li-queue button { font-size: 12px; padding: 2px 9px; }

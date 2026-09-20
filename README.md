@@ -222,6 +222,9 @@ last chose. The run's log header records what was used — *"6 rows × 1 step �
 More rows in parallel finishes sooner at the same cost; lower effort is faster
 and cheaper per answer. Both are worth trying on a handful of rows before
 committing to a long list.
+A queue can be emptied at any time with **Clear the queue** on the status
+bar; whatever is already in flight finishes.
+
 A run streams progress into the log strip at the bottom and can be cancelled
 mid-flight. Every line is stamped in your own time zone and prefixed with the
 row's place in the run — `[15/30 selected]` — so a long run tells you how far
@@ -318,8 +321,18 @@ reach** puts them first.
 Each person carries two things you set:
 
 - **Strength**, one to five stars — how well you actually know them.
+  **Refresh strength** derives it from something already fetched: the number
+  of connections you and they have in common, which their profile states. The
+  bands are 100+ → ★★★★★, 50 → ★★★★, 20 → ★★★, 5 → ★★, below that ★. A rating
+  you set by hand is marked *yours* and is never overwritten unless you
+  confirm. The shared count is shown beside the stars, so a rating can be
+  argued with.
 - **Rank**, a plain number — the order you would ask in. **Renumber 1…n**
   closes the gaps that accumulate, in whatever order is on screen.
+
+**Refresh details** brings titles, photos and paths up to date from lookups
+already on disk — no LinkedIn traffic. A person added through one investor
+gains the second investor as a path once that one is looked up.
 
 Tick people here and **Look up N on LinkedIn** runs them through the agent.
 Because their profile address is already known, this skips the search
@@ -358,7 +371,10 @@ too, so a decision can be reviewed later — particularly useful for a "not
 found", where the near-misses explain why. Selecting a contact shows its
 record; **Watch live** goes back to the running commentary.
 
-- **1st degree** — you already know them; it is labelled and done.
+- **1st degree** — you already know them, so their mutual connections are not
+  enumerated: the path through someone else is moot, and walking it is the
+  most expensive thing the agent does. The link and the count are recorded,
+  and **Fetch mutual connections** on that contact runs the walk on request.
 - **2nd degree** — once the top hit clears the 90% bar, and only then, it
   follows the *"…and 10 other mutual connections"* link on that result card and records everyone you could be introduced through,
   with links. If that link opens an overlay rather than navigating, it reads

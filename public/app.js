@@ -2644,8 +2644,27 @@ function selectContact(id) {
             ),
           ]),
           pageLinks({ ...(c.mutualPage || {}), text: c.mutualPage?.text || c.mutualText }),
+          c.mutualPage?.pending
+            ? el('div', { className: 'body' }, [
+                el('div', {
+                  className: 'muted small',
+                  textContent:
+                    `Not fetched: they are a first-degree connection, so the path through anyone else is moot. ` +
+                    (c.mutualPage.claimed ? `LinkedIn says you share ${c.mutualPage.claimed}. ` : ''),
+                }),
+                button('Fetch mutual connections', '', async () => {
+                  try {
+                    await post(`/api/linkedin/contacts/${c.id}/mutuals`);
+                  } catch (err) {
+                    return toast(err.message, 'bad');
+                  }
+                  toast('Queued — watch it on the right.');
+                  pollLinkedIn();
+                }),
+              ])
+            : null,
           read ? mutualPicker(c) : null,
-          read
+          read || c.mutualPage?.pending
             ? null
             : el('div', {
                 className: 'body empty',
@@ -2916,6 +2935,14 @@ function renderActivity(q) {
           'good'
         )
       );
+    } else if (e.type === 'mutual-skipped') {
+      nodes.push(
+        step(
+          'Skipped the mutual connections',
+          `${e.reason} — "${e.text}" was recorded and can be fetched on request.`,
+          e.t
+        )
+      );
     } else if (e.type === 'mutual-dead') {
       nodes.push(
         step('That link went nowhere', 'Clicking it neither navigated nor opened a panel; trying the profile.', e.t, [], 'bad')
@@ -3052,12 +3079,25 @@ async function pollLinkedIn() {
   try {
     const q = await api('/api/linkedin/queue');
     const bar = $('#li-queue');
-    bar.classList.toggle('hidden', !q.running && !q.pending.length);
-    bar.textContent = q.running
-      ? `Looking up ${q.current?.name || '…'}${q.pending.length ? ` · ${q.pending.length} waiting` : ''}`
-      : q.pending.length
-      ? `${q.pending.length} waiting`
-      : '';
+    const waiting = q.pending.length;
+    bar.classList.toggle('hidden', !q.running && !waiting);
+    if (q.running || waiting) {
+      bar.replaceChildren(
+        el('span', {
+          textContent: q.running
+            ? `Looking up ${q.current?.name || '…'}${waiting ? ` · ${waiting} waiting` : ''}`
+            : `${waiting} waiting`,
+        }),
+        waiting
+          ? button(`Clear the queue (${waiting})`, '', async () => {
+              // Whatever is in flight finishes; this drops what has not started.
+              const r = await post('/api/linkedin/queue/clear');
+              toast(r.dropped ? `${r.dropped} dropped from the queue` : 'Nothing was waiting');
+              pollLinkedIn();
+            })
+          : null
+      );
+    }
 
     // The last person searched for, repeatable in one click.
     li.last = q.last || null;
@@ -3267,7 +3307,22 @@ function renderNetwork() {
         el('span', { className: 'rank-cell' }, rank),
         personCard(p),
         el('div', { className: 'nw-meta' }, [
-          stars(p.strength || 0, (v) => patchPerson(p.id, { strength: v })),
+          el('div', { className: 'strength-line' }, [
+            stars(p.strength || 0, (v) => patchPerson(p.id, { strength: v })),
+            Number.isFinite(p.shared)
+              ? el('span', {
+                  className: 'muted small',
+                  textContent: `${p.shared} shared`,
+                  title:
+                    p.strengthSource === 'derived'
+                      ? `Rated from the ${p.shared} connections you have in common`
+                      : `${p.shared} connections in common`,
+                })
+              : null,
+            p.strengthSource === 'you'
+              ? el('span', { className: 'muted small', textContent: 'yours', title: 'You set this rating' })
+              : null,
+          ]),
           p.degree && p.degree !== '1st'
             ? el('div', {
                 className: 'muted small warn',
@@ -3338,6 +3393,60 @@ $('#nw-delete').addEventListener('click', async () => {
   await post('/api/linkedin/network/delete', { ids });
   nw.picked.clear();
   loadNetwork();
+});
+
+/**
+ * Strength from the connections you share with each person — a number their
+ * profile states, gathered when they were looked up. Nothing you rated by
+ * hand is overwritten unless you say so.
+ */
+$('#nw-strength').addEventListener('click', async () => {
+  let r;
+  try {
+    r = await post('/api/linkedin/network/refresh-strength');
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  await loadNetwork();
+
+  if (!r.set && r.missing === r.people) {
+    return toast(
+      'No shared-connection counts yet — look these people up on LinkedIn first, which fetches them.',
+      'bad'
+    );
+  }
+  if (r.kept && !r.set && confirm(`${r.kept} already have a rating you set. Replace those too?`)) {
+    const f = await post('/api/linkedin/network/refresh-strength', { overwrite: true });
+    await loadNetwork();
+    return toast(`${f.set} re-rated from shared connections`, 'good');
+  }
+  toast(
+    [
+      r.set ? `${r.set} rated from shared connections` : 'Nothing to change',
+      r.kept ? `${r.kept} left as you set them` : '',
+      r.missing ? `${r.missing} not looked up yet` : '',
+    ]
+      .filter(Boolean)
+      .join(' · '),
+    r.set ? 'good' : ''
+  );
+});
+
+// Everything needed is already on disk: the mutual-connection lists of every
+// lookup. This re-reads them rather than going back to LinkedIn.
+$('#nw-resync').addEventListener('click', async () => {
+  let r;
+  try {
+    r = await post('/api/linkedin/network/resync');
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  await loadNetwork();
+  const bits = [
+    r.details ? `${r.details} updated` : '',
+    r.paths ? `${r.paths} new path${r.paths === 1 ? '' : 's'} recorded` : '',
+  ].filter(Boolean);
+  toast(bits.length ? bits.join(' · ') : 'Already up to date with everything fetched', bits.length ? 'good' : '');
 });
 
 // Rank is yours to set, but gaps accumulate; this closes them in the order

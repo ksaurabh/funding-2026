@@ -485,6 +485,10 @@ async function readProfile(url) {
     };
   }
 
+  // extractProfileInPage returns the raw href; it is often relative, and
+  // everything downstream navigates to it.
+  if (read?.mutual?.url) read.mutual.url = absolute(read.mutual.url);
+
   return { ...read, url: page.url().split('?')[0] };
 }
 
@@ -504,14 +508,14 @@ async function readSharedConnections() {
  * Find one person. Returns what was found and how sure we are; the caller
  * decides what to store. Never guesses past the confidence threshold.
  */
-export async function findPerson({ name, company, url, threshold = 0.9, onEvent = () => {} }) {
+export async function findPerson({ name, company, url, threshold = 0.9, withMutuals = false, onEvent = () => {} }) {
   if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
   const s = await status();
   if (!s.loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
 
   // Given the profile itself, there is nothing to search for or be unsure
   // about — go straight there.
-  if (url) return openKnownProfile({ url, name, company, onEvent });
+  if (url) return openKnownProfile({ url, name, company, withMutuals, onEvent });
 
   onEvent({ type: 'search', query: { name, company } });
   const candidates = await searchPeople(name, company);
@@ -587,7 +591,19 @@ export async function findPerson({ name, company, url, threshold = 0.9, onEvent 
   // opening — and it is right here, on the page already in front of us.
   let via = [];
   let mutualPage = null;
-  if (best.mutual) {
+
+  // Someone you already know needs no path through anyone else, and walking
+  // their shared connections is the most expensive thing here. The link and
+  // the count are kept so it can be done on request.
+  if (best.mutual && best.degree === '1st' && !withMutuals) {
+    mutualPage = {
+      link: best.mutual.url,
+      text: best.mutual.text,
+      claimed: claimedMutuals(best.mutual.text),
+      pending: true,
+    };
+    onEvent({ type: 'mutual-skipped', text: best.mutual.text, reason: 'first-degree connection' });
+  } else if (best.mutual) {
     onEvent({ type: 'mutual-found', text: best.mutual.text, url: best.mutual.url });
     await wait(PACE.betweenActions);
     const opened = await openMutuals(best.mutual, (p) =>
@@ -670,7 +686,7 @@ export async function findPerson({ name, company, url, threshold = 0.9, onEvent 
  * people already in your network, where the profile is known: no search, no
  * confidence to weigh, and no chance of landing on a namesake.
  */
-async function openKnownProfile({ url, name, company, onEvent }) {
+async function openKnownProfile({ url, name, company, withMutuals, onEvent }) {
   const shots = [];
   const shot = async (label) => {
     const cap = await capture(label);
@@ -689,7 +705,15 @@ async function openKnownProfile({ url, name, company, onEvent }) {
 
   let via = [];
   let mutualPage = null;
-  if (profile.mutual) {
+  if (profile.mutual && degree === '1st' && !withMutuals) {
+    mutualPage = {
+      link: profile.mutual.url,
+      text: profile.mutual.text,
+      claimed: claimedMutuals(profile.mutual.text),
+      pending: true,
+    };
+    onEvent({ type: 'mutual-skipped', text: profile.mutual.text, reason: 'first-degree connection' });
+  } else if (profile.mutual) {
     onEvent({ type: 'mutual-found', text: profile.mutual.text, url: profile.mutual.url });
     const landed = await openMutuals(profile.mutual, (p) => onEvent({ type: 'shared-page', ...p, from: 'profile' }));
     via = landed.via;
@@ -721,8 +745,49 @@ async function openKnownProfile({ url, name, company, onEvent }) {
       via,
       mutualText: profile.mutual?.text || null,
       mutualPage,
+      // How many connections you and this person share, as their profile
+      // states it. The closest thing LinkedIn gives to "how well do I know
+      // them", and the only such number that is actually fetched.
+      sharedWithYou: claimedMutuals(profile.mutual?.text),
     },
   };
+}
+
+/**
+ * Walk a mutual-connections list on its own, from a link kept by an earlier
+ * lookup. This is the step skipped for first-degree connections.
+ */
+export async function enumerateMutuals({ link, text, onEvent = () => {} }) {
+  if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
+  if (!(await status()).loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
+  if (!link) throw new Error('No mutual-connections link was recorded for them.');
+
+  // Links stored before they were absolutised, and any stored relative.
+  const target = absolute(link);
+  onEvent({ type: 'mutual-found', text, url: target });
+  const landed = await openMutuals({ url: target, text }, (p) => onEvent({ type: 'shared-page', ...p, from: 'request' }));
+
+  const shots = [];
+  let cap = null;
+  if (landed.opened) {
+    cap = await capture('Mutual connections');
+    if (cap) {
+      shots.push(cap);
+      onEvent({ type: 'shot', ...cap });
+    }
+  }
+
+  const mutualPage = {
+    link,
+    text,
+    pageUrl: landed.url || null,
+    html: cap?.html || null,
+    claimed: claimedMutuals(text),
+    pages: landed.pages || 1,
+    pending: false,
+  };
+  onEvent({ type: 'shared', count: landed.via.length, via: landed.via, from: 'request', ...mutualPage });
+  return { via: landed.via, mutualPage, shots };
 }
 
 export const pauseBetweenLookups = () => wait(PACE.betweenLookups);
