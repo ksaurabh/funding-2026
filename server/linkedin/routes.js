@@ -126,9 +126,24 @@ linkedinRoutes.post('/contacts/delete', (req, res) => {
 linkedinRoutes.get('/network', (_req, res) => res.json(network.all()));
 
 linkedinRoutes.post('/network', (req, res) => {
-  const people = Array.isArray(req.body?.people) ? req.body.people : [];
-  if (!people.length) return res.status(400).json({ error: 'Nobody to add.' });
-  res.json(network.add(people, req.body?.source || null));
+  // Either one batch with a source, or several — adding everyone that a set
+  // of contacts is connected through, each keeping its own attribution.
+  const groups = Array.isArray(req.body?.groups)
+    ? req.body.groups
+    : [{ people: req.body?.people || [], source: req.body?.source || null }];
+
+  const totals = { added: 0, merged: 0, total: 0, from: 0 };
+  for (const g of groups) {
+    const people = Array.isArray(g?.people) ? g.people : [];
+    if (!people.length) continue;
+    const r = network.add(people, g.source || null);
+    totals.added += r.added;
+    totals.merged += r.merged;
+    totals.total = r.total;
+    totals.from++;
+  }
+  if (!totals.from) return res.status(400).json({ error: 'Nobody to add.' });
+  res.json(totals);
 });
 
 linkedinRoutes.patch('/network/:id', (req, res) => {

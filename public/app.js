@@ -2223,7 +2223,13 @@ function renderLiTable() {
     ])
   );
 
-  const picked = [...li.picked].filter((id) => li.contacts.some((c) => c.id === id)).length;
+  const pickedContacts = li.contacts.filter((c) => li.picked.has(c.id));
+  const picked = pickedContacts.length;
+  const mutuals = pickedContacts.reduce((n, c) => n + (c.via?.length || 0), 0);
+
+  $('#li-add-mutuals').classList.toggle('hidden', !mutuals);
+  $('#li-add-mutuals').textContent = `Add ${mutuals} mutual connection${mutuals === 1 ? '' : 's'} to my network`;
+
   $('#li-delete').classList.toggle('hidden', !picked);
   $('#li-delete').textContent = `Delete ${picked} selected`;
   $('#li-clear-all').disabled = !li.contacts.length;
@@ -2295,6 +2301,37 @@ function renderLiTable() {
 }
 
 /**
+ * Add everyone a set of contacts is connected through. Each person keeps the
+ * contact they are a path to, so someone reachable via two investors records
+ * both.
+ */
+async function addMutualsFrom(contacts, describe) {
+  const groups = contacts
+    .filter((c) => c.via?.length)
+    .map((c) => ({
+      source: { id: c.id, name: c.name },
+      people: c.via.map((p) => ({ name: p.name, url: p.url, headline: p.headline, photo: p.photo })),
+    }));
+
+  if (!groups.length) {
+    return alert('None of those have any mutual connections recorded yet.');
+  }
+
+  const people = groups.reduce((n, g) => n + g.people.length, 0);
+  if (!confirm(`Add ${describe || `${people} people from ${groups.length} contact(s)`} to my network?`)) return;
+
+  let r;
+  try {
+    r = await post('/api/linkedin/network', { groups });
+  } catch (err) {
+    return alert(err.message);
+  }
+
+  const bits = [r.added ? `${r.added} added` : '', r.merged ? `${r.merged} already there` : ''].filter(Boolean);
+  if (confirm(`${bits.join(', ') || 'Nothing to add'}. Open My network?`)) location.hash = '#/network';
+}
+
+/**
  * The mutual connections, tickable, with the one action worth taking on
  * them: adding them to the people you know.
  */
@@ -2320,6 +2357,11 @@ function mutualPicker(contact) {
     selectContact(contact.id);
   });
 
+  const addAll = button(`Add all ${contact.via.length} to my network`, '', async () => {
+    await addMutualsFrom([contact], `everyone ${contact.name} is connected through`);
+    selectContact(contact.id);
+  });
+
   const all = el('label', { className: 'inline' }, [
     (() => {
       const box = el('input', { type: 'checkbox' });
@@ -2340,7 +2382,7 @@ function mutualPicker(contact) {
   };
 
   wrap.append(
-    el('div', { className: 'picker-bar' }, [all, count, addBtn]),
+    el('div', { className: 'picker-bar' }, [all, count, addBtn, addAll]),
     el(
       'div',
       { className: 'people' },
@@ -3002,6 +3044,9 @@ function networkVisible() {
   const byName = (a, b) => a.name.localeCompare(b.name);
   rows = [...rows].sort((a, b) => {
     if (nw.sort === 'name') return byName(a, b);
+    // Reach: who opens the most doors. The point of adding in bulk across
+    // several investors is finding the people who appear in more than one.
+    if (nw.sort === 'reach') return (b.sources?.length || 0) - (a.sources?.length || 0) || byName(a, b);
     if (nw.sort === 'strength') return (b.strength ?? -1) - (a.strength ?? -1) || byName(a, b);
     if (nw.sort === 'added') return (b.addedAt || '').localeCompare(a.addedAt || '');
     // by rank: unranked sink to the bottom rather than sorting as zero
@@ -3090,10 +3135,12 @@ function renderNetwork() {
         el('div', { className: 'nw-meta' }, [
           stars(p.strength || 0, (v) => patchPerson(p.id, { strength: v })),
           (p.sources || []).length
-            ? el('div', {
-                className: 'muted small',
-                textContent: 'Path to ' + p.sources.map((s) => s.name).join(', '),
-              })
+            ? el('div', { className: 'muted small' }, [
+                p.sources.length > 1
+                  ? el('span', { className: 'badge full', textContent: `${p.sources.length} paths` })
+                  : null,
+                document.createTextNode(' Path to ' + p.sources.map((s) => s.name).join(', ')),
+              ])
             : null,
         ]),
         notes,

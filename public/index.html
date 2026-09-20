@@ -197,6 +197,7 @@
     <span id="li-state" class="pill idle">Not running</span>
     <span class="spacer"></span>
     <input id="li-search" type="search" placeholder="Filter contacts…" />
+    <button id="li-add-mutuals" class="primary hidden"></button>
     <button id="li-delete" class="danger hidden"></button>
     <button id="li-clear-all" class="danger">Delete all</button>
     <a href="/api/linkedin/contacts.csv" class="btn">Download CSV</a>
@@ -239,6 +240,7 @@
     <label class="inline">Sort
       <select id="nw-sort">
         <option value="rank">by rank</option>
+        <option value="reach">by reach</option>
         <option value="strength">by strength</option>
         <option value="name">by name</option>
         <option value="added">by when added</option>

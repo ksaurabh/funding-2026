@@ -298,9 +298,16 @@ and the count is shown against what LinkedIn claims.
 
 The people you know directly, gathered as you go. In a contact's **mutual
 connections** section, tick the people who could introduce you and **Add to my
-network**; they land on the **My network** tab, remembering which contacts
-they are a path to. Adding someone twice merges rather than duplicates, and
-records the extra path.
+network** — or **Add all N to my network** to take everyone that investor is
+connected through in one click. To do it across several investors at once,
+tick them in the contacts table and use **Add N mutual connections to my
+network**.
+
+They land on the **My network** tab, remembering which contacts they are a
+path to. Adding someone twice merges rather than duplicates and records the
+extra path, so bulk-adding across investors is how you find the people who
+open more than one door: they carry a **"2 paths"** badge, and sorting **by
+reach** puts them first.
 
 Each person carries two things you set:
 
@@ -309,7 +316,7 @@ Each person carries two things you set:
   closes the gaps that accumulate, in whatever order is on screen.
 
 The list filters by strength (including *Unrated*) and by text, and sorts by
-rank, strength, name or when they were added. Sorting by rank puts unranked
+rank, reach, strength, name or when they were added. Sorting by rank puts unranked
 people at the bottom rather than treating them as zero. **Download CSV**
 exports it, each row carrying who they can introduce you to.
 
