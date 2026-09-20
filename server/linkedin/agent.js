@@ -20,10 +20,18 @@ export const SHOTS_DIR = path.join(DATA_DIR, 'linkedin-shots');
 const BASE = process.env.LINKEDIN_BASE || 'https://www.linkedin.com';
 
 // Pacing, in milliseconds. Deliberately unhurried.
-const PACE = { betweenActions: [1200, 2600], afterNavigation: [1500, 3000], betweenLookups: [4000, 9000] };
-// One mutual-connections page per five seconds, and a ceiling so a contact
-// with thousands of shared connections cannot run all afternoon.
-const MUTUAL_PAGE_DELAY = 5000;
+const PACE = { betweenActions: [1200, 2600], settle: [400, 900], betweenLookups: [4000, 9000] };
+
+// The gap before each page load. Drawn from an exponential rather than picked
+// uniformly: a fixed interval, or an even spread, is a machine's signature.
+// This is mostly short with an occasional long pause. The mean is set so the
+// measured gap between page loads — this delay plus the settle after the
+// previous one — lands in the 2-3s band.
+const PAGE_DELAY_MEAN = 1900;
+const PAGE_DELAY_MAX = 20000;
+
+// A ceiling so a contact with thousands of shared connections cannot run all
+// afternoon.
 const MUTUAL_PAGE_LIMIT = 40;
 
 /**
@@ -49,6 +57,21 @@ const profileUrl = (href) => absolute(href)?.split('?')[0] ?? null;
 
 const jitter = ([lo, hi]) => lo + Math.random() * (hi - lo);
 const wait = (range) => new Promise((r) => setTimeout(r, jitter(range)));
+
+const pageDelay = () => Math.min(-PAGE_DELAY_MEAN * Math.log(1 - Math.random()), PAGE_DELAY_MAX);
+
+/**
+ * Every navigation goes through here: pause first, then load, then let the
+ * page settle. Nothing should call page.goto directly — the pause is what
+ * keeps the agent at a human pace.
+ */
+async function visit(url, opts = {}) {
+  const waited = pageDelay();
+  await new Promise((r) => setTimeout(r, waited));
+  await page.goto(url, { waitUntil: 'domcontentloaded', ...opts });
+  await wait(PACE.settle);
+  return waited;
+}
 
 let ctx = null; // the persistent browser context
 let page = null;
@@ -138,8 +161,7 @@ export async function openSession() {
   });
 
   page = ctx.pages()[0] || (await ctx.newPage());
-  await page.goto(`${BASE}/feed/`, { waitUntil: 'domcontentloaded' });
-  await wait(PACE.afterNavigation);
+  await visit(`${BASE}/feed/`);
   return status();
 }
 
@@ -193,8 +215,7 @@ export async function status() {
 export async function recheck() {
   if (!ctx || !page) return { open: false, loggedIn: false };
   try {
-    await page.goto(`${BASE}/feed/`, { waitUntil: 'domcontentloaded' });
-    await wait(PACE.afterNavigation);
+    await visit(`${BASE}/feed/`);
   } catch {
     /* whatever the tab is showing, still report on it */
   }
@@ -259,10 +280,7 @@ async function dumpHtml(tag) {
  */
 async function searchPeople(name, company) {
   const q = [name, company].filter(Boolean).join(' ');
-  await page.goto(`${BASE}/search/results/people/?keywords=${encodeURIComponent(q)}`, {
-    waitUntil: 'domcontentloaded',
-  });
-  await wait(PACE.afterNavigation);
+  await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(q)}`);
 
   let people = [];
   try {
@@ -325,8 +343,7 @@ async function readMutualLink(card) {
  */
 async function openMutuals(mutual, onPage) {
   if (mutual.url) {
-    await page.goto(mutual.url, { waitUntil: 'domcontentloaded' });
-    await wait(PACE.afterNavigation);
+    await visit(mutual.url);
     const landed = page.url();
     const { via, pages } = await collectAllMutuals(landed, onPage);
     return { opened: true, url: landed, via, pages };
@@ -348,7 +365,7 @@ async function openMutuals(mutual, onPage) {
   if (!clicked) return { opened: false, via: [] };
 
   await page.waitForURL((u) => u.toString() !== before, { timeout: 8000 }).catch(() => {});
-  await wait(PACE.afterNavigation);
+  await wait(PACE.settle);
 
   if (page.url() !== before) {
     const landed = page.url();
@@ -376,12 +393,11 @@ async function collectAllMutuals(startUrl, onPage) {
   let pageNo = 1;
 
   for (; pageNo <= MUTUAL_PAGE_LIMIT; pageNo++) {
+    let waited = 0;
     if (pageNo > 1) {
-      await new Promise((r) => setTimeout(r, MUTUAL_PAGE_DELAY));
       const url = new URL(startUrl);
       url.searchParams.set('page', String(pageNo));
-      await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
-      await wait(PACE.afterNavigation);
+      waited = await visit(url.toString());
     }
 
     const batch = await collectPeopleCards();
@@ -393,7 +409,13 @@ async function collectAllMutuals(startUrl, onPage) {
       }
     }
 
-    await onPage?.({ page: pageNo, added, total: seen.size, people: [...seen.values()] });
+    await onPage?.({
+      page: pageNo,
+      added,
+      total: seen.size,
+      people: [...seen.values()],
+      waitedMs: Math.round(waited),
+    });
 
     // A page that adds nobody means the list has run out, or LinkedIn is
     // repeating itself; either way there is nothing further to read.
@@ -438,8 +460,7 @@ async function collectPeopleCards(scope = page) {
 
 /** Open a profile and read back what it says about itself. */
 async function readProfile(url) {
-  await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await wait(PACE.afterNavigation);
+  await visit(url);
 
   let read = null;
   try {
@@ -475,7 +496,7 @@ async function readSharedConnections() {
   await wait(PACE.betweenActions);
   await link.click().catch(() => {});
   await page.waitForLoadState('domcontentloaded').catch(() => {});
-  await wait(PACE.afterNavigation);
+  await wait(PACE.settle);
   return collectPeopleCards();
 }
 

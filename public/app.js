@@ -2801,9 +2801,8 @@ function renderActivity(q) {
       nodes.push(
         step(
           `Mutual connections — page ${e.page}`,
-          e.added
-            ? `${e.added} new on this page, ${e.total} so far. Next page in 5s.`
-            : `Nothing new on this page; ${e.total} in total.`,
+          (e.added ? `${e.added} new on this page, ${e.total} so far.` : `Nothing new on this page; ${e.total} in total.`) +
+            (e.waitedMs ? ` Waited ${(e.waitedMs / 1000).toFixed(1)}s before loading it.` : ''),
           e.t
         )
       );

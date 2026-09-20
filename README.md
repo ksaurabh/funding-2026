@@ -290,10 +290,9 @@ For the mutual connections in particular, the trail and the contact both show
 **the link that was followed** (clickable, so you can open that page yourself),
 **the page it landed on**, **how many contacts were read from it**, and a link
 to **the saved copy of that page's HTML**. Every page of connections is read,
-not just the first: one page per five seconds, stopping when a page adds
-nobody new, capped at 40 pages. The trail reports each page as it lands
-(*"page 3 — 4 new, 12 so far. Next page in 5s."*) and the count is shown
-against what LinkedIn claims.
+not just the first: it stops when a page adds nobody new, and is capped at 40
+pages. The trail reports each page as it lands, with how long it waited first,
+and the count is shown against what LinkedIn claims.
 
 ### My network
 
@@ -374,8 +373,12 @@ their photo, name and title. Below that are the cached pages, the
 **relationship strength you score 1–10**, and free-text notes on how you know
 them. **Download CSV** exports the book.
 
-One lookup runs at a time, paced with pauses between actions — this is meant to
-work at human speed. LinkedIn's terms prohibit automated access and they
+One lookup runs at a time, and every page load is preceded by a random pause.
+The pause is drawn from an exponential distribution rather than picked
+uniformly or fixed — a steady interval is a machine's signature — so most are
+short with an occasional long one: **0 to 20 seconds, averaging 2-3 seconds
+between page loads** (measured at 2.7s over a sixteen-page run, median 2.2s).
+This is meant to work at human speed. LinkedIn's terms prohibit automated access and they
 rate-limit and block aggressively, so keep batches small and expect to re-sign
 in periodically. People are read from a page **structurally** — every link to a profile is a
 person, the block around it is their card (`server/linkedin/extract.js`) —
