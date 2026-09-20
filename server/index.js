@@ -203,6 +203,14 @@ app.patch('/api/lists/:id', (req, res) => {
   const list = lists.find((l) => l.id === req.params.id);
   if (!list) return res.status(404).json({ error: 'List not found.' });
   if (typeof req.body?.name === 'string' && req.body.name.trim()) list.name = req.body.name.trim();
+  // Which columns hold a person and their firm, so a LinkedIn lookup from a
+  // row is one click after the first time.
+  if (req.body?.linkedin) {
+    list.linkedin = {
+      nameColumn: String(req.body.linkedin.nameColumn || '').trim(),
+      companyColumn: String(req.body.linkedin.companyColumn || '').trim(),
+    };
+  }
   write('lists', lists);
   res.json(list);
 });

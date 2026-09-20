@@ -43,6 +43,7 @@
     <button id="columns-btn">Columns…</button>
     <span class="spacer"></span>
     <button id="run-all">Run all</button>
+    <button id="find-paths">Find LinkedIn paths</button>
     <button id="run-steps">Run steps…</button>
     <button id="fill-gaps">Fill gaps</button>
     <button id="run-unanswered">Run unanswered</button>
@@ -72,6 +73,28 @@
     </aside>
   </div>
   <div id="log" class="log"></div>
+
+  <dialog id="li-map-dialog">
+    <form method="dialog" class="dialog-head">
+      <h3>Which columns hold the person?</h3>
+      <button value="close">Cancel</button>
+    </form>
+    <p class="muted small">
+      Asked once per list, then remembered. The LinkedIn agent searches for a person
+      by name and their firm — pick the columns holding each.
+    </p>
+    <label class="field">
+      <span>Person's name</span>
+      <select id="li-map-name"></select>
+    </label>
+    <label class="field">
+      <span>Their company</span>
+      <select id="li-map-company"></select>
+    </label>
+    <div class="dialog-foot">
+      <button id="li-map-save" class="primary">Save and queue</button>
+    </div>
+  </dialog>
 
   <dialog id="run-dialog">
     <form method="dialog" class="dialog-head">

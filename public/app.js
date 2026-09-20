@@ -764,6 +764,13 @@ function renderRunButtons(rows) {
     (partial.length ? ` — ${partial.length} part-way through` : '') +
     '. Steps already evaluated are skipped, not re-asked.';
 
+  const paths = $('#find-paths');
+  paths.textContent = scope ? `Find LinkedIn paths (${target.rows.length} ${scope})` : 'Find LinkedIn paths';
+  paths.disabled = !target.rows.length;
+  paths.title = state.list?.linkedin?.nameColumn
+    ? `Queue the people in "${state.list.linkedin.nameColumn}" for a LinkedIn path lookup`
+    : 'Queue these rows for a LinkedIn path lookup — you pick the name column once';
+
   const rest = $('#run-unanswered');
   rest.textContent = scope ? `Run unanswered ${scope} (${unanswered.length})` : `Run unanswered (${unanswered.length})`;
   rest.disabled = !unanswered.length || state.running;
@@ -803,6 +810,7 @@ async function selectInvestor(id) {
         }),
     el('div', { className: 'actions' }, [
       button('Run playbook on this row', 'primary', () => run({ investorIds: [id] })),
+      button('Find LinkedIn path', '', () => findPathForRow(data.investor)),
       button('Clear answers', 'danger', async () => {
         await api(`/api/lists/${state.listId}/investors/${id}/answers`, { method: 'DELETE' });
         await loadInvestors();
@@ -1897,6 +1905,91 @@ $('#clear-key').addEventListener('click', async () => {
 });
 
 
+
+// ------------------------------------- queueing a row for a LinkedIn lookup
+
+// Guesses for which column holds a person and which holds their firm, so the
+// one-time mapping dialog usually just needs confirming.
+const PERSON_HINTS = ['main investor', 'contact', 'partner', 'person', 'name', 'who', 'lead partner'];
+const COMPANY_HINTS = ['lead investor', 'company', 'firm', 'investor', 'organization', 'organisation'];
+
+const guessColumn = (columns, hints) =>
+  columns.find((c) => hints.some((h) => c.toLowerCase().trim() === h)) ||
+  columns.find((c) => hints.some((h) => c.toLowerCase().includes(h))) ||
+  '';
+
+/** Queue one row's person for a LinkedIn path lookup. */
+async function findPathForRow(row) {
+  const map = state.list?.linkedin;
+  if (!map?.nameColumn) return askColumnMapping(row);
+  await queueRowLookups([row], map);
+}
+
+async function queueRowLookups(rows, map) {
+  const people = rows
+    .map((r) => ({
+      name: String(r[map.nameColumn] ?? '').trim(),
+      company: String(map.companyColumn ? r[map.companyColumn] ?? '' : '').trim(),
+    }))
+    .filter((p) => p.name);
+
+  if (!people.length) {
+    return alert(`No name in "${map.nameColumn}" for ${rows.length === 1 ? 'that row' : 'any of those rows'}.`);
+  }
+
+  try {
+    await post('/api/linkedin/lookup', { people });
+  } catch (err) {
+    return alert(err.message);
+  }
+
+  const who = people.length === 1 ? people[0].name : `${people.length} people`;
+  if (confirm(`Queued ${who} for a LinkedIn path lookup.\n\nOpen the LinkedIn tab?`)) {
+    location.hash = '#/linkedin';
+  }
+}
+
+/** Asked once per list; the answer is saved on the list. */
+function askColumnMapping(rowToQueueAfter) {
+  const columns = state.investors.columns || [];
+  const fill = (sel, guess, blank) =>
+    sel.replaceChildren(
+      el('option', { value: '', textContent: blank }),
+      ...columns.map((c) =>
+        el('option', { value: c, textContent: c || '(unnamed)', selected: c === guess })
+      )
+    );
+
+  fill($('#li-map-name'), guessColumn(columns, PERSON_HINTS), '— choose —');
+  fill($('#li-map-company'), guessColumn(columns, COMPANY_HINTS), '— none —');
+
+  $('#li-map-save').onclick = async (e) => {
+    e.preventDefault();
+    const nameColumn = $('#li-map-name').value;
+    if (!nameColumn) return alert('Pick the column holding the person’s name.');
+    const companyColumn = $('#li-map-company').value;
+
+    const updated = await api(`/api/lists/${state.listId}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ linkedin: { nameColumn, companyColumn } }),
+    });
+    state.list = { ...state.list, linkedin: updated.linkedin };
+    $('#li-map-dialog').close();
+    if (rowToQueueAfter) await queueRowLookups([].concat(rowToQueueAfter), updated.linkedin);
+  };
+
+  $('#li-map-dialog').showModal();
+}
+
+$('#find-paths').addEventListener('click', () => {
+  const target = runTarget();
+  if (!target.rows.length) return;
+  const map = state.list?.linkedin;
+  if (!map?.nameColumn) return askColumnMapping(target.rows);
+  queueRowLookups(target.rows, map);
+});
+
 // =========================================================== LinkedIn agent
 // Finds the warmest path to a person: who they are on LinkedIn, how far away
 // they are, and — for a 2nd-degree contact — who you both know.
@@ -2058,15 +2151,15 @@ async function fillLiColumnPickers() {
     company.replaceChildren(el('option', { value: '', textContent: 'company column' }));
     return;
   }
-  const { columns } = await api(`/api/lists/${listId}/investors`);
-  name.replaceChildren(
-    el('option', { value: '', textContent: 'name column' }),
-    ...columns.map((c) => el('option', { value: c, textContent: c || '(unnamed)' }))
-  );
-  company.replaceChildren(
-    el('option', { value: '', textContent: 'company column' }),
-    ...columns.map((c) => el('option', { value: c, textContent: c || '(unnamed)' }))
-  );
+  const { columns, list } = await api(`/api/lists/${listId}/investors`);
+  // Default to the mapping the list already remembers, if there is one.
+  const saved = list?.linkedin || {};
+  const opts = (blank, chosen) => [
+    el('option', { value: '', textContent: blank }),
+    ...columns.map((c) => el('option', { value: c, textContent: c || '(unnamed)', selected: c === chosen })),
+  ];
+  name.replaceChildren(...opts('name column', saved.nameColumn));
+  company.replaceChildren(...opts('company column', saved.companyColumn));
 }
 
 $('#li-list').addEventListener('change', fillLiColumnPickers);

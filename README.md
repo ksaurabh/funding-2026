@@ -255,7 +255,14 @@ whole time; you can watch what it does and take over at any point.
 
 Give it a **name and company**, or point it at a list and pick the columns
 holding those, and it queues the lookups. You can queue names before starting
-the session — they wait, and run as soon as the agent is signed in. For each one it searches LinkedIn,
+the session — they wait, and run as soon as the agent is signed in.
+
+The quickest route in is from the list itself. **Find LinkedIn path** on a row
+queues that investor's contact; **Find LinkedIn paths** in the toolbar does the
+same for the ticked or filtered rows. The first time, it asks which column
+holds the person and which holds their firm — guessing from the column names,
+so usually you just confirm — and remembers the answer on that list. After
+that it is one click, and it offers to take you to the LinkedIn tab. For each one it searches LinkedIn,
 scores every result on how well the name *and* the company match, and only
 accepts a match at **90% confidence or better** — a right name at the wrong
 firm scores about 65% and is rejected, recorded as "not found" with the reason,
