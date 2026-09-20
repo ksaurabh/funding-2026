@@ -31,10 +31,13 @@ header {
   top: 0;
   z-index: 10;
 }
-.brand { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); text-decoration: none; white-space: nowrap; }
-.brand:hover { color: var(--accent); }
+/* Home leads the header; it replaced the title, which linked to the same
+   place. The app's name lives in the document title. */
+#home-tab { font-weight: 600; color: var(--text); }
+#home-tab.active { color: var(--accent); }
 .crumb { font-size: 14px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
 .crumb:not(:empty)::before { content: "/"; margin-right: 8px; color: var(--line); }
+.crumb { font-weight: 500; color: var(--text); }
 nav { display: flex; gap: 4px; }
 a.tab { font: inherit; padding: 5px 11px; border: 1px solid transparent; border-radius: 6px; color: var(--muted); text-decoration: none; }
 a.tab:hover { background: #f3f0ea; }
