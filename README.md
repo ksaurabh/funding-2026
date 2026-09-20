@@ -236,6 +236,41 @@ you stop. One run happens at a time across the whole app.
 the columns the playbook filled in -- plus one `<step name> (answer)` column
 holding each step's full answer.
 
+## Find LinkedIn path to contacts
+
+A separate section that answers a different question: not "is this investor a
+fit" but "who do I know who can introduce me".
+
+**Start agent session** opens a real Chrome window using your installed
+browser. If you are not signed in to LinkedIn, sign in there yourself — the
+app never handles your credentials — and the session is kept in
+`data/linkedin-profile/` so you only do it once. The window stays visible the
+whole time; you can watch what it does and take over at any point.
+
+Give it a **name and company**, or point it at a list and pick the columns
+holding those, and it queues the lookups. For each one it searches LinkedIn,
+scores every result on how well the name *and* the company match, and only
+accepts a match at **90% confidence or better** — a right name at the wrong
+firm scores about 65% and is rejected, recorded as "not found" with the reason,
+rather than guessed at. It then opens the profile and reads the connection
+degree from the page itself.
+
+- **1st degree** — you already know them; it is labelled and done.
+- **2nd degree** — it follows through to the shared connections and records
+  everyone you could be introduced through, with links.
+- **3rd** — recorded as out of reach for now.
+
+Each contact keeps name, company, headline, LinkedIn URL, degree, the paths in,
+and a **relationship strength you score 1–10**, plus free-text notes on how you
+know them. **Download CSV** exports the book.
+
+One lookup runs at a time, paced with pauses between actions — this is meant to
+work at human speed. LinkedIn's terms prohibit automated access and they
+rate-limit and block aggressively, so keep batches small and expect to re-sign
+in periodically. Every LinkedIn-specific selector lives in
+`server/linkedin/selectors.js`: when LinkedIn changes its markup and lookups
+start coming back empty, that one file is what needs updating.
+
 ## Layout
 
 ```

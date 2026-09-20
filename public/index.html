@@ -16,6 +16,7 @@
   </nav>
   <span class="spacer"></span>
   <a href="#/playbooks" class="tab" id="playbooks-tab">Playbooks</a>
+  <a href="#/linkedin" class="tab" id="linkedin-tab">LinkedIn</a>
   <a href="#/settings" class="tab" id="settings-tab">Settings</a>
   <a href="#/lists" id="spend" class="pill cost" title="Total spent on research so far">—</a>
   <div id="runpill" class="pill idle">Idle</div>
@@ -161,6 +162,43 @@
   <div class="scroll pad">
     <div id="playbook-grid" class="grid"></div>
   </div>
+</main>
+
+<!-- -------------------------------------------------------------- linkedin -->
+<main id="view-linkedin" class="view hidden">
+  <div class="toolbar">
+    <button id="li-start" class="primary">Start agent session</button>
+    <button id="li-stop" class="danger" disabled>Close</button>
+    <span id="li-state" class="pill idle">Not running</span>
+    <span class="spacer"></span>
+    <input id="li-search" type="search" placeholder="Filter contacts…" />
+    <a href="/api/linkedin/contacts.csv" class="btn">Download CSV</a>
+  </div>
+
+  <div id="li-lookup" class="toolbar sub">
+    <input id="li-name" type="text" placeholder="Person's name" />
+    <input id="li-company" type="text" placeholder="Their company" />
+    <button id="li-add" class="primary">Find path</button>
+    <span class="spacer"></span>
+    <label class="inline">From a list
+      <select id="li-list"></select>
+      <select id="li-name-col"></select>
+      <select id="li-company-col"></select>
+    </label>
+    <button id="li-from-list">Queue them</button>
+  </div>
+
+  <div id="li-queue" class="notice hidden"></div>
+
+  <div class="split">
+    <div class="listpane">
+      <table id="li-table"><thead></thead><tbody></tbody></table>
+    </div>
+    <aside id="li-detail" class="detail">
+      <p class="muted pad">Select a contact to see the path to them.</p>
+    </aside>
+  </div>
+  <div id="li-log" class="log"></div>
 </main>
 
 <!-- -------------------------------------------------------------- settings -->

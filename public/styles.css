@@ -594,3 +594,16 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .run-options .inline { gap: 6px; font-size: 12px; }
 .run-options select { width: auto; font-size: 13px; color: var(--text); }
 #run-dialog-summary { margin: 0 0 4px; }
+
+/* -------------------------------------------------------------- LinkedIn */
+.toolbar.sub { background: var(--bg); }
+.toolbar.sub.disabled { opacity: .5; pointer-events: none; }
+#li-name, #li-company { width: 190px; }
+#li-search { max-width: 220px; }
+#li-list, #li-name-col, #li-company-col { width: auto; max-width: 170px; font-size: 12px; }
+#li-table th, #li-table td { white-space: nowrap; max-width: 260px; }
+.badge.deg-1st { color: #1c6b40; border-color: #bfdcca; background: #eef7f1; }
+.badge.deg-2nd { color: #8a5a17; border-color: #e6d4b0; background: #fdf6e8; }
+.badge.deg-3rd { color: var(--muted); }
+.strength-row { display: flex; align-items: center; gap: 10px; }
+.strength { flex: 1; accent-color: var(--accent); }

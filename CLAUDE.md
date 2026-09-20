@@ -48,6 +48,17 @@ After any such edit, check that every function called is still defined,
 and that every `$('#id')` the script binds exists in the HTML. Prefer
 targeted `Edit` calls over slicing between anchors.
 
+## The LinkedIn agent drives a real browser
+
+`server/linkedin/` opens the user's actual Chrome with their signed-in
+LinkedIn session. Do not test it against linkedin.com — starting a session
+opens a window on their machine, and automated traffic risks their account
+being rate-limited or blocked. Point `LINKEDIN_BASE` at a local stand-in
+instead; there is a fixture pattern in the git history of this feature.
+
+Selectors live only in `server/linkedin/selectors.js`. When lookups come back
+empty, that file is the fix, not the agent.
+
 ## Their data lives in `data/` and is gitignored
 
 `data/` holds the API key, the imported lists, manual cell edits and every

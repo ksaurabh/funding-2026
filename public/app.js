@@ -62,7 +62,7 @@ const state = {
 function parseHash() {
   const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
   if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
-  const top = ['settings', 'playbooks'].includes(parts[0]) ? parts[0] : 'lists';
+  const top = ['settings', 'playbooks', 'linkedin'].includes(parts[0]) ? parts[0] : 'lists';
   return { view: top, listId: null };
 }
 
@@ -98,11 +98,16 @@ async function route() {
   }
   $('#settings-tab').classList.toggle('active', view === 'settings');
   $('#playbooks-tab').classList.toggle('active', view === 'playbooks');
+  $('#linkedin-tab').classList.toggle('active', view === 'linkedin');
   $('#export').href = `/api/lists/${listId}/export.csv`;
 
   await loadCost();
   if (view === 'lists') await loadLists();
   if (view === 'playbooks') await loadPlaybookIndex();
+  if (view === 'linkedin') {
+    await fillLiListPickers();
+    await pollLinkedIn();
+  }
   if (view === 'playbook') {
     renderSteps(); // the column dropdowns depend on the current schema
     renderTokens();
@@ -1890,6 +1895,331 @@ $('#clear-key').addEventListener('click', async () => {
   $('#settings-status').textContent = 'Key cleared.';
   loadSettings();
 });
+
+
+// =========================================================== LinkedIn agent
+// Finds the warmest path to a person: who they are on LinkedIn, how far away
+// they are, and — for a 2nd-degree contact — who you both know.
+
+const li = { contacts: [], selected: null, filter: '', session: { open: false, loggedIn: false } };
+
+const DEGREE_LABEL = { '1st': 'You know them', '2nd': 'One hop away', '3rd': 'Three degrees out' };
+
+async function liSession(action) {
+  try {
+    li.session = await (action ? post(`/api/linkedin/session/${action}`) : api('/api/linkedin/session'));
+  } catch (err) {
+    li.session = { open: false, loggedIn: false, error: err.message };
+  }
+  renderLiSession();
+  return li.session;
+}
+
+function renderLiSession() {
+  const s = li.session;
+  const pill = $('#li-state');
+  pill.className = 'pill ' + (s.loggedIn ? 'done' : s.open ? 'running' : 'idle');
+  pill.textContent = s.error
+    ? s.error
+    : !s.open
+    ? 'Not running'
+    : s.loggedIn
+    ? 'Signed in'
+    : 'Waiting for you to sign in…';
+  $('#li-stop').disabled = !s.open;
+  $('#li-start').textContent = s.open ? 'Bring window forward' : 'Start agent session';
+  $('#li-lookup').classList.toggle('disabled', !s.loggedIn);
+}
+
+$('#li-start').addEventListener('click', async () => {
+  $('#li-start').disabled = true;
+  try {
+    await liSession('start');
+    if (li.session.open && !li.session.loggedIn) {
+      // The browser is open on the login page; wait for the person to finish.
+      await liSession('wait-login');
+    }
+  } finally {
+    $('#li-start').disabled = false;
+  }
+});
+
+$('#li-stop').addEventListener('click', () => liSession('stop'));
+
+$('#li-add').addEventListener('click', async () => {
+  const name = $('#li-name').value.trim();
+  if (!name) return;
+  try {
+    await post('/api/linkedin/lookup', { name, company: $('#li-company').value.trim() });
+    $('#li-name').value = '';
+    $('#li-company').value = '';
+    pollLinkedIn();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$('#li-from-list').addEventListener('click', async () => {
+  const listId = $('#li-list').value;
+  const nameColumn = $('#li-name-col').value;
+  if (!listId || !nameColumn) return alert('Pick a list and the column holding the person’s name.');
+  try {
+    const r = await post('/api/linkedin/lookup-from-list', {
+      listId,
+      nameColumn,
+      companyColumn: $('#li-company-col').value,
+    });
+    alert(`Queued ${r.queued} lookup(s).${r.skipped ? ` ${r.skipped} skipped — already looked up or blank.` : ''}`);
+    pollLinkedIn();
+  } catch (err) {
+    alert(err.message);
+  }
+});
+
+$('#li-search').addEventListener('input', (e) => {
+  li.filter = e.target.value;
+  renderLiTable();
+});
+
+/** Lists and their columns, for queueing names straight out of a list. */
+async function fillLiListPickers() {
+  const lists = await api('/api/lists');
+  const sel = $('#li-list');
+  const keep = sel.value;
+  sel.replaceChildren(
+    el('option', { value: '', textContent: '— choose —' }),
+    ...lists.map((l) => el('option', { value: l.id, textContent: l.name, selected: l.id === keep }))
+  );
+  await fillLiColumnPickers();
+}
+
+async function fillLiColumnPickers() {
+  const listId = $('#li-list').value;
+  const name = $('#li-name-col');
+  const company = $('#li-company-col');
+  if (!listId) {
+    name.replaceChildren(el('option', { value: '', textContent: 'name column' }));
+    company.replaceChildren(el('option', { value: '', textContent: 'company column' }));
+    return;
+  }
+  const { columns } = await api(`/api/lists/${listId}/investors`);
+  name.replaceChildren(
+    el('option', { value: '', textContent: 'name column' }),
+    ...columns.map((c) => el('option', { value: c, textContent: c || '(unnamed)' }))
+  );
+  company.replaceChildren(
+    el('option', { value: '', textContent: 'company column' }),
+    ...columns.map((c) => el('option', { value: c, textContent: c || '(unnamed)' }))
+  );
+}
+
+$('#li-list').addEventListener('change', fillLiColumnPickers);
+
+async function loadContacts() {
+  li.contacts = await api('/api/linkedin/contacts');
+  renderLiTable();
+}
+
+function liVisible() {
+  const q = li.filter.trim().toLowerCase();
+  if (!q) return li.contacts;
+  return li.contacts.filter((c) =>
+    [c.name, c.company, c.headline, c.degree].some((v) => String(v ?? '').toLowerCase().includes(q))
+  );
+}
+
+function renderLiTable() {
+  const rows = liVisible();
+  $('#li-table thead').replaceChildren(
+    el('tr', {}, [
+      el('th', { textContent: 'Person' }),
+      el('th', { textContent: 'Company' }),
+      el('th', { textContent: 'Connection' }),
+      el('th', { textContent: 'Via' }),
+      el('th', { textContent: 'Strength' }),
+    ])
+  );
+
+  $('#li-table tbody').replaceChildren(
+    ...rows.map((c) => {
+      const degree = c.degree
+        ? el('span', { className: `badge deg-${c.degree}`, textContent: c.degree, title: DEGREE_LABEL[c.degree] || '' })
+        : el('span', { className: 'badge err', textContent: c.status === 'not found' ? 'not found' : '—' });
+
+      const strength = el('select', { className: 'cell-select' }, [
+        el('option', { value: '', textContent: '—', selected: !c.strength }),
+        ...Array.from({ length: 10 }, (_, i) =>
+          el('option', { value: String(i + 1), textContent: String(i + 1), selected: c.strength === i + 1 })
+        ),
+      ]);
+      strength.addEventListener('click', (e) => e.stopPropagation());
+      strength.addEventListener('change', async () => {
+        await api(`/api/linkedin/contacts/${c.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ strength: strength.value }),
+        });
+        c.strength = strength.value ? Number(strength.value) : null;
+      });
+
+      const tr = el('tr', { className: c.id === li.selected ? 'selected' : '' }, [
+        el('td', { textContent: c.name, title: c.headline || '' }),
+        el('td', { textContent: c.company || '', title: c.company || '' }),
+        el('td', {}, degree),
+        el('td', { textContent: c.via?.length ? String(c.via.length) : '' }),
+        el('td', {}, strength),
+      ]);
+      tr.addEventListener('click', () => selectContact(c.id));
+      return tr;
+    })
+  );
+}
+
+function selectContact(id) {
+  li.selected = id;
+  renderLiTable();
+  const c = li.contacts.find((x) => x.id === id);
+  if (!c) return;
+
+  const parts = [
+    el('div', { className: 'detail-head' }, [
+      el('h2', { textContent: c.name }),
+      el('div', { className: 'meta', textContent: [c.headline, c.company].filter(Boolean).join(' · ') }),
+      el('div', { className: 'actions' }, [
+        c.url
+          ? el('a', { className: 'btn primary', href: c.url, target: '_blank', rel: 'noreferrer', textContent: 'Open on LinkedIn' })
+          : null,
+        button('Look up again', '', () => post('/api/linkedin/lookup', { name: c.queriedAs || c.name, company: c.company }).then(pollLinkedIn)),
+        button('Remove', 'danger', async () => {
+          if (!confirm(`Remove ${c.name} from the contact book?`)) return;
+          await api(`/api/linkedin/contacts/${c.id}`, { method: 'DELETE' });
+          li.selected = null;
+          loadContacts();
+          $('#li-detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select a contact.' }));
+        }),
+      ]),
+    ]),
+  ];
+
+  if (c.status === 'not found') {
+    parts.push(
+      el('div', { className: 'answer' }, [
+        el('h4', { textContent: 'No confident match' }),
+        el('div', { className: 'body error', textContent: c.reason || 'No match above the confidence bar.' }),
+      ])
+    );
+  } else {
+    parts.push(
+      el('div', { className: 'answer' }, [
+        el('h4', {}, [
+          document.createTextNode('Connection'),
+          el('span', { className: `badge deg-${c.degree}`, textContent: c.degree || 'unknown' }),
+        ]),
+        el('div', {
+          className: 'body',
+          textContent:
+            (DEGREE_LABEL[c.degree] || 'Degree not established') +
+            (c.confidence ? ` · matched with ${Math.round(c.confidence * 100)}% confidence` : ''),
+        }),
+      ])
+    );
+
+    if (c.degree === '2nd') {
+      parts.push(
+        el('div', { className: 'answer' }, [
+          el('h4', { textContent: `Paths in (${c.via?.length || 0})` }),
+          c.via?.length
+            ? el(
+                'div',
+                { className: 'cites' },
+                c.via.map((v) =>
+                  el('a', { href: v.url, target: '_blank', rel: 'noreferrer', textContent: v.name })
+                )
+              )
+            : el('div', { className: 'body empty', textContent: 'No shared connections were listed.' }),
+        ])
+      );
+    }
+  }
+
+  // Relationship strength and a place for what you know about them.
+  const strength = el('input', {
+    type: 'range',
+    min: '1',
+    max: '10',
+    step: '1',
+    value: String(c.strength || 5),
+    className: 'strength',
+  });
+  const readout = el('span', { className: 'badge', textContent: c.strength ? String(c.strength) : 'unscored' });
+  strength.addEventListener('input', () => (readout.textContent = strength.value));
+  strength.addEventListener('change', async () => {
+    await api(`/api/linkedin/contacts/${c.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ strength: strength.value }),
+    });
+    c.strength = Number(strength.value);
+    renderLiTable();
+  });
+
+  const notes = el('textarea', { rows: 3, value: c.notes || '', placeholder: 'How you know them, what to mention…' });
+  notes.addEventListener('blur', async () => {
+    if (notes.value === (c.notes || '')) return;
+    await api(`/api/linkedin/contacts/${c.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ notes: notes.value }),
+    });
+    c.notes = notes.value;
+  });
+
+  parts.push(
+    el('div', { className: 'answer' }, [
+      el('h4', {}, [document.createTextNode('Relationship strength'), readout]),
+      el('div', { className: 'strength-row' }, [el('span', { className: 'muted small', textContent: '1 cold' }), strength, el('span', { className: 'muted small', textContent: '10 close' })]),
+      el('h4', { style: 'margin-top:14px', textContent: 'Notes' }),
+      notes,
+    ])
+  );
+
+  $('#li-detail').replaceChildren(...parts);
+}
+
+let liPolling = false;
+async function pollLinkedIn() {
+  if (liPolling || parseHash().view !== 'linkedin') return;
+  liPolling = true;
+  try {
+    const q = await api('/api/linkedin/queue');
+    const bar = $('#li-queue');
+    bar.classList.toggle('hidden', !q.running && !q.pending.length);
+    bar.textContent = q.running
+      ? `Looking up ${q.current?.name || '…'}${q.pending.length ? ` · ${q.pending.length} waiting` : ''}`
+      : q.pending.length
+      ? `${q.pending.length} waiting`
+      : '';
+
+    const log = $('#li-log');
+    const atBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+    log.replaceChildren(
+      ...q.log.map((l) => el('div', { textContent: `${clock(l.t)}  ${l.msg}`, title: new Date(l.t).toLocaleString() }))
+    );
+    if (atBottom) log.scrollTop = log.scrollHeight;
+
+    await liSession();
+    await loadContacts();
+    if (li.selected && !document.activeElement?.closest?.('#li-detail')) selectContact(li.selected);
+  } catch {
+    /* next tick */
+  } finally {
+    liPolling = false;
+  }
+}
+
+setInterval(() => {
+  if (parseHash().view === 'linkedin') pollLinkedIn();
+}, 3000);
 
 // --------------------------------------------------------------------- boot
 

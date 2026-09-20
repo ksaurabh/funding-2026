@@ -23,6 +23,7 @@ import {
   SAMPLE_STEPS,
 } from './store.js';
 import { startRun, jobStatus, cancelJob, renderTemplate, slugify } from './runner.js';
+import { linkedinRoutes } from './linkedin/routes.js';
 import { costOf, knownModel } from './pricing.js';
 
 const app = express();
@@ -36,6 +37,8 @@ app.use(
     setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
   })
 );
+
+app.use('/api/linkedin', linkedinRoutes);
 
 // ------------------------------------------------------------------ helpers
 
