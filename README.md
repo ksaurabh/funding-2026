@@ -405,7 +405,9 @@ fall back to the card automatically.
 
 - **1st degree** — you already know them, so their mutual connections are not
   enumerated: the path through someone else is moot, and walking it is the
-  most expensive thing the agent does. The link and the count are recorded,
+  most expensive thing the agent does. The same applies to **anyone whose
+  mutual connections have already been fetched** — looking them up again
+  refreshes their profile and leaves the list alone. The link and the count are recorded,
   and **Fetch mutual connections** on that contact runs the walk on request.
 - **2nd degree** — once the top hit clears the 90% bar, and only then, it
   follows the *"…and 10 other mutual connections"* link on that result card and records everyone you could be introduced through,

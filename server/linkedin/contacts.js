@@ -325,10 +325,19 @@ async function drain() {
         }
       };
 
+      // Walking someone's mutual connections is the expensive part. If this
+      // contact already has a degree and a list that was actually fetched,
+      // there is nothing to learn by doing it again.
+      const known = item.contactId ? all().find((c) => c.id === item.contactId) : null;
+      const haveMutuals = !!(
+        known?.degree &&
+        (known.via?.length || known.mutualPage?.pending === false)
+      );
+
       try {
         const result = item.mutualsOnly
           ? await mutualsOnlyResult(item, onEvent)
-          : await agent.findPerson({ ...item, onEvent });
+          : await agent.findPerson({ ...item, skipMutuals: haveMutuals && !item.withMutuals, onEvent });
         if (!result.found) {
           note(`✗ ${item.name}: ${result.reason}`);
           upsert({
@@ -370,9 +379,11 @@ async function drain() {
             url: p.url,
             degree,
             degreeSource: p.degree ? null : fromCard ? 'search result' : null,
-            via: p.via,
+            // Left out when the walk was skipped, so the merge keeps what was
+            // fetched before rather than replacing it with an empty list.
+            via: haveMutuals && !item.mutualsOnly ? undefined : p.via,
             mutualText: p.mutualText || null,
-            mutualPage: p.mutualPage || null,
+            mutualPage: haveMutuals && !item.mutualsOnly ? undefined : p.mutualPage || null,
             confidence: result.confidence,
             status: 'found',
             reason: null,

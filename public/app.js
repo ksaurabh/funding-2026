@@ -3140,7 +3140,9 @@ function renderActivity(q) {
       nodes.push(
         step(
           'Skipped the mutual connections',
-          `${e.reason} — "${e.text}" was recorded and can be fetched on request.`,
+          e.reason === 'already fetched for this contact'
+            ? `${e.reason} — the ones on record were kept.`
+            : `${e.reason} — "${e.text}" was recorded and can be fetched on request.`,
           e.t
         )
       );

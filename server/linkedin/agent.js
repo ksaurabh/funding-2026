@@ -510,14 +510,22 @@ async function readSharedConnections() {
  * Find one person. Returns what was found and how sure we are; the caller
  * decides what to store. Never guesses past the confidence threshold.
  */
-export async function findPerson({ name, company, url, threshold = 0.9, withMutuals = false, onEvent = () => {} }) {
+export async function findPerson({
+  name,
+  company,
+  url,
+  threshold = 0.9,
+  withMutuals = false,
+  skipMutuals = false,
+  onEvent = () => {},
+}) {
   if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
   const s = await status();
   if (!s.loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
 
   // Given the profile itself, there is nothing to search for or be unsure
   // about — go straight there.
-  if (url) return openKnownProfile({ url, name, company, withMutuals, onEvent });
+  if (url) return openKnownProfile({ url, name, company, withMutuals, skipMutuals, onEvent });
 
   onEvent({ type: 'search', query: { name, company } });
   const candidates = await searchPeople(name, company);
@@ -597,7 +605,9 @@ export async function findPerson({ name, company, url, threshold = 0.9, withMutu
   // Someone you already know needs no path through anyone else, and walking
   // their shared connections is the most expensive thing here. The link and
   // the count are kept so it can be done on request.
-  if (best.mutual && best.degree === '1st' && !withMutuals) {
+  if (best.mutual && skipMutuals) {
+    onEvent({ type: 'mutual-skipped', text: best.mutual.text, reason: 'already fetched for this contact' });
+  } else if (best.mutual && best.degree === '1st' && !withMutuals) {
     mutualPage = {
       link: best.mutual.url,
       text: best.mutual.text,
@@ -640,7 +650,7 @@ export async function findPerson({ name, company, url, threshold = 0.9, withMutu
 
   // No link on the card but the profile has one (or says 2nd degree): try the
   // profile's own shared-connections route instead.
-  if (!via.length && (profile.mutual || degree === '2nd')) {
+  if (!via.length && !skipMutuals && (profile.mutual || degree === '2nd')) {
     onEvent({ type: 'shared-start' });
     let landed = null;
     if (profile.mutual) {
@@ -688,7 +698,7 @@ export async function findPerson({ name, company, url, threshold = 0.9, withMutu
  * people already in your network, where the profile is known: no search, no
  * confidence to weigh, and no chance of landing on a namesake.
  */
-async function openKnownProfile({ url, name, company, withMutuals, onEvent }) {
+async function openKnownProfile({ url, name, company, withMutuals, skipMutuals, onEvent }) {
   const shots = [];
   const shot = async (label) => {
     const cap = await capture(label);
@@ -707,7 +717,9 @@ async function openKnownProfile({ url, name, company, withMutuals, onEvent }) {
 
   let via = [];
   let mutualPage = null;
-  if (profile.mutual && degree === '1st' && !withMutuals) {
+  if (profile.mutual && skipMutuals) {
+    onEvent({ type: 'mutual-skipped', text: profile.mutual.text, reason: 'already fetched for this contact' });
+  } else if (profile.mutual && degree === '1st' && !withMutuals) {
     mutualPage = {
       link: profile.mutual.url,
       text: profile.mutual.text,
