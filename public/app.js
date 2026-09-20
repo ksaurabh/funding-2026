@@ -3106,9 +3106,9 @@ function renderActivity(q) {
         className: 'meta',
         textContent: start?.company ? `Searching as “${start.name} ${start.company}”` : 'Live activity',
       }),
-      li.selected
-        ? el('div', { className: 'actions' }, [button('Back to contact', '', () => selectContact(li.selected))])
-        : null,
+      // Unreachable now: the pane only shows this trail when nothing is
+      // selected, and "Watch live" is what clears the selection.
+      null,
     ])
   );
 
@@ -3316,12 +3316,13 @@ async function pollLinkedIn() {
     await loadNetworkKeys();
     await loadContacts();
 
-    // The pane shows the work while it is happening, and the selected contact
-    // the rest of the time — unless you are typing in it.
+    // Picking a contact is a decision: the pane stays on it, even while the
+    // agent works on someone else. The live trail is what you get when you
+    // have not chosen anyone, or after "Watch live" clears the choice.
+    // Skipped entirely while you are typing in the pane.
     const busy = document.activeElement?.closest?.('#li-detail');
     if (!busy) {
-      if (q.running || (!li.selected && (q.activity || []).length)) renderActivity(q);
-      else if (li.selected) selectContact(li.selected);
+      if (li.selected) selectContact(li.selected);
       else renderActivity(q);
     }
   } catch {
