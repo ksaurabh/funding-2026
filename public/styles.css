@@ -597,7 +597,6 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 
 /* -------------------------------------------------------------- LinkedIn */
 .toolbar.sub { background: var(--bg); }
-.toolbar.sub.disabled { opacity: .5; pointer-events: none; }
 #li-name, #li-company { width: 190px; }
 #li-search { max-width: 220px; }
 #li-list, #li-name-col, #li-company-col { width: auto; max-width: 170px; font-size: 12px; }

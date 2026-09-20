@@ -1928,7 +1928,13 @@ function renderLiSession() {
     : 'Waiting for you to sign in…';
   $('#li-stop').disabled = !s.open;
   $('#li-start').textContent = s.open ? 'Bring window forward' : 'Start agent session';
-  $('#li-lookup').classList.toggle('disabled', !s.loggedIn);
+  // The lookup row stays usable with no session: names can be queued first
+  // and the agent picks them up as soon as it is signed in.
+  $('#li-hint').textContent = s.loggedIn
+    ? ''
+    : s.open
+    ? 'Sign in to LinkedIn in the agent window; queued lookups will start by themselves.'
+    : 'Queue names now — they run once you start the agent session.';
 }
 
 $('#li-start').addEventListener('click', async () => {
@@ -1939,6 +1945,10 @@ $('#li-start').addEventListener('click', async () => {
       // The browser is open on the login page; wait for the person to finish.
       await liSession('wait-login');
     }
+    if (li.session.loggedIn) {
+      await post('/api/linkedin/queue/resume').catch(() => {});
+      pollLinkedIn();
+    }
   } finally {
     $('#li-start').disabled = false;
   }
@@ -1946,18 +1956,40 @@ $('#li-start').addEventListener('click', async () => {
 
 $('#li-stop').addEventListener('click', () => liSession('stop'));
 
+async function queueLookup(people) {
+  await post('/api/linkedin/lookup', Array.isArray(people) ? { people } : people);
+  await pollLinkedIn();
+  // Nothing will happen until the browser is up, so offer to bring it up.
+  if (!li.session.loggedIn && confirm('Start the LinkedIn agent session now so these can run?')) {
+    await liSession('start');
+    if (li.session.open && !li.session.loggedIn) await liSession('wait-login');
+    await post('/api/linkedin/queue/resume').catch(() => {});
+    pollLinkedIn();
+  }
+}
+
 $('#li-add').addEventListener('click', async () => {
   const name = $('#li-name').value.trim();
-  if (!name) return;
+  if (!name) return $('#li-name').focus();
   try {
-    await post('/api/linkedin/lookup', { name, company: $('#li-company').value.trim() });
+    await queueLookup({ name, company: $('#li-company').value.trim() });
     $('#li-name').value = '';
     $('#li-company').value = '';
-    pollLinkedIn();
+    $('#li-name').focus();
   } catch (err) {
     alert(err.message);
   }
 });
+
+// Enter in either field queues the lookup.
+for (const id of ['#li-name', '#li-company']) {
+  $(id).addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      $('#li-add').click();
+    }
+  });
+}
 
 $('#li-from-list').addEventListener('click', async () => {
   const listId = $('#li-list').value;

@@ -248,7 +248,8 @@ app never handles your credentials — and the session is kept in
 whole time; you can watch what it does and take over at any point.
 
 Give it a **name and company**, or point it at a list and pick the columns
-holding those, and it queues the lookups. For each one it searches LinkedIn,
+holding those, and it queues the lookups. You can queue names before starting
+the session — they wait, and run as soon as the agent is signed in. For each one it searches LinkedIn,
 scores every result on how well the name *and* the company match, and only
 accepts a match at **90% confidence or better** — a right name at the wrong
 firm scores about 65% and is rejected, recorded as "not found" with the reason,

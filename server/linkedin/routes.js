@@ -58,6 +58,7 @@ linkedinRoutes.post('/lookup', (req, res) => {
 });
 
 linkedinRoutes.post('/queue/clear', (_req, res) => res.json({ dropped: contacts.clearQueue() }));
+linkedinRoutes.post('/queue/resume', (_req, res) => res.json(contacts.resumeQueue()));
 
 /** Queue everyone named in two columns of a list, skipping blanks and repeats. */
 linkedinRoutes.post('/lookup-from-list', (req, res) => {

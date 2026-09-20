@@ -76,6 +76,15 @@ export function enqueue(items) {
   return added.length;
 }
 
+/** Restart the queue after it stopped for a closed or signed-out browser. */
+export function resumeQueue() {
+  if (!running && queue.length) {
+    note(`Resuming ${queue.length} queued lookup${queue.length === 1 ? '' : 's'}.`);
+    void drain();
+  }
+  return queueStatus();
+}
+
 export function clearQueue() {
   const n = queue.length;
   queue = [];
@@ -126,13 +135,18 @@ async function drain() {
           );
         }
       } catch (err) {
-        note(`✗ ${item.name}: ${err.message}`);
-        // A closed browser or a sign-out should stop the batch, not grind
-        // through it failing every time.
+        // A closed browser or a sign-out stops the batch rather than grinding
+        // through it failing every time — and the lookup goes back on the
+        // queue, since nothing was actually attempted.
         if (/not open|not signed in/i.test(err.message)) {
-          note(`Stopping: ${queue.length} lookup(s) left in the queue.`);
+          queue.unshift(item);
+          current = null;
+          note(
+            `Paused — ${err.message} ${queue.length} lookup${queue.length === 1 ? '' : 's'} waiting for a session.`
+          );
           break;
         }
+        note(`✗ ${item.name}: ${err.message}`);
       }
       current = null;
       if (queue.length) await agent.pauseBetweenLookups();
