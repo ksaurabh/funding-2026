@@ -943,6 +943,7 @@ async function selectInvestor(id) {
       el('h4', {}, [
         document.createTextNode(s.name),
         s.webSearch ? el('span', { className: 'badge', textContent: 'web' }) : null,
+        s.manual ? el('span', { className: 'badge queued', textContent: 'on request' }) : null,
         a?.truncated ? el('span', { className: 'badge err', textContent: 'truncated' }) : null,
       ]),
       body,
@@ -984,7 +985,9 @@ async function selectInvestor(id) {
     }
     parts.push(
       el('div', { className: 'actions', style: 'margin-top:8px' }, [
-        button('Re-run this step', '', () => run({ investorIds: [id], stepIds: [s.id] })),
+        button(a?.text || a?.error ? 'Re-run this step' : 'Run this step', a?.text ? '' : 'primary', () =>
+          run({ investorIds: [id], stepIds: [s.id] })
+        ),
       ])
     );
     return el('div', { className: 'answer' }, parts);
@@ -1542,6 +1545,7 @@ $('#run-steps').addEventListener('click', () => {
           checked: state.lastStepPick ? state.lastStepPick.includes(st.id) : true,
         }),
         el('span', { textContent: st.name }),
+        st.manual ? el('span', { className: 'badge queued', textContent: 'on request' }) : null,
         st.writeTo ? el('span', { className: 'badge', textContent: `→ ${st.writeTo}` }) : null,
       ])
     )
@@ -1721,7 +1725,9 @@ function renderSteps() {
   }
   $('#steps').replaceChildren(
     ...state.playbook.steps.map((s, i) => {
-      const node = el('div', { className: 'step' + (s.enabled === false ? ' disabled' : '') });
+      const node = el('div', {
+        className: 'step' + (s.enabled === false ? ' disabled' : '') + (s.manual ? ' manual' : ''),
+      });
       const name = el('input', { type: 'text', value: s.name, placeholder: 'Step name' });
       name.addEventListener('input', () => {
         s.name = name.value;
@@ -1751,6 +1757,12 @@ function renderSteps() {
         node.classList.toggle('disabled', !on.checked);
       });
 
+      const manual = el('input', { type: 'checkbox', checked: !!s.manual });
+      manual.addEventListener('change', () => {
+        s.manual = manual.checked;
+        node.classList.toggle('manual', manual.checked);
+      });
+
       node.append(
         el('div', { className: 'step-head' }, [
           el('span', { className: 'num', textContent: String(i + 1) }),
@@ -1766,6 +1778,10 @@ function renderSteps() {
         el('div', { className: 'step-opts' }, [
           el('label', {}, [web, document.createTextNode('Let the model search the web')]),
           el('label', {}, [on, document.createTextNode('Enabled')]),
+          el('label', { title: 'Left out of Run all and Fill gaps; runs when you ask for it by name' }, [
+            manual,
+            document.createTextNode('Only when I ask'),
+          ]),
           el('label', {}, [document.createTextNode('Fill column'), writeToSelect(s)]),
           el('span', { textContent: `reference later as {{steps.${slug(s.key || s.name)}}}` }),
         ])

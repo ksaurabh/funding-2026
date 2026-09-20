@@ -827,3 +827,4 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
   color: var(--accent);
   white-space: nowrap;
 }
+.step.manual { border-left: 3px solid #d79a2b; }

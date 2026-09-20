@@ -73,6 +73,8 @@ function normaliseSteps(steps) {
     prompt: s.prompt || '',
     webSearch: !!s.webSearch,
     enabled: s.enabled !== false,
+    // Left out of ordinary runs; only runs when asked for by name.
+    manual: !!s.manual,
     // Column this step's answer fills in, if any.
     writeTo: String(s.writeTo || '').trim(),
   }));
@@ -145,11 +147,14 @@ function createList({ name, csv, source, steps, playbookName }) {
 }
 
 /** Answered/total counts for a list, used on the lists index. */
+/** The steps an ordinary run covers: enabled, and not manual-only. */
+const automaticSteps = (playbook) => playbook.steps.filter((s) => s.enabled !== false && !s.manual);
+
 function listStats(id) {
   const playbook = playbookOf(id);
   const answers = read(listFile(id, 'answers'), {});
   const investors = read(listFile(id, 'investors'), { rows: [] });
-  const enabled = playbook.steps.filter((s) => s.enabled !== false);
+  const enabled = automaticSteps(playbook);
   let answered = 0;
   let errors = 0;
   let lastRun = null;
@@ -661,7 +666,7 @@ app.get('/api/lists/:listId/investors', (req, res) => {
     const investors = readRowsMerged(list.id);
     const answers = read(listFile(list.id, 'answers'), {});
     const playbook = playbookOf(list.id);
-    const enabled = playbook.steps.filter((s) => s.enabled !== false);
+    const enabled = automaticSteps(playbook);
 
     const rows = investors.rows.map((r) => {
       const entry = answers[r.__id];
@@ -768,7 +773,7 @@ app.post('/api/lists/:listId/run', (req, res) => {
     if (body.scope === 'unanswered' || body.scope === 'gaps') {
       const answers = read(listFile(list.id, 'answers'), {});
       const playbook = playbookOf(list.id);
-      const enabled = playbook.steps.filter((s) => s.enabled !== false);
+      const enabled = automaticSteps(playbook);
       ids = investors.rows
         .filter((r) => enabled.some((s) => !answers[r.__id]?.steps?.[s.id]?.text))
         .map((r) => r.__id);

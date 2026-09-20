@@ -128,8 +128,15 @@ original's.
 
 A playbook is an ordered list of *ask an LLM* steps. Each step has a name, a
 prompt, a "let the model search the web" toggle (Anthropic's server-side web
-search — sources are captured and shown with the answer), and optionally a
-column to **fill in** from its answer. Prompts are templates:
+search — sources are captured and shown with the answer), an **Only when I
+ask** flag, and optionally a column to **fill in** from its answer.
+
+**Only when I ask** keeps a step out of ordinary runs. *Run all*, *Fill gaps*
+and *Run unanswered* pass it by, and it does not count towards a row being
+complete — so an expensive or occasional question does not leave every row
+looking unfinished. It runs when you name it: **Run this step** on a row, or
+by ticking it in **Run steps…**. Steps like this are marked *on request* in
+the row detail and the step picker. Prompts are templates:
 
 | Token | Fills in with |
 |---|---|

@@ -138,7 +138,12 @@ export function startRun({
   const investors = readRowsMerged(listId);
 
   let steps = playbook.steps.filter((s) => s.enabled !== false);
-  if (stepIds && stepIds.length) steps = steps.filter((s) => stepIds.includes(s.id));
+  if (stepIds && stepIds.length) {
+    // Naming a step is asking for it, so a manual-only step runs here.
+    steps = steps.filter((s) => stepIds.includes(s.id));
+  } else {
+    steps = steps.filter((s) => !s.manual);
+  }
   if (!playbook.id) throw new Error('This list has no playbook attached. Pick one on the Playbook tab.');
   if (!steps.length) throw new Error('The playbook has no enabled steps to run.');
 
