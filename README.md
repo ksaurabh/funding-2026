@@ -328,9 +328,14 @@ record; **Watch live** goes back to the running commentary.
   trail says so — those are someone else's connections.
 - **3rd** — recorded as out of reach for now.
 
-Each contact keeps name, company, headline, LinkedIn URL, degree, the paths in,
-and a **relationship strength you score 1–10**, plus free-text notes on how you
-know them. **Download CSV** exports the book.
+Selecting a contact walks through the same reasoning in order: **what the
+search turned up**, each result scored, followed by the **verdict** — which
+one cleared the 90% bar, or that none did; then the **connection degree** in
+plain words; then, for a second-degree contact, the **link to the mutual
+connections page on LinkedIn** and the people parsed from it as cards with
+their photo, name and title. Below that are the cached pages, the
+**relationship strength you score 1–10**, and free-text notes on how you know
+them. **Download CSV** exports the book.
 
 One lookup runs at a time, paced with pauses between actions — this is meant to
 work at human speed. LinkedIn's terms prohibit automated access and they

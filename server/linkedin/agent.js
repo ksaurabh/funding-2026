@@ -367,7 +367,13 @@ async function collectPeopleCards(scope = page) {
     }
   }
 
-  return people.slice(0, 25).map((p) => ({ name: p.name, url: profileUrl(p.url), headline: p.headline || '' }));
+  return people.slice(0, 25).map((p) => ({
+    name: p.name,
+    url: profileUrl(p.url),
+    headline: p.headline || '',
+    company: p.company || '',
+    photo: p.photo || null,
+  }));
 }
 
 /** Open a profile and read back what it says about itself. */

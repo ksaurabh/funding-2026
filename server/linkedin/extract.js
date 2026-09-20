@@ -28,6 +28,18 @@ export function extractPeopleInPage() {
   // Keep the innermost: outer wrappers repeat their children's text.
   cards = cards.filter((b) => !cards.some((o) => o !== b && b.contains(o)));
 
+  // A person's avatar, when the card has one worth showing.
+  const photoIn = (scope, exclude) => {
+    for (const img of scope.querySelectorAll('img')) {
+      if (exclude && exclude.contains(img)) continue;
+      const src = img.currentSrc || img.src || '';
+      if (!src || src.startsWith('data:')) continue;
+      if (/ghost|placeholder|spacer/i.test(src)) continue;
+      return src;
+    }
+    return null;
+  };
+
   const people = [];
   const seen = new Set();
 
@@ -65,6 +77,7 @@ export function extractPeopleInPage() {
 
     people.push({
       name,
+      photo: photoIn(card, mutualBlock),
       headline: rest[0] || '',
       company: rest[1] || '',
       degree: degree ? degree.toLowerCase().replace('3rd+', '3rd') : null,
@@ -87,6 +100,7 @@ export function extractPeopleInPage() {
     const box = a.closest('div, li') || a.parentElement;
     people.push({
       name,
+      photo: box ? photoIn(box) : null,
       headline: '',
       company: '',
       degree: (DEGREE_LOOSE.exec(clean(box?.innerText)) || [])[1] || null,

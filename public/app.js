@@ -2264,6 +2264,24 @@ function selectContact(id) {
     ]),
   ];
 
+  // --- what the search returned, and the verdict on it -------------------
+  if (c.candidates?.length) {
+    const cleared = c.candidates.filter((x) => (x.confidence ?? 0) >= 0.9);
+    parts.push(
+      el('div', { className: 'answer' }, [
+        el('h4', { textContent: `What the search turned up (${c.candidates.length})` }),
+        ...c.candidates.map((cand, i) => candidateCard(cand, i + 1)),
+        el('div', {
+          className: 'verdict ' + (cleared.length ? 'good' : 'bad'),
+          textContent: cleared.length
+            ? `${cleared[0].name} cleared the 90% bar at ${Math.round(cleared[0].confidence * 100)}% — ` +
+              'that is the person recorded below.'
+            : 'None of these cleared the 90% bar, so no one was recorded.',
+        }),
+      ])
+    );
+  }
+
   if (c.status === 'not found') {
     parts.push(
       el('div', { className: 'answer' }, [
@@ -2283,6 +2301,7 @@ function selectContact(id) {
       ])
     );
   } else {
+    // --- how far away they are -------------------------------------------
     parts.push(
       el('div', { className: 'answer' }, [
         el('h4', {}, [
@@ -2292,45 +2311,45 @@ function selectContact(id) {
         el('div', {
           className: 'body',
           textContent:
-            (DEGREE_LABEL[c.degree] || 'Degree not established') +
-            (c.confidence ? ` · matched with ${Math.round(c.confidence * 100)}% confidence` : ''),
+            c.degree === '1st'
+              ? 'A first-degree connection — you already know them, no introduction needed.'
+              : c.degree === '2nd'
+              ? 'A second-degree connection — one introduction away, through the people below.'
+              : c.degree === '3rd'
+              ? 'Third degree — no direct path through your network.'
+              : 'The connection degree could not be read from the page.',
         }),
       ])
     );
 
+    // --- the way in, for a second-degree contact --------------------------
     if (c.degree === '2nd' || c.via?.length || c.mutualPage) {
+      const read = c.via?.length || 0;
+      const claimed = c.mutualPage?.claimed;
       parts.push(
         el('div', { className: 'answer' }, [
           el('h4', {
             textContent:
-              `Paths in (${c.via?.length || 0}` +
-              (c.mutualPage?.claimed && c.mutualPage.claimed > (c.via?.length || 0)
-                ? ` of ${c.mutualPage.claimed}`
-                : '') +
-              ')',
+              `Mutual connections (${read}` + (claimed && claimed > read ? ` of ${claimed}` : '') + ' parsed)',
           }),
           pageLinks({ ...(c.mutualPage || {}), text: c.mutualPage?.text || c.mutualText }),
-          c.via?.length
-            ? el(
-                'div',
-                { className: 'cites' },
-                c.via.map((v) =>
-                  el('a', { href: v.url, target: '_blank', rel: 'noreferrer', textContent: v.name })
-                )
-              )
-            : el('div', { className: 'body empty', textContent: 'No shared connections were listed.' }),
+          read
+            ? el('div', { className: 'people' }, c.via.map(personCard))
+            : el('div', {
+                className: 'body empty',
+                textContent: c.mutualPage
+                  ? 'Nobody was parsed from that page — open the saved copy to see why.'
+                  : 'No mutual connections page was reached.',
+              }),
+          claimed && claimed > read
+            ? el('div', {
+                className: 'muted small',
+                textContent: `LinkedIn reports ${claimed}; only the first page is read. Open the link above for the rest.`,
+              })
+            : null,
         ])
       );
     }
-  }
-
-  if (c.candidates?.length) {
-    parts.push(
-      el('div', { className: 'answer' }, [
-        el('h4', { textContent: `What the search turned up (${c.candidates.length})` }),
-        ...c.candidates.map((cand, i) => candidateCard(cand, i + 1)),
-      ])
-    );
   }
 
   const shots = shotBlock(c.shots);
@@ -2438,6 +2457,36 @@ function shotBlock(shots) {
     )
   );
   return wrap;
+}
+
+/** Picture, name, then title or company — one connection at a glance. */
+function personCard(p) {
+  const initials = (p.name || '?')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0] || '')
+    .join('')
+    .toUpperCase();
+
+  const avatar = p.photo
+    ? el('img', { className: 'avatar', src: p.photo, alt: '', loading: 'lazy', referrerPolicy: 'no-referrer' })
+    : el('span', { className: 'avatar initials', textContent: initials });
+  // A LinkedIn photo URL is signed and expires; fall back to initials.
+  if (p.photo) {
+    avatar.addEventListener('error', () =>
+      avatar.replaceWith(el('span', { className: 'avatar initials', textContent: initials }))
+    );
+  }
+
+  return el('div', { className: 'person' }, [
+    avatar,
+    el('div', { className: 'person-text' }, [
+      p.url
+        ? el('a', { href: p.url, target: '_blank', rel: 'noreferrer', className: 'person-name', textContent: p.name })
+        : el('span', { className: 'person-name', textContent: p.name }),
+      el('div', { className: 'person-sub', textContent: p.headline || p.company || '', title: p.headline || '' }),
+    ]),
+  ]);
 }
 
 /** One scraped search result, scored, as the agent saw it. */
@@ -2581,11 +2630,7 @@ function renderActivity(q) {
           e.t,
           [
             pageLinks(e),
-            el(
-              'div',
-              { className: 'cites' },
-              e.via.map((v) => el('a', { href: v.url, target: '_blank', rel: 'noreferrer', textContent: v.name }))
-            ),
+            el('div', { className: 'people' }, e.via.map(personCard)),
           ]
         )
       );
