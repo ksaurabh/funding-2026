@@ -21,6 +21,10 @@ const BASE = process.env.LINKEDIN_BASE || 'https://www.linkedin.com';
 
 // Pacing, in milliseconds. Deliberately unhurried.
 const PACE = { betweenActions: [1200, 2600], afterNavigation: [1500, 3000], betweenLookups: [4000, 9000] };
+// One mutual-connections page per five seconds, and a ceiling so a contact
+// with thousands of shared connections cannot run all afternoon.
+const MUTUAL_PAGE_DELAY = 5000;
+const MUTUAL_PAGE_LIMIT = 40;
 
 /**
  * Result hrefs come back relative as often as absolute — and sometimes not at
@@ -309,11 +313,13 @@ async function readMutualLink(card) {
  * side. Navigates when the link has an href, and clicks it on the search page
  * when it does not (LinkedIn sometimes opens these as an overlay).
  */
-async function openMutuals(mutual) {
+async function openMutuals(mutual, onPage) {
   if (mutual.url) {
     await page.goto(mutual.url, { waitUntil: 'domcontentloaded' });
     await wait(PACE.afterNavigation);
-    return { opened: true, url: page.url(), via: await collectPeopleCards() };
+    const landed = page.url();
+    const { via, pages } = await collectAllMutuals(landed, onPage);
+    return { opened: true, url: landed, via, pages };
   }
 
   // No href: click the link where it sits. It may navigate, or open a modal.
@@ -334,13 +340,57 @@ async function openMutuals(mutual) {
   await page.waitForURL((u) => u.toString() !== before, { timeout: 8000 }).catch(() => {});
   await wait(PACE.afterNavigation);
 
-  if (page.url() !== before) return { opened: true, url: page.url(), via: await collectPeopleCards() };
+  if (page.url() !== before) {
+    const landed = page.url();
+    const { via, pages } = await collectAllMutuals(landed, onPage);
+    return { opened: true, url: landed, via, pages };
+  }
 
   // Still on the search page. Only a modal counts — reading the page itself
   // would hand back the search results dressed up as mutual connections.
   const overlay = await findOne(page, SELECTORS.overlay);
   if (overlay) return { opened: true, url: page.url(), via: await collectPeopleCards(overlay) };
   return { opened: false, via: [] };
+}
+
+/**
+ * Walk every page of a mutual-connections list, not just the first.
+ *
+ * Paging goes through the URL rather than by clicking "Next": the button is
+ * lazily rendered and moves around, while `page=N` on a people search is
+ * stable. Stops when a page adds nobody new, and paces itself deliberately —
+ * this is the part most likely to look like scraping if hurried.
+ */
+async function collectAllMutuals(startUrl, onPage) {
+  const seen = new Map();
+  let pageNo = 1;
+
+  for (; pageNo <= MUTUAL_PAGE_LIMIT; pageNo++) {
+    if (pageNo > 1) {
+      await new Promise((r) => setTimeout(r, MUTUAL_PAGE_DELAY));
+      const url = new URL(startUrl);
+      url.searchParams.set('page', String(pageNo));
+      await page.goto(url.toString(), { waitUntil: 'domcontentloaded' });
+      await wait(PACE.afterNavigation);
+    }
+
+    const batch = await collectPeopleCards();
+    let added = 0;
+    for (const p of batch) {
+      if (p.url && !seen.has(p.url)) {
+        seen.set(p.url, p);
+        added++;
+      }
+    }
+
+    await onPage?.({ page: pageNo, added, total: seen.size, people: [...seen.values()] });
+
+    // A page that adds nobody means the list has run out, or LinkedIn is
+    // repeating itself; either way there is nothing further to read.
+    if (!added) break;
+  }
+
+  return { via: [...seen.values()], pages: Math.min(pageNo, MUTUAL_PAGE_LIMIT) };
 }
 
 /**
@@ -505,7 +555,9 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
   if (best.mutual) {
     onEvent({ type: 'mutual-found', text: best.mutual.text, url: best.mutual.url });
     await wait(PACE.betweenActions);
-    const opened = await openMutuals(best.mutual);
+    const opened = await openMutuals(best.mutual, (p) =>
+      onEvent({ type: 'shared-page', ...p, from: 'search result' })
+    );
     via = opened.via;
     if (opened.opened) {
       // Only worth capturing once we are actually on that page.
@@ -516,6 +568,7 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
         pageUrl: opened.url,
         html: cap?.html || null,
         claimed: claimedMutuals(best.mutual.text),
+        pages: opened.pages || 1,
       };
       onEvent({ type: 'shared', count: via.length, via, from: 'search result', ...mutualPage });
     } else {
@@ -538,7 +591,9 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
     onEvent({ type: 'shared-start' });
     let landed = null;
     if (profile.mutual) {
-      landed = await openMutuals(profile.mutual);
+      landed = await openMutuals(profile.mutual, (p) =>
+        onEvent({ type: 'shared-page', ...p, from: 'profile' })
+      );
       via = landed.via;
     } else {
       via = await readSharedConnections();
@@ -550,6 +605,7 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
       pageUrl: landed?.url || page.url(),
       html: cap?.html || null,
       claimed: claimedMutuals(profile.mutual?.text),
+      pages: landed?.pages || 1,
     };
     onEvent({ type: 'shared', count: via.length, via, from: 'profile', ...mutualPage });
   }

@@ -289,10 +289,11 @@ LinkedIn displayed, the HTML shows why the agent read it the way it did.
 For the mutual connections in particular, the trail and the contact both show
 **the link that was followed** (clickable, so you can open that page yourself),
 **the page it landed on**, **how many contacts were read from it**, and a link
-to **the saved copy of that page's HTML**. Only the first page of connections
-is read, so the count is reported against what LinkedIn claims — *"3 contacts
-read from the mutual connections page — LinkedIn says 79"* — rather than
-pretending it is the whole list.
+to **the saved copy of that page's HTML**. Every page of connections is read,
+not just the first: one page per five seconds, stopping when a page adds
+nobody new, capped at 40 pages. The trail reports each page as it lands
+(*"page 3 — 4 new, 12 so far. Next page in 5s."*) and the count is shown
+against what LinkedIn claims.
 
 ### Replaying a saved page
 
@@ -327,6 +328,11 @@ record; **Watch live** goes back to the running commentary.
   a mutual-connections link too; that one is deliberately left alone, and the
   trail says so — those are someone else's connections.
 - **3rd** — recorded as out of reach for now.
+
+A queued lookup gets its row straight away, marked *queued* and then
+*working* with a spinner; its detail shows what the agent is doing right now
+(*"Working — mutual connections, page 3 (12 so far)…"*) and each section
+appears as that stage completes, rather than everything arriving at the end.
 
 The table lists each contact once, with a **Lookup time** column showing when
 it last ran — the clock for today, the date for anything older, and the exact

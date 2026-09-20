@@ -112,6 +112,20 @@ export function enqueue(items) {
       contactId: i.contactId || null,
     }))
     .filter((i) => i.name);
+  // Give every queued lookup a row at once, so it is visible as pending
+  // rather than appearing only when it finishes.
+  for (const item of added) {
+    const row = upsert({
+      id: item.contactId || undefined,
+      queriedAs: item.name,
+      queriedCompany: item.company,
+      name: item.name,
+      company: item.company,
+      status: 'queued',
+    });
+    item.contactId = row.id;
+  }
+
   queue.push(...added);
   if (added.length) note(`Queued ${added.length} lookup${added.length === 1 ? '' : 's'}.`);
   void drain();
@@ -174,16 +188,43 @@ async function drain() {
       // Each lookup gets its own slate; the previous one stays on the contact.
       activity = [];
       record({ type: 'start', name: item.name, company: item.company });
+
+      const patchRow = (fields) =>
+        upsert({ id: item.contactId, queriedAs: item.name, queriedCompany: item.company, ...fields });
+
+      patchRow({ status: 'running', ranAt: new Date().toISOString(), stage: 'searching' });
+
+      // Each stage lands on the contact as it happens, so its detail fills in
+      // while the agent is still working rather than all at the end.
+      const onEvent = (e) => {
+        record(e);
+        if (e.type === 'results') patchRow({ candidates: e.top, stage: 'scoring' });
+        else if (e.type === 'accepted') patchRow({ confidence: e.confidence, stage: 'opening the profile' });
+        else if (e.type === 'profile') {
+          const p = e.profile;
+          patchRow({
+            name: p.name || item.name,
+            company: p.company || item.company,
+            headline: p.headline,
+            url: p.url,
+            degree: p.degree,
+            stage: p.degree === '2nd' ? 'reading mutual connections' : 'finishing',
+          });
+        } else if (e.type === 'shared-page') {
+          patchRow({ via: e.people, stage: `mutual connections, page ${e.page} (${e.total} so far)` });
+        }
+      };
+
       try {
-        const result = await agent.findPerson({ ...item, onEvent: record });
+        const result = await agent.findPerson({ ...item, onEvent });
         if (!result.found) {
           note(`✗ ${item.name}: ${result.reason}`);
           upsert({
             id: item.contactId || undefined,
             queriedAs: item.name,
             queriedCompany: item.company,
-            ranAt: new Date().toISOString(),
             tookMs: Date.now() - startedAt,
+            stage: null,
             name: item.name,
             company: item.company,
             degree: null,
@@ -203,8 +244,8 @@ async function drain() {
             id: item.contactId || undefined,
             queriedAs: item.name,
             queriedCompany: item.company,
-            ranAt: new Date().toISOString(),
             tookMs: Date.now() - startedAt,
+            stage: null,
             name: p.name,
             company: p.company || item.company,
             headline: p.headline,
@@ -227,6 +268,11 @@ async function drain() {
         }
       } catch (err) {
         record({ type: 'error', message: err.message });
+        if (!/not open|not signed in/i.test(err.message)) {
+          patchRow({ status: 'failed', stage: null, reason: err.message, tookMs: Date.now() - startedAt });
+        } else {
+          patchRow({ status: 'queued', stage: null });
+        }
         // A closed browser or a sign-out stops the batch rather than grinding
         // through it failing every time — and the lookup goes back on the
         // queue, since nothing was actually attempted.

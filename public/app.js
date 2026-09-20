@@ -2210,9 +2210,19 @@ function renderLiTable() {
 
   $('#li-table tbody').replaceChildren(
     ...rows.map((c) => {
-      const degree = c.degree
+      const working = c.status === 'running' || c.status === 'queued';
+      const degree = working
+        ? el('span', { className: 'badge running', title: c.stage || 'Queued' }, [
+            c.status === 'running' ? el('i', { className: 'spinner' }) : null,
+            document.createTextNode(c.status === 'running' ? 'working' : 'queued'),
+          ])
+        : c.degree
         ? el('span', { className: `badge deg-${c.degree}`, textContent: c.degree, title: DEGREE_LABEL[c.degree] || '' })
-        : el('span', { className: 'badge err', textContent: c.status === 'not found' ? 'not found' : '—' });
+        : el('span', {
+            className: 'badge err',
+            textContent: c.status === 'failed' ? 'failed' : c.status === 'not found' ? 'not found' : '—',
+            title: c.reason || '',
+          });
 
       const strength = el('select', { className: 'cell-select' }, [
         el('option', { value: '', textContent: '—', selected: !c.strength }),
@@ -2231,7 +2241,9 @@ function renderLiTable() {
       });
 
       const when = c.ranAt || c.updatedAt;
-      const tr = el('tr', { className: c.id === li.selected ? 'selected' : '' }, [
+      const tr = el('tr', {
+        className: (c.id === li.selected ? 'selected ' : '') + (working ? 'active' : ''),
+      }, [
         el('td', { textContent: c.name, title: c.headline || '' }),
         el('td', { textContent: c.company || '', title: c.company || '' }),
         el('td', {}, degree),
@@ -2257,10 +2269,16 @@ function selectContact(id) {
   const c = li.contacts.find((x) => x.id === id);
   if (!c) return;
 
+  const busy = c.status === 'running' || c.status === 'queued';
   const parts = [
     el('div', { className: 'detail-head' }, [
-      el('h2', { textContent: c.name }),
-      el('div', { className: 'meta', textContent: [c.headline, c.company].filter(Boolean).join(' · ') }),
+      el('h2', {}, [
+        c.status === 'running' ? el('i', { className: 'spinner' }) : null,
+        document.createTextNode(c.name),
+      ]),
+      busy
+        ? el('div', { className: 'meta running', textContent: c.stage ? `Working — ${c.stage}…` : 'Queued…' })
+        : el('div', { className: 'meta', textContent: [c.headline, c.company].filter(Boolean).join(' · ') }),
       el('div', { className: 'actions' }, [
         c.url
           ? el('a', { className: 'btn primary', href: c.url, target: '_blank', rel: 'noreferrer', textContent: 'Open on LinkedIn' })
@@ -2354,10 +2372,16 @@ function selectContact(id) {
       const claimed = c.mutualPage?.claimed;
       parts.push(
         el('div', { className: 'answer' }, [
-          el('h4', {
-            textContent:
-              `Mutual connections (${read}` + (claimed && claimed > read ? ` of ${claimed}` : '') + ' parsed)',
-          }),
+          el('h4', {}, [
+            c.stage?.startsWith('mutual connections') ? el('i', { className: 'spinner' }) : null,
+            document.createTextNode(
+              `Mutual connections (${read}` +
+                (claimed && claimed > read ? ` of ${claimed}` : '') +
+                ' parsed' +
+                (c.mutualPage?.pages > 1 ? `, ${c.mutualPage.pages} pages` : '') +
+                ')'
+            ),
+          ]),
           pageLinks({ ...(c.mutualPage || {}), text: c.mutualPage?.text || c.mutualText }),
           read
             ? el('div', { className: 'people' }, c.via.map(personCard))
@@ -2367,10 +2391,12 @@ function selectContact(id) {
                   ? 'Nobody was parsed from that page — open the saved copy to see why.'
                   : 'No mutual connections page was reached.',
               }),
-          claimed && claimed > read
+          claimed && claimed > read && !busy
             ? el('div', {
                 className: 'muted small',
-                textContent: `LinkedIn reports ${claimed}; only the first page is read. Open the link above for the rest.`,
+                textContent:
+                  `LinkedIn reports ${claimed}. Pages are read one every 5 seconds until a page adds nobody new; ` +
+                  'if this is short, the list stopped early or ran into the page limit.',
               })
             : null,
         ])
@@ -2639,6 +2665,16 @@ function renderActivity(q) {
             ]),
           ],
           'good'
+        )
+      );
+    } else if (e.type === 'shared-page') {
+      nodes.push(
+        step(
+          `Mutual connections — page ${e.page}`,
+          e.added
+            ? `${e.added} new on this page, ${e.total} so far. Next page in 5s.`
+            : `Nothing new on this page; ${e.total} in total.`,
+          e.t
         )
       );
     } else if (e.type === 'shared-start') {
