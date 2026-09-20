@@ -788,3 +788,29 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .nw-row.nw-head { border-bottom: 1px solid var(--line); padding-bottom: 5px; }
 .nw-row.nw-head span { font-weight: 600; }
 .muted.small.warn { color: var(--err); }
+
+/* ------------------------------------------------------ transient notices */
+#toasts {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 50;
+  pointer-events: none;
+}
+.toast {
+  background: var(--text);
+  color: #fff;
+  padding: 9px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: 0 6px 20px rgba(31, 29, 26, .22);
+  opacity: 1;
+  transition: opacity .4s ease, transform .4s ease;
+  max-width: 420px;
+}
+.toast.good { background: #235c3c; }
+.toast.bad { background: #8d2a22; }
+.toast.go { opacity: 0; transform: translateY(6px); }

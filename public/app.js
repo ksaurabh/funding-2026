@@ -12,6 +12,22 @@ const api = async (url, opts) => {
   if (!res.ok) throw new Error(body?.error || res.statusText);
   return body;
 };
+/**
+ * A brief, non-blocking note. For things that happened and are reversible —
+ * a dialog for those just gets in the way.
+ */
+function toast(message, tone = '') {
+  let host = $('#toasts');
+  if (!host) {
+    host = el('div', { id: 'toasts' });
+    document.body.append(host);
+  }
+  const note = el('div', { className: 'toast ' + tone, textContent: message });
+  host.append(note);
+  setTimeout(() => note.classList.add('go'), 3200);
+  setTimeout(() => note.remove(), 3700);
+}
+
 const post = (url, body) =>
   api(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body || {}) });
 
@@ -2364,12 +2380,9 @@ function renderLiTable() {
  * contact they are a path to, so someone reachable via two investors records
  * both.
  */
-async function addPeople(groups, describe) {
+async function addPeople(groups) {
   const live = groups.filter((g) => g.people.length);
-  if (!live.length) return alert('Everyone there is already in your network.');
-
-  const count = live.reduce((n, g) => n + g.people.length, 0);
-  if (!confirm(`Add ${describe || `${count} people`} to my network?`)) return;
+  if (!live.length) return toast('Everyone there is already in your network.');
 
   let r;
   try {
@@ -2380,12 +2393,12 @@ async function addPeople(groups, describe) {
       })),
     });
   } catch (err) {
-    return alert(err.message);
+    return toast(err.message, 'bad');
   }
 
-  const bits = [r.added ? `${r.added} added` : '', r.merged ? `${r.merged} already there` : ''].filter(Boolean);
   await loadNetworkKeys();
-  if (confirm(`${bits.join(', ') || 'Nothing to add'}. Open My network?`)) location.hash = '#/network';
+  const bits = [r.added ? `${r.added} added to your network` : '', r.merged ? `${r.merged} already there` : ''];
+  toast(bits.filter(Boolean).join(' · ') || 'Nothing to add', 'good');
 }
 
 /**
@@ -2393,15 +2406,15 @@ async function addPeople(groups, describe) {
  * the network. Each person keeps the contact they are a path to, so someone
  * reachable via two investors records both.
  */
-async function addMutualsFrom(contacts, describe) {
+async function addMutualsFrom(contacts) {
   const groups = contacts
     .map((c) => ({ source: { id: c.id, name: c.name }, people: notYetInNetwork(c.via) }))
     .filter((g) => g.people.length);
 
   if (!groups.length) {
-    return alert('Nothing new — everyone they are connected through is already in your network.');
+    return toast('Nothing new — everyone they are connected through is already in your network.');
   }
-  await addPeople(groups, describe);
+  await addPeople(groups);
 }
 
 /**
@@ -2415,17 +2428,7 @@ function mutualPicker(contact) {
   const addBtn = button('Add to my network', 'primary', async () => {
     const people = [...chosen.values()];
     if (!people.length) return;
-    let r;
-    try {
-      r = await post('/api/linkedin/network', {
-        people: people.map((p) => ({ name: p.name, url: p.url, headline: p.headline, photo: p.photo })),
-        source: { id: contact.id, name: contact.name },
-      });
-    } catch (err) {
-      return alert(err.message);
-    }
-    const bits = [r.added ? `${r.added} added` : '', r.merged ? `${r.merged} already there` : ''].filter(Boolean);
-    if (confirm(`${bits.join(', ')}. Open My network?`)) location.hash = '#/network';
+    await addPeople([{ source: { id: contact.id, name: contact.name }, people }]);
     chosen.clear();
     selectContact(contact.id);
   });
@@ -2434,7 +2437,7 @@ function mutualPicker(contact) {
   const already = contact.via.length - missing.length;
 
   const addAll = button(`Add ${missing.length} new to my network`, '', async () => {
-    await addPeople([{ source: { id: contact.id, name: contact.name }, people: missing }], `${missing.length} new`);
+    await addPeople([{ source: { id: contact.id, name: contact.name }, people: missing }]);
     await loadNetworkKeys();
     selectContact(contact.id);
   });
