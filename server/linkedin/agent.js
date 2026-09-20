@@ -297,7 +297,7 @@ async function openMutuals(mutual) {
   if (mutual.url) {
     await page.goto(mutual.url, { waitUntil: 'domcontentloaded' });
     await wait(PACE.afterNavigation);
-    return collectPeopleCards();
+    return { opened: true, via: await collectPeopleCards() };
   }
 
   // No href: click the link where it sits. It may navigate, or open a modal.
@@ -313,17 +313,18 @@ async function openMutuals(mutual) {
     }
     if (clicked) break;
   }
-  if (!clicked) return [];
+  if (!clicked) return { opened: false, via: [] };
 
   await page.waitForURL((u) => u.toString() !== before, { timeout: 8000 }).catch(() => {});
   await wait(PACE.afterNavigation);
 
-  if (page.url() !== before) return collectPeopleCards();
+  if (page.url() !== before) return { opened: true, via: await collectPeopleCards() };
 
   // Still on the search page. Only a modal counts — reading the page itself
   // would hand back the search results dressed up as mutual connections.
   const overlay = await findOne(page, SELECTORS.overlay);
-  return overlay ? collectPeopleCards(overlay) : [];
+  if (overlay) return { opened: true, via: await collectPeopleCards(overlay) };
+  return { opened: false, via: [] };
 }
 
 /**
@@ -439,19 +440,41 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
     const reason =
       `Best match was ${best.name} at ${Math.round(best.confidence * 100)}% confidence, ` +
       `below the ${Math.round(threshold * 100)}% bar.`;
-    onEvent({ type: 'rejected', reason });
+    // A near miss often has a mutual-connections link too. Not following it is
+    // the point of the bar: those are someone else's connections.
+    onEvent({
+      type: 'rejected',
+      reason,
+      hadMutualLink: !!best.mutual,
+    });
     return { found: false, reason, candidates: top, shots };
   }
 
-  // The mutual-connections link lives on the search card, so follow it while
-  // that page is still in front of us.
+  onEvent({
+    type: 'accepted',
+    name: best.name,
+    confidence: best.confidence,
+    rank: all.indexOf(best) + 1,
+    threshold,
+  });
+
+  // Past the bar, so the mutual-connections link on that card is worth
+  // opening — and it is right here, on the page already in front of us.
   let via = [];
   if (best.mutual) {
     onEvent({ type: 'mutual-found', text: best.mutual.text, url: best.mutual.url });
     await wait(PACE.betweenActions);
-    via = await openMutuals(best.mutual, { name, company });
-    await shot('Mutual connections');
-    onEvent({ type: 'shared', count: via.length, via, from: 'search result' });
+    const opened = await openMutuals(best.mutual);
+    via = opened.via;
+    if (opened.opened) {
+      // Only worth capturing once we are actually on that page.
+      await shot('Mutual connections');
+      onEvent({ type: 'shared', count: via.length, via, from: 'search result' });
+    } else {
+      onEvent({ type: 'mutual-dead', text: best.mutual.text });
+    }
+  } else {
+    onEvent({ type: 'no-mutual-link' });
   }
 
   await wait(PACE.betweenActions);

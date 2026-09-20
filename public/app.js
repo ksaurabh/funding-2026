@@ -2516,8 +2516,32 @@ function renderActivity(q) {
           e.top.map((c, i) => candidateCard(c, i + 1))
         )
       );
+    } else if (e.type === 'accepted') {
+      nodes.push(
+        step(
+          `Match accepted — ${Math.round(e.confidence * 100)}%`,
+          `${e.name} (result #${e.rank}) cleared the ${Math.round(e.threshold * 100)}% bar.`,
+          e.t,
+          [],
+          'good'
+        )
+      );
+    } else if (e.type === 'mutual-dead') {
+      nodes.push(
+        step('That link went nowhere', 'Clicking it neither navigated nor opened a panel; trying the profile.', e.t, [], 'bad')
+      );
+    } else if (e.type === 'no-mutual-link') {
+      nodes.push(step('No mutual-connections link on that result', 'Trying the profile instead.', e.t));
     } else if (e.type === 'rejected') {
-      nodes.push(step('No confident match', e.reason, e.t, [], 'bad'));
+      nodes.push(
+        step(
+          'No confident match',
+          e.reason + (e.hadMutualLink ? ' Its mutual-connections link was left alone.' : ''),
+          e.t,
+          [],
+          'bad'
+        )
+      );
     } else if (e.type === 'opening') {
       nodes.push(step('Opening the profile', e.name, e.t));
     } else if (e.type === 'profile') {

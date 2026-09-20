@@ -291,12 +291,14 @@ found", where the near-misses explain why. Selecting a contact shows its
 record; **Watch live** goes back to the running commentary.
 
 - **1st degree** — you already know them; it is labelled and done.
-- **2nd degree** — it follows the *"…and 10 other mutual connections"* link on
-  the result card itself and records everyone you could be introduced through,
+- **2nd degree** — once the top hit clears the 90% bar, and only then, it
+  follows the *"…and 10 other mutual connections"* link on that result card and records everyone you could be introduced through,
   with links. If that link opens an overlay rather than navigating, it reads
   the overlay; if clicking it does nothing at all, it reports no paths rather
   than mistaking the search results for mutual connections. A profile-side
-  shared-connections link is the fallback.
+  shared-connections link is the fallback. A near miss below the bar often has
+  a mutual-connections link too; that one is deliberately left alone, and the
+  trail says so — those are someone else's connections.
 - **3rd** — recorded as out of reach for now.
 
 Each contact keeps name, company, headline, LinkedIn URL, degree, the paths in,
