@@ -200,6 +200,22 @@ export async function waitForLogin(timeoutMs = 180000) {
 }
 
 const DEGREE = /\b(1st|2nd|3rd|3rd\+)\b/i;
+
+/**
+ * "Ken Elefant, mike d. kail & 77 other mutual connections" -> 79.
+ * LinkedIn names a couple and counts the rest, and only lists a page of them,
+ * so this is what to compare the number actually read against.
+ */
+function claimedMutuals(text) {
+  if (!text) return null;
+  const n = /(\d[\d,]*)\s+other\s+mutual/i.exec(text);
+  if (n) {
+    const named = (text.slice(0, n.index).match(/,|\band\b|&/g) || []).length + (n.index > 0 ? 1 : 0);
+    return Number(n[1].replace(/,/g, '')) + Math.max(0, named - 1);
+  }
+  const plain = /(\d[\d,]*)\s+mutual/i.exec(text);
+  return plain ? Number(plain[1].replace(/,/g, '')) : null;
+}
 const readDegree = (text) => {
   const m = DEGREE.exec(text || '');
   return m ? m[1].toLowerCase().replace('3rd+', '3rd') : null;
@@ -483,7 +499,13 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
     if (opened.opened) {
       // Only worth capturing once we are actually on that page.
       const cap = await shot('Mutual connections');
-      mutualPage = { link: best.mutual.url, text: best.mutual.text, pageUrl: opened.url, html: cap?.html || null };
+      mutualPage = {
+        link: best.mutual.url,
+        text: best.mutual.text,
+        pageUrl: opened.url,
+        html: cap?.html || null,
+        claimed: claimedMutuals(best.mutual.text),
+      };
       onEvent({ type: 'shared', count: via.length, via, from: 'search result', ...mutualPage });
     } else {
       onEvent({ type: 'mutual-dead', text: best.mutual.text });
@@ -516,6 +538,7 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
       text: profile.mutual?.text || null,
       pageUrl: landed?.url || page.url(),
       html: cap?.html || null,
+      claimed: claimedMutuals(profile.mutual?.text),
     };
     onEvent({ type: 'shared', count: via.length, via, from: 'profile', ...mutualPage });
   }

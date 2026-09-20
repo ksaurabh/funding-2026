@@ -289,7 +289,25 @@ LinkedIn displayed, the HTML shows why the agent read it the way it did.
 For the mutual connections in particular, the trail and the contact both show
 **the link that was followed** (clickable, so you can open that page yourself),
 **the page it landed on**, **how many contacts were read from it**, and a link
-to **the saved copy of that page's HTML**.
+to **the saved copy of that page's HTML**. Only the first page of connections
+is read, so the count is reported against what LinkedIn claims — *"3 contacts
+read from the mutual connections page — LinkedIn says 79"* — rather than
+pretending it is the whole list.
+
+### Replaying a saved page
+
+```bash
+node tools/parse-saved.mjs                                  # everything cached
+node tools/parse-saved.mjs path/to/page.html
+node tools/parse-saved.mjs --query "Greg Dracon@.406 Ventures"
+```
+
+Runs the agent's real parsing over saved pages with no browser session and no
+LinkedIn involved: the mutual-connections links it finds, the people it
+extracts with their degrees and headlines, and — with `--query` — how each
+scores and whether the top hit would be accepted. Parsing changes get checked
+here against pages LinkedIn actually served, before going anywhere near the
+live site.
 
 The right-hand pane shows the work as it happens: the search it ran, the **top
 three results it scraped** with each one's name and company score and whether

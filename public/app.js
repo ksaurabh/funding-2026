@@ -2301,7 +2301,14 @@ function selectContact(id) {
     if (c.degree === '2nd' || c.via?.length || c.mutualPage) {
       parts.push(
         el('div', { className: 'answer' }, [
-          el('h4', { textContent: `Paths in (${c.via?.length || 0})` }),
+          el('h4', {
+            textContent:
+              `Paths in (${c.via?.length || 0}` +
+              (c.mutualPage?.claimed && c.mutualPage.claimed > (c.via?.length || 0)
+                ? ` of ${c.mutualPage.claimed}`
+                : '') +
+              ')',
+          }),
           pageLinks({ ...(c.mutualPage || {}), text: c.mutualPage?.text || c.mutualText }),
           c.via?.length
             ? el(
@@ -2564,8 +2571,13 @@ function renderActivity(q) {
     } else if (e.type === 'shared') {
       nodes.push(
         step(
-          `${e.count} contact${e.count === 1 ? '' : 's'} read from the mutual connections page`,
-          e.count ? 'People you could be introduced through:' : 'The page listed nobody.',
+          `${e.count} contact${e.count === 1 ? '' : 's'} read from the mutual connections page` +
+            (e.claimed && e.claimed > e.count ? ` — LinkedIn says ${e.claimed}` : ''),
+          e.count
+            ? e.claimed && e.claimed > e.count
+              ? 'People you could be introduced through. Only the first page is read; open the link above for the rest.'
+              : 'People you could be introduced through:'
+            : 'The page listed nobody.',
           e.t,
           [
             pageLinks(e),
