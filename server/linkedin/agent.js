@@ -97,6 +97,16 @@ function prune() {
   }
 }
 
+/** Drop one cached page, by filename. */
+export function removeCachedPage(file) {
+  try {
+    if (!file || file.includes('/') || file.includes('..')) return;
+    fs.rmSync(path.join(SHOTS_DIR, file), { force: true });
+  } catch {
+    /* housekeeping */
+  }
+}
+
 /** What is in the cache, newest first. */
 export function cachedPages() {
   try {

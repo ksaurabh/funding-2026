@@ -725,3 +725,5 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 #li-table td .badge.running { display: inline-flex; align-items: center; gap: 5px; }
 .detail-head h2 { display: flex; align-items: center; gap: 8px; }
 .meta.running { color: var(--accent); }
+
+#li-table th.tick, #li-table td.tick { width: 28px; padding: 4px 0 4px 10px; }

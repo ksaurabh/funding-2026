@@ -334,6 +334,11 @@ A queued lookup gets its row straight away, marked *queued* and then
 (*"Working — mutual connections, page 3 (12 so far)…"*) and each section
 appears as that stage completes, rather than everything arriving at the end.
 
+Past lookups can be thrown away: tick rows and **Delete selected**, use
+**Delete all**, or **Delete this lookup** on a contact. The screenshots and
+saved HTML cached for a lookup are deleted with it, rather than being left
+behind in the cache.
+
 The table lists each contact once, with a **Lookup time** column showing when
 it last ran — the clock for today, the date for anything older, and the exact
 time plus how long it took on hover. Looking someone up again updates their

@@ -68,8 +68,22 @@ export function patch(id, fields) {
   return c;
 }
 
-export function remove(id) {
-  write(KEY, all().filter((c) => c.id !== id));
+/**
+ * Forget a lookup, and the pages cached for it — leaving those behind would
+ * just fill the cache with screenshots nothing refers to.
+ */
+export function remove(ids) {
+  const wanted = new Set([].concat(ids));
+  const list = all();
+  const going = list.filter((c) => wanted.has(c.id));
+
+  for (const c of going) {
+    const files = [...(c.shots || []).flatMap((s) => [s.file, s.html]), c.html, c.mutualPage?.html];
+    for (const f of files) if (f) agent.removeCachedPage(f);
+  }
+
+  write(KEY, list.filter((c) => !wanted.has(c.id)));
+  return going.length;
 }
 
 // ------------------------------------------------------------------- queue

@@ -1999,6 +1999,7 @@ const li = {
   selected: null,
   filter: '',
   last: null, // the person searched for most recently
+  picked: new Set(), // contacts ticked for deletion
   session: { open: false, loggedIn: false },
 };
 
@@ -2197,8 +2198,18 @@ function lookupTime(iso) {
 
 function renderLiTable() {
   const rows = liVisible();
+  const allTicked = rows.length > 0 && rows.every((c) => li.picked.has(c.id));
+  const someTicked = !allTicked && rows.some((c) => li.picked.has(c.id));
+  const tickAll = el('input', { type: 'checkbox', checked: allTicked, title: 'Select all shown' });
+  tickAll.indeterminate = someTicked;
+  tickAll.addEventListener('change', () => {
+    for (const c of rows) (tickAll.checked ? li.picked.add(c.id) : li.picked.delete(c.id));
+    renderLiTable();
+  });
+
   $('#li-table thead').replaceChildren(
     el('tr', {}, [
+      el('th', { className: 'tick' }, tickAll),
       el('th', { textContent: 'Person' }),
       el('th', { textContent: 'Company' }),
       el('th', { textContent: 'Connection' }),
@@ -2207,6 +2218,11 @@ function renderLiTable() {
       el('th', { textContent: 'Lookup time' }),
     ])
   );
+
+  const picked = [...li.picked].filter((id) => li.contacts.some((c) => c.id === id)).length;
+  $('#li-delete').classList.toggle('hidden', !picked);
+  $('#li-delete').textContent = `Delete ${picked} selected`;
+  $('#li-clear-all').disabled = !li.contacts.length;
 
   $('#li-table tbody').replaceChildren(
     ...rows.map((c) => {
@@ -2240,10 +2256,21 @@ function renderLiTable() {
         c.strength = strength.value ? Number(strength.value) : null;
       });
 
+      const tick = el('input', { type: 'checkbox', checked: li.picked.has(c.id) });
+      tick.addEventListener('click', (e) => {
+        e.stopPropagation();
+        tick.checked ? li.picked.add(c.id) : li.picked.delete(c.id);
+        renderLiTable();
+      });
+
       const when = c.ranAt || c.updatedAt;
       const tr = el('tr', {
-        className: (c.id === li.selected ? 'selected ' : '') + (working ? 'active' : ''),
+        className:
+          (c.id === li.selected ? 'selected ' : '') +
+          (li.picked.has(c.id) ? 'ticked ' : '') +
+          (working ? 'active' : ''),
       }, [
+        el('td', { className: 'tick' }, tick),
         el('td', { textContent: c.name, title: c.headline || '' }),
         el('td', { textContent: c.company || '', title: c.company || '' }),
         el('td', {}, degree),
@@ -2262,6 +2289,38 @@ function renderLiTable() {
     })
   );
 }
+
+/** Forget a set of lookups, and everything cached for them. */
+async function deleteContacts(ids, { all: everything } = {}) {
+  try {
+    await post('/api/linkedin/contacts/delete', everything ? { all: true } : { ids });
+  } catch (err) {
+    return alert(err.message);
+  }
+  for (const id of ids) li.picked.delete(id);
+  if (everything) li.picked.clear();
+  if (!li.contacts.some((c) => c.id === li.selected) || everything || ids.includes(li.selected)) {
+    li.selected = null;
+    $('#li-detail').replaceChildren(
+      el('p', { className: 'muted pad', textContent: 'Select a contact to see the path to them.' })
+    );
+  }
+  await loadContacts();
+}
+
+$('#li-delete').addEventListener('click', () => {
+  const ids = [...li.picked];
+  if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} lookup${ids.length === 1 ? '' : 's'}? The pages cached for them go too.`)) return;
+  deleteContacts(ids);
+});
+
+$('#li-clear-all').addEventListener('click', () => {
+  const n = li.contacts.length;
+  if (!n) return alert('There are no lookups to delete.');
+  if (!confirm(`Delete all ${n} lookup${n === 1 ? '' : 's'}? This cannot be undone.`)) return;
+  deleteContacts([], { all: true });
+});
 
 function selectContact(id) {
   li.selected = id;
@@ -2297,12 +2356,9 @@ function selectContact(id) {
           renderLiTable();
           pollLinkedIn();
         }),
-        button('Remove', 'danger', async () => {
-          if (!confirm(`Remove ${c.name} from the contact book?`)) return;
-          await api(`/api/linkedin/contacts/${c.id}`, { method: 'DELETE' });
-          li.selected = null;
-          loadContacts();
-          $('#li-detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select a contact.' }));
+        button('Delete this lookup', 'danger', () => {
+          if (!confirm(`Delete the lookup for ${c.name}? The pages cached for it go too.`)) return;
+          deleteContacts([c.id]);
         }),
       ]),
     ]),

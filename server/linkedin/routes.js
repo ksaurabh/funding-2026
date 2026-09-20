@@ -111,8 +111,13 @@ linkedinRoutes.patch('/contacts/:id', (req, res) => {
 });
 
 linkedinRoutes.delete('/contacts/:id', (req, res) => {
-  contacts.remove(req.params.id);
-  res.json({ ok: true });
+  res.json({ removed: contacts.remove(req.params.id) });
+});
+
+/** Several at once, and everything, from the contacts table. */
+linkedinRoutes.post('/contacts/delete', (req, res) => {
+  const ids = req.body?.all ? contacts.all().map((c) => c.id) : req.body?.ids || [];
+  res.json({ removed: contacts.remove(ids) });
 });
 
 linkedinRoutes.get('/contacts.csv', (_req, res) => {
