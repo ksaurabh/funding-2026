@@ -1928,6 +1928,9 @@ function renderLiSession() {
     : 'Waiting for you to sign in…';
   $('#li-stop').disabled = !s.open;
   $('#li-start').textContent = s.open ? 'Bring window forward' : 'Start agent session';
+  // Detection can be wrong; let the person settle it.
+  $('#li-recheck').classList.toggle('hidden', !s.open || s.loggedIn);
+  if (s.detectedBy) pill.title = `Signed-in state read from the ${s.detectedBy}`;
   // The lookup row stays usable with no session: names can be queued first
   // and the agent picks them up as soon as it is signed in.
   $('#li-hint').textContent = s.loggedIn
@@ -1951,6 +1954,27 @@ $('#li-start').addEventListener('click', async () => {
     }
   } finally {
     $('#li-start').disabled = false;
+  }
+});
+
+$('#li-recheck').addEventListener('click', async () => {
+  const b = $('#li-recheck');
+  b.disabled = true;
+  b.textContent = 'Checking…';
+  try {
+    await liSession('recheck');
+    if (!li.session.loggedIn) {
+      alert(
+        'Still not seeing a signed-in LinkedIn session in that window.\n\n' +
+          'Make sure the agent window itself (not another Chrome window) is signed in, ' +
+          'then try again.'
+      );
+    } else {
+      pollLinkedIn();
+    }
+  } finally {
+    b.disabled = false;
+    b.textContent = "I'm already signed in";
   }
 });
 

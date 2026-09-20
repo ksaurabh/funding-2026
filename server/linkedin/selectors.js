@@ -5,9 +5,25 @@
 // entry is a list tried in order, so an old and a new selector can coexist.
 
 export const SELECTORS = {
-  // Signed-in state
-  loggedIn: ['#global-nav', 'nav.global-nav', '[data-test-global-nav]'],
-  loginForm: ['#username', 'form.login__form', '[data-test-id="sign-in-form"]'],
+  // Signed-in state. Several, because LinkedIn's shell markup varies by page
+  // and by A/B bucket — but the cookie check in agent.js is the real signal.
+  loggedIn: [
+    '#global-nav',
+    'nav.global-nav',
+    '[data-test-global-nav]',
+    '.global-nav__me',
+    'img.global-nav__me-photo',
+    'button[aria-label*="profile" i]',
+    'a[href*="/in/"][data-test-app-aware-link]',
+    'main#main',
+  ],
+  loginForm: [
+    '#username',
+    'form.login__form',
+    '[data-test-id="sign-in-form"]',
+    'a[href*="/login"][class*="sign-in"]',
+    'button[data-id="sign-in-form__submit-btn"]',
+  ],
 
   // People search results
   resultCard: [

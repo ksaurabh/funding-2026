@@ -244,7 +244,13 @@ fit" but "who do I know who can introduce me".
 **Start agent session** opens a real Chrome window using your installed
 browser. If you are not signed in to LinkedIn, sign in there yourself — the
 app never handles your credentials — and the session is kept in
-`data/linkedin-profile/` so you only do it once. The window stays visible the
+`data/linkedin-profile/` so you only do it once.
+
+Being signed in is detected from LinkedIn's own session cookie rather than by
+reading the page, since the page markup varies and changes. If it still thinks
+you are signed out when you are not, **I'm already signed in** re-checks and
+gets on with any queued lookups; the state pill's tooltip says whether the
+answer came from the cookie or the page. The window stays visible the
 whole time; you can watch what it does and take over at any point.
 
 Give it a **name and company**, or point it at a list and pick the columns

@@ -34,6 +34,17 @@ linkedinRoutes.post('/session/wait-login', async (_req, res) => {
   }
 });
 
+// "I'm already signed in" — look again rather than keep waiting.
+linkedinRoutes.post('/session/recheck', async (_req, res) => {
+  try {
+    const s = await agent.recheck();
+    if (s.loggedIn) contacts.resumeQueue();
+    res.json(s);
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 linkedinRoutes.post('/session/stop', async (_req, res) => {
   try {
     res.json(await agent.closeSession());

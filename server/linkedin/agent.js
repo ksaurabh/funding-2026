@@ -64,15 +64,54 @@ export async function closeSession() {
   return { open: false, loggedIn: false };
 }
 
+/**
+ * LinkedIn's session cookie. Far more reliable than reading the page: the
+ * shell markup differs between the feed, a profile and a search, and changes
+ * often, but `li_at` is present exactly when you are signed in.
+ */
+async function hasAuthCookie() {
+  try {
+    const cookies = await ctx.cookies([BASE, 'https://www.linkedin.com']);
+    return cookies.some((c) => c.name === 'li_at' && c.value);
+  } catch {
+    return false;
+  }
+}
+
 export async function status() {
   if (!ctx || !page) return { open: false, loggedIn: false };
   try {
-    const loggedIn = !!(await findOne(page, SELECTORS.loggedIn));
-    const onLogin = !!(await findOne(page, SELECTORS.loginForm));
-    return { open: true, loggedIn: loggedIn && !onLogin, url: page.url() };
+    const cookie = await hasAuthCookie();
+    const domSaysIn = !!(await findOne(page, SELECTORS.loggedIn));
+    const onLoginPage = /\/(login|checkpoint|uas\/login|signup)/.test(page.url());
+    const loginForm = !!(await findOne(page, SELECTORS.loginForm));
+
+    return {
+      open: true,
+      // The cookie settles it; the DOM is a fallback for anything that is not
+      // really LinkedIn (a local stand-in, say).
+      loggedIn: cookie || (domSaysIn && !onLoginPage && !loginForm),
+      url: page.url(),
+      detectedBy: cookie ? 'cookie' : domSaysIn ? 'page' : 'neither',
+    };
   } catch {
     return { open: true, loggedIn: false };
   }
+}
+
+/**
+ * Re-check after you say you have signed in: go to the feed and look again,
+ * which also shakes out a stale tab left on a login page.
+ */
+export async function recheck() {
+  if (!ctx || !page) return { open: false, loggedIn: false };
+  try {
+    await page.goto(`${BASE}/feed/`, { waitUntil: 'domcontentloaded' });
+    await wait(PACE.afterNavigation);
+  } catch {
+    /* whatever the tab is showing, still report on it */
+  }
+  return status();
 }
 
 /** Wait for you to finish signing in, up to `timeoutMs`. */
