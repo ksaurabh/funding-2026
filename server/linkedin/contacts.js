@@ -53,10 +53,18 @@ let queue = [];
 let running = false;
 let log = [];
 let current = null;
+// A running account of what the agent is doing and what it is reading, so the
+// UI can show the work rather than just the outcome.
+let activity = [];
 
 const note = (msg) => {
   log.push({ t: new Date().toISOString(), msg });
   if (log.length > 400) log.splice(0, log.length - 400);
+};
+
+const record = (event) => {
+  activity.push({ t: new Date().toISOString(), ...event });
+  if (activity.length > 60) activity.splice(0, activity.length - 60);
 };
 
 export const queueStatus = () => ({
@@ -64,6 +72,7 @@ export const queueStatus = () => ({
   current,
   pending: queue.map((q) => ({ name: q.name, company: q.company })),
   log: log.slice(-200),
+  activity: activity.slice(-30),
 });
 
 export function enqueue(items) {
@@ -100,8 +109,11 @@ async function drain() {
       const item = queue.shift();
       current = item;
       note(`Looking up ${item.name}${item.company ? ` · ${item.company}` : ''}…`);
+      // Each lookup gets its own slate; the previous one stays on the contact.
+      activity = [];
+      record({ type: 'start', name: item.name, company: item.company });
       try {
-        const result = await agent.findPerson(item);
+        const result = await agent.findPerson({ ...item, onEvent: record });
         if (!result.found) {
           note(`✗ ${item.name}: ${result.reason}`);
           upsert({
@@ -113,6 +125,8 @@ async function drain() {
             status: 'not found',
             reason: result.reason,
             via: [],
+            // Kept so the near-misses can be reviewed later.
+            candidates: result.candidates || [],
           });
         } else {
           const p = result.person;
@@ -127,6 +141,7 @@ async function drain() {
             status: 'found',
             reason: null,
             queriedAs: item.name,
+            candidates: result.candidates || [],
           });
           note(
             `✓ ${p.name} — ${p.degree || 'degree unknown'}` +
@@ -135,6 +150,7 @@ async function drain() {
           );
         }
       } catch (err) {
+        record({ type: 'error', message: err.message });
         // A closed browser or a sign-out stops the batch rather than grinding
         // through it failing every time — and the lookup goes back on the
         // queue, since nothing was actually attempted.

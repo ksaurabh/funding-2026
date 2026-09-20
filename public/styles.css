@@ -606,3 +606,27 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 .badge.deg-3rd { color: var(--muted); }
 .strength-row { display: flex; align-items: center; gap: 10px; }
 .strength { flex: 1; accent-color: var(--accent); }
+
+/* ------------------------------------------- the agent's work, as it works */
+.answer.act { padding: 10px 16px; }
+.answer.act h4 { display: flex; align-items: center; gap: 8px; }
+.act-time { margin-left: auto; font-variant-numeric: tabular-nums; }
+.answer.act.good h4 { color: var(--ok); }
+.answer.act.bad h4 { color: var(--err); }
+.answer.act .body.small { font-size: 12px; color: var(--muted); }
+
+.cand {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  background: var(--bg);
+}
+.cand.hit { border-color: #bfdcca; background: #f4faf6; }
+.cand-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cand-head a { color: var(--accent); font-weight: 500; }
+.cand-rank { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cand-score { margin-left: auto; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.cand-score.good { color: var(--ok); font-weight: 600; }
+.cand-line { font-size: 12px; margin-top: 3px; }
+.cand-line.muted { color: var(--muted); }

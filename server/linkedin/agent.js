@@ -201,35 +201,59 @@ async function readSharedConnections() {
  * Find one person. Returns what was found and how sure we are; the caller
  * decides what to store. Never guesses past the confidence threshold.
  */
-export async function findPerson({ name, company, threshold = 0.9 }) {
+export async function findPerson({ name, company, threshold = 0.9, onEvent = () => {} }) {
   if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
   const s = await status();
   if (!s.loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
 
+  onEvent({ type: 'search', query: { name, company } });
   const candidates = await searchPeople(name, company);
+
   if (!candidates.length) {
+    onEvent({ type: 'results', count: 0, top: [] });
     return { found: false, reason: 'LinkedIn returned no people for that search.', candidates: [] };
   }
 
   const { best, accepted, runnerUp, all } = pickBest({ name, company }, candidates, threshold);
+  // What the search actually turned up, scored — the raw material behind the
+  // decision, worth showing whether or not anything was accepted.
+  const top = all.slice(0, 3).map((c) => ({
+    name: c.name,
+    headline: c.headline,
+    company: c.company,
+    degree: c.degree,
+    url: c.url,
+    confidence: c.confidence,
+    nameScore: c.nameScore,
+    companyScore: c.companyScore,
+  }));
+  onEvent({ type: 'results', count: candidates.length, top, threshold });
+
   if (!accepted) {
-    return {
-      found: false,
-      reason:
-        `Best match was ${best.name} at ${Math.round(best.confidence * 100)}% confidence, ` +
-        `below the ${Math.round(threshold * 100)}% bar.`,
-      candidates: all.slice(0, 5),
-    };
+    const reason =
+      `Best match was ${best.name} at ${Math.round(best.confidence * 100)}% confidence, ` +
+      `below the ${Math.round(threshold * 100)}% bar.`;
+    onEvent({ type: 'rejected', reason });
+    return { found: false, reason, candidates: top };
   }
 
   await wait(PACE.betweenActions);
+  onEvent({ type: 'opening', url: best.url, name: best.name });
   const profile = await readProfile(best.url);
   const degree = profile.degree || best.degree || null;
-  const via = degree === '2nd' ? await readSharedConnections() : [];
+  onEvent({ type: 'profile', profile: { ...profile, degree } });
+
+  let via = [];
+  if (degree === '2nd') {
+    onEvent({ type: 'shared-start' });
+    via = await readSharedConnections();
+    onEvent({ type: 'shared', count: via.length, via });
+  }
 
   return {
     found: true,
     confidence: best.confidence,
+    candidates: top,
     runnerUp: runnerUp ? { name: runnerUp.name, confidence: runnerUp.confidence } : null,
     person: {
       name: profile.name || best.name,

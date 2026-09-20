@@ -269,6 +269,14 @@ firm scores about 65% and is rejected, recorded as "not found" with the reason,
 rather than guessed at. It then opens the profile and reads the connection
 degree from the page itself.
 
+The right-hand pane shows the work as it happens: the search it ran, the **top
+three results it scraped** with each one's name and company score and whether
+it cleared the bar, the profile it opened and what that page said, and the
+shared connections it then followed. Those listings are kept on the contact
+too, so a decision can be reviewed later — particularly useful for a "not
+found", where the near-misses explain why. Selecting a contact shows its
+record; **Watch live** goes back to the running commentary.
+
 - **1st degree** — you already know them; it is labelled and done.
 - **2nd degree** — it follows through to the shared connections and records
   everyone you could be introduced through, with links.

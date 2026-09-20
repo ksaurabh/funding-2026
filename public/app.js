@@ -2239,6 +2239,11 @@ function selectContact(id) {
           ? el('a', { className: 'btn primary', href: c.url, target: '_blank', rel: 'noreferrer', textContent: 'Open on LinkedIn' })
           : null,
         button('Look up again', '', () => post('/api/linkedin/lookup', { name: c.queriedAs || c.name, company: c.company }).then(pollLinkedIn)),
+        button('Watch live', '', () => {
+          li.selected = null;
+          renderLiTable();
+          pollLinkedIn();
+        }),
         button('Remove', 'danger', async () => {
           if (!confirm(`Remove ${c.name} from the contact book?`)) return;
           await api(`/api/linkedin/contacts/${c.id}`, { method: 'DELETE' });
@@ -2291,6 +2296,15 @@ function selectContact(id) {
     }
   }
 
+  if (c.candidates?.length) {
+    parts.push(
+      el('div', { className: 'answer' }, [
+        el('h4', { textContent: `What the search turned up (${c.candidates.length})` }),
+        ...c.candidates.map((cand, i) => candidateCard(cand, i + 1)),
+      ])
+    );
+  }
+
   // Relationship strength and a place for what you know about them.
   const strength = el('input', {
     type: 'range',
@@ -2335,6 +2349,146 @@ function selectContact(id) {
   $('#li-detail').replaceChildren(...parts);
 }
 
+
+/** One scraped search result, scored, as the agent saw it. */
+function candidateCard(c, rank) {
+  const pct = Math.round((c.confidence ?? 0) * 100);
+  const verdict = pct >= 90 ? 'match' : 'below bar';
+  return el('div', { className: 'cand' + (pct >= 90 ? ' hit' : '') }, [
+    el('div', { className: 'cand-head' }, [
+      el('span', { className: 'cand-rank', textContent: `#${rank}` }),
+      c.url
+        ? el('a', { href: c.url, target: '_blank', rel: 'noreferrer', textContent: c.name || '(no name)' })
+        : el('span', { textContent: c.name || '(no name)' }),
+      c.degree ? el('span', { className: `badge deg-${c.degree}`, textContent: c.degree }) : null,
+      el('span', { className: 'cand-score' + (pct >= 90 ? ' good' : ''), textContent: `${pct}% ${verdict}` }),
+    ]),
+    c.headline ? el('div', { className: 'cand-line', textContent: c.headline }) : null,
+    c.company && c.company !== c.headline ? el('div', { className: 'cand-line muted', textContent: c.company }) : null,
+    el('div', {
+      className: 'muted small',
+      textContent:
+        `name ${Math.round((c.nameScore ?? 0) * 100)}%` +
+        (c.companyScore === null || c.companyScore === undefined
+          ? ', no company to check'
+          : `, company ${Math.round(c.companyScore * 100)}%`),
+    }),
+  ]);
+}
+
+/** The right pane while the agent is working: what it is doing, and what it reads. */
+function renderActivity(q) {
+  const events = q.activity || [];
+  const pane = $('#li-detail');
+
+  if (!events.length) {
+    pane.replaceChildren(
+      el('div', { className: 'detail-head' }, [
+        el('h2', { textContent: q.running ? 'Working…' : 'Live activity' }),
+        el('div', {
+          className: 'meta',
+          textContent: q.running
+            ? 'Watching the agent.'
+            : 'Queue a lookup and what the agent finds will appear here. Select a contact to see its record.',
+        }),
+      ])
+    );
+    return;
+  }
+
+  const nodes = [];
+  const start = events.find((e) => e.type === 'start');
+  nodes.push(
+    el('div', { className: 'detail-head' }, [
+      el('h2', {}, [
+        q.running ? el('i', { className: 'spinner' }) : null,
+        document.createTextNode(start ? start.name : 'Live activity'),
+      ]),
+      el('div', {
+        className: 'meta',
+        textContent: start?.company ? `Searching as “${start.name} ${start.company}”` : 'Live activity',
+      }),
+      li.selected
+        ? el('div', { className: 'actions' }, [button('Back to contact', '', () => selectContact(li.selected))])
+        : null,
+    ])
+  );
+
+  for (const e of events) {
+    if (e.type === 'start') continue;
+
+    if (e.type === 'search') {
+      nodes.push(step('Searching LinkedIn', `“${[e.query.name, e.query.company].filter(Boolean).join(' ')}”`, e.t));
+    } else if (e.type === 'results') {
+      nodes.push(
+        step(
+          `Read ${e.count} result${e.count === 1 ? '' : 's'}`,
+          e.count ? `Top ${Math.min(3, e.top.length)}, scored against the ${Math.round((e.threshold ?? 0.9) * 100)}% bar:` : 'Nothing came back.',
+          e.t,
+          e.top.map((c, i) => candidateCard(c, i + 1))
+        )
+      );
+    } else if (e.type === 'rejected') {
+      nodes.push(step('No confident match', e.reason, e.t, [], 'bad'));
+    } else if (e.type === 'opening') {
+      nodes.push(step('Opening the profile', e.name, e.t));
+    } else if (e.type === 'profile') {
+      const p = e.profile;
+      nodes.push(
+        step(
+          'Read the profile',
+          '',
+          e.t,
+          [
+            el('div', { className: 'cand' }, [
+              el('div', { className: 'cand-head' }, [
+                el('a', { href: p.url, target: '_blank', rel: 'noreferrer', textContent: p.name || '(no name)' }),
+                p.degree ? el('span', { className: `badge deg-${p.degree}`, textContent: p.degree }) : null,
+              ]),
+              p.headline ? el('div', { className: 'cand-line', textContent: p.headline }) : null,
+              p.company ? el('div', { className: 'cand-line muted', textContent: p.company }) : null,
+            ]),
+          ],
+          'good'
+        )
+      );
+    } else if (e.type === 'shared-start') {
+      nodes.push(step('Following the shared connections', '', e.t));
+    } else if (e.type === 'shared') {
+      nodes.push(
+        step(
+          `${e.count} path${e.count === 1 ? '' : 's'} in`,
+          e.count ? 'People you could be introduced through:' : 'None listed.',
+          e.t,
+          [
+            el(
+              'div',
+              { className: 'cites' },
+              e.via.map((v) => el('a', { href: v.url, target: '_blank', rel: 'noreferrer', textContent: v.name }))
+            ),
+          ]
+        )
+      );
+    } else if (e.type === 'error') {
+      nodes.push(step('Stopped', e.message, e.t, [], 'bad'));
+    }
+  }
+
+  pane.replaceChildren(...nodes.filter(Boolean));
+}
+
+/** One line of the activity trail, optionally with content underneath. */
+function step(title, detail, t, extra = [], tone = '') {
+  return el('div', { className: 'answer act ' + tone }, [
+    el('h4', {}, [
+      document.createTextNode(title),
+      el('span', { className: 'muted small act-time', textContent: clock(t) }),
+    ]),
+    detail ? el('div', { className: 'body small', textContent: detail }) : null,
+    ...extra,
+  ]);
+}
+
 let liPolling = false;
 async function pollLinkedIn() {
   if (liPolling || parseHash().view !== 'linkedin') return;
@@ -2358,7 +2512,15 @@ async function pollLinkedIn() {
 
     await liSession();
     await loadContacts();
-    if (li.selected && !document.activeElement?.closest?.('#li-detail')) selectContact(li.selected);
+
+    // The pane shows the work while it is happening, and the selected contact
+    // the rest of the time — unless you are typing in it.
+    const busy = document.activeElement?.closest?.('#li-detail');
+    if (!busy) {
+      if (q.running || (!li.selected && (q.activity || []).length)) renderActivity(q);
+      else if (li.selected) selectContact(li.selected);
+      else renderActivity(q);
+    }
   } catch {
     /* next tick */
   } finally {
