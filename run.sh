@@ -66,8 +66,15 @@ start() {
     fi
   done
 
+  # Install when there is nothing there, and also when the lockfile has moved
+  # ahead of what is installed — a pull that adds a dependency leaves
+  # node_modules present but stale, which fails at import time.
   if [ ! -d "$ROOT/node_modules" ]; then
     echo "Installing dependencies…"
+    (cd "$ROOT" && npm install --no-audit --no-fund)
+  elif [ "$ROOT/package-lock.json" -nt "$ROOT/node_modules/.package-lock.json" ] ||
+       [ "$ROOT/package.json" -nt "$ROOT/node_modules/.package-lock.json" ]; then
+    echo "Dependencies changed since the last install; updating…"
     (cd "$ROOT" && npm install --no-audit --no-fund)
   fi
 
