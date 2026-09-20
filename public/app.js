@@ -95,12 +95,17 @@ async function route() {
     state.anchor = null;
     $('#search').value = '';
     $('#detail').replaceChildren(el('p', { className: 'muted pad', textContent: 'Select a row to see its answers.' }));
+    const restored = restoreFilters();
     try {
       await Promise.all([loadInvestors(), loadPlaybook()]);
     } catch (err) {
       alert(err.message);
       location.hash = '#/lists';
       return;
+    }
+    // Say so, rather than leaving a short list looking like a short list.
+    if (restored && isFiltered()) {
+      toast(`Filters restored — ${visibleRows().length} of ${state.investors.rows.length} rows`);
     }
   }
   if (!listId) state.listId = null;
@@ -428,6 +433,45 @@ function filterGroup(label, chips, onRemove) {
   return el('div', { className: 'filter-group' }, [head, el('div', { className: 'chips' }, chips)]);
 }
 
+// Filters are a view preference, kept per list in this browser rather than
+// on the list itself — two people looking at the same list want their own.
+const filtersKey = () => `filters:${state.listId}`;
+
+function saveFilters() {
+  if (!state.listId) return;
+  try {
+    const values = {};
+    for (const [col, set] of Object.entries(state.valueFilters)) if (set.size) values[col] = [...set];
+    const active = state.filter || state.statusFilter.size || Object.keys(values).length;
+    if (active) {
+      localStorage.setItem(
+        filtersKey(),
+        JSON.stringify({ text: state.filter, status: [...state.statusFilter], values })
+      );
+    } else {
+      localStorage.removeItem(filtersKey());
+    }
+  } catch {
+    /* private window; filters just will not persist */
+  }
+}
+
+/** Put back what was in force last time this list was open. */
+function restoreFilters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(filtersKey()) || 'null');
+    if (!saved) return false;
+    state.filter = saved.text || '';
+    $('#search').value = state.filter;
+    state.statusFilter = new Set(saved.status || []);
+    state.valueFilters = {};
+    for (const [col, vals] of Object.entries(saved.values || {})) state.valueFilters[col] = new Set(vals);
+    return isFiltered();
+  } catch {
+    return false;
+  }
+}
+
 /** How many rows survive every filter together, the search box included. */
 function updateFilterCount() {
   const count = $('#filter-count');
@@ -490,6 +534,7 @@ function renderFilters() {
           chip.addEventListener('click', () => {
             const set = (state.valueFilters[col] ||= new Set());
             set.has(v) ? set.delete(v) : set.add(v);
+            saveFilters();
             renderFilters();
             renderTable();
           });
@@ -497,6 +542,7 @@ function renderFilters() {
         }),
         () => {
           delete state.valueFilters[col];
+          saveFilters();
           patchField(col, { filter: false });
         }
       )
@@ -543,6 +589,9 @@ $('#add-filter').addEventListener('change', (e) => {
 $('#clear-filters').addEventListener('click', () => {
   state.valueFilters = {};
   state.statusFilter = new Set();
+  state.filter = '';
+  $('#search').value = '';
+  saveFilters();
   renderFilters();
   renderTable();
 });
@@ -1146,6 +1195,7 @@ function button(text, cls, onClick) {
 
 $('#search').addEventListener('input', (e) => {
   state.filter = e.target.value;
+  saveFilters();
   updateFilterCount();
   renderTable();
 });

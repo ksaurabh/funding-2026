@@ -98,6 +98,13 @@ The right of the bar's header always shows how many rows survive **all** the
 filters together, the search box included — `37 of 529 rows match` — and it
 stays visible when the bar is collapsed.
 
+Filters are remembered **per list**: leave and come back and the same ones are
+in force, with the search box repopulated. Returning to a filtered list says
+so — *"Filters restored — 37 of 529 rows"* — so a short list never looks like
+a short list. **Clear filters** clears the saved ones too. They live in the
+browser rather than on the list, being a view preference rather than
+something about the data.
+
 You choose what is worth filtering by. Filtering only reads, so **any** column
 can go on the bar — it does not have to be editable or a dropdown. Tick
 **Filter** next to a column in **Columns…**, or use **+ Add filter** on the bar
