@@ -2,6 +2,7 @@
 import crypto from 'node:crypto';
 import { read, write } from '../store.js';
 import * as agent from './agent.js';
+import * as network from './network.js';
 
 const LAST_KEY = 'linkedin-last';
 
@@ -122,6 +123,8 @@ export function enqueue(items) {
     .map((i) => ({
       name: String(i.name || '').trim(),
       company: String(i.company || '').trim(),
+      // A known profile address skips the search entirely.
+      url: String(i.url || '').trim() || null,
       // Set when re-running a contact, so the result updates that row.
       contactId: i.contactId || null,
     }))
@@ -133,6 +136,7 @@ export function enqueue(items) {
       id: item.contactId || undefined,
       queriedAs: item.name,
       queriedCompany: item.company,
+      url: item.url || undefined,
       name: item.name,
       company: item.company,
       status: 'queued',
@@ -196,7 +200,11 @@ async function drain() {
       }
       const item = queue.shift();
       current = item;
-      note(`Looking up ${item.name}${item.company ? ` · ${item.company}` : ''}…`);
+      note(
+        `Looking up ${item.name}` +
+          (item.url ? ' · by profile link' : item.company ? ` · ${item.company}` : '') +
+          '…'
+      );
       write(LAST_KEY, { name: item.name, company: item.company, at: new Date().toISOString() });
       const startedAt = Date.now();
       // Each lookup gets its own slate; the previous one stays on the contact.
@@ -274,6 +282,16 @@ async function drain() {
             candidates: result.candidates || [],
             shots: result.shots || [],
           });
+          // A lookup started from someone in your network refreshes them.
+          if (item.url) {
+            network.refreshByUrl(item.url, {
+              name: p.name,
+              headline: p.headline,
+              company: p.company,
+              degree: p.degree,
+            });
+          }
+
           note(
             `✓ ${p.name} — ${p.degree || 'degree unknown'}` +
               (p.via.length ? `, ${p.via.length} shared connection${p.via.length === 1 ? '' : 's'}` : '') +

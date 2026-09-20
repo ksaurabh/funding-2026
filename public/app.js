@@ -3177,6 +3177,8 @@ function renderNetwork() {
     (nw.picked.size ? ` · ${nw.picked.size} selected` : '');
   $('#nw-delete').classList.toggle('hidden', !nw.picked.size);
   $('#nw-delete').textContent = `Remove ${nw.picked.size} selected`;
+  $('#nw-lookup').classList.toggle('hidden', !nw.picked.size);
+  $('#nw-lookup').textContent = `Look up ${nw.picked.size} on LinkedIn`;
   $('#nw-sort').value = nw.sort;
 
   // Strength filter, with counts.
@@ -3208,6 +3210,15 @@ function renderNetwork() {
       : null
   );
 
+  const allTicked = rows.length > 0 && rows.every((p) => nw.picked.has(p.id));
+  const someTicked = !allTicked && rows.some((p) => nw.picked.has(p.id));
+  const tickAll = el('input', { type: 'checkbox', checked: allTicked, title: 'Select all shown' });
+  tickAll.indeterminate = someTicked;
+  tickAll.addEventListener('change', () => {
+    for (const p of rows) (tickAll.checked ? nw.picked.add(p.id) : nw.picked.delete(p.id));
+    renderNetwork();
+  });
+
   if (!nw.people.length) {
     $('#nw-list').replaceChildren(
       el('p', {
@@ -3221,6 +3232,13 @@ function renderNetwork() {
   }
 
   $('#nw-list').replaceChildren(
+    el('div', { className: 'nw-row nw-head' }, [
+      tickAll,
+      el('span', { className: 'muted small', textContent: 'Rank' }),
+      el('span', { className: 'muted small', textContent: 'Person' }),
+      el('span', { className: 'muted small', textContent: 'Strength · paths' }),
+      el('span', { className: 'muted small', textContent: 'Notes' }),
+    ]),
     ...rows.map((p) => {
       const tick = el('input', { type: 'checkbox', checked: nw.picked.has(p.id) });
       tick.addEventListener('change', () => {
@@ -3247,6 +3265,12 @@ function renderNetwork() {
         personCard(p),
         el('div', { className: 'nw-meta' }, [
           stars(p.strength || 0, (v) => patchPerson(p.id, { strength: v })),
+          p.degree && p.degree !== '1st'
+            ? el('div', {
+                className: 'muted small warn',
+                textContent: `LinkedIn says ${p.degree}, not a direct connection`,
+              })
+            : null,
           (p.sources || []).length
             ? el('div', { className: 'muted small' }, [
                 p.sources.length > 1
@@ -3269,6 +3293,39 @@ $('#nw-search').addEventListener('input', (e) => {
 $('#nw-sort').addEventListener('change', (e) => {
   nw.sort = e.target.value;
   renderNetwork();
+});
+
+// The people here have known profiles, so a lookup goes straight to the
+// profile: it confirms the degree and refreshes their title and company.
+$('#nw-lookup').addEventListener('click', async () => {
+  const chosen = nw.people.filter((p) => nw.picked.has(p.id));
+  if (!chosen.length) return;
+
+  const withUrl = chosen.filter((p) => p.url);
+  if (!withUrl.length) return alert('None of those have a LinkedIn address on file to look up.');
+
+  const skipped = chosen.length - withUrl.length;
+  const mins = Math.max(1, Math.round((withUrl.length * 12) / 60));
+  if (
+    !confirm(
+      `Look up ${withUrl.length} ${withUrl.length === 1 ? 'person' : 'people'} on LinkedIn?` +
+        (skipped ? ` (${skipped} have no profile link and will be skipped.)` : '') +
+        `\n\nOne at a time, paced — roughly ${mins} minute${mins === 1 ? '' : 's'}.`
+    )
+  ) {
+    return;
+  }
+
+  try {
+    await post('/api/linkedin/lookup', {
+      people: withUrl.map((p) => ({ name: p.name, url: p.url, company: p.headline || '' })),
+    });
+  } catch (err) {
+    return alert(err.message);
+  }
+  nw.picked.clear();
+  renderNetwork();
+  if (confirm('Queued. Watch them on the LinkedIn page?')) location.hash = '#/linkedin';
 });
 
 $('#nw-delete').addEventListener('click', async () => {

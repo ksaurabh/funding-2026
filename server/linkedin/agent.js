@@ -504,10 +504,14 @@ async function readSharedConnections() {
  * Find one person. Returns what was found and how sure we are; the caller
  * decides what to store. Never guesses past the confidence threshold.
  */
-export async function findPerson({ name, company, threshold = 0.9, onEvent = () => {} }) {
+export async function findPerson({ name, company, url, threshold = 0.9, onEvent = () => {} }) {
   if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
   const s = await status();
   if (!s.loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
+
+  // Given the profile itself, there is nothing to search for or be unsure
+  // about — go straight there.
+  if (url) return openKnownProfile({ url, name, company, onEvent });
 
   onEvent({ type: 'search', query: { name, company } });
   const candidates = await searchPeople(name, company);
@@ -656,6 +660,66 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
       via,
       mutualText: best.mutual?.text || mutualPage?.text || null,
       // Where the connections were read from, and the saved copy of it.
+      mutualPage,
+    },
+  };
+}
+
+/**
+ * Look someone up by their profile address rather than by name. Used for the
+ * people already in your network, where the profile is known: no search, no
+ * confidence to weigh, and no chance of landing on a namesake.
+ */
+async function openKnownProfile({ url, name, company, onEvent }) {
+  const shots = [];
+  const shot = async (label) => {
+    const cap = await capture(label);
+    if (cap) {
+      shots.push(cap);
+      onEvent({ type: 'shot', ...cap });
+    }
+    return cap;
+  };
+
+  onEvent({ type: 'direct', url, name });
+  const profile = await readProfile(url);
+  await shot('Profile');
+  const degree = profile.degree || null;
+  onEvent({ type: 'profile', profile: { ...profile, degree } });
+
+  let via = [];
+  let mutualPage = null;
+  if (profile.mutual) {
+    onEvent({ type: 'mutual-found', text: profile.mutual.text, url: profile.mutual.url });
+    const landed = await openMutuals(profile.mutual, (p) => onEvent({ type: 'shared-page', ...p, from: 'profile' }));
+    via = landed.via;
+    if (landed.opened) {
+      const cap = await shot('Mutual connections');
+      mutualPage = {
+        link: profile.mutual.url,
+        text: profile.mutual.text,
+        pageUrl: landed.url,
+        html: cap?.html || null,
+        claimed: claimedMutuals(profile.mutual.text),
+        pages: landed.pages || 1,
+      };
+      onEvent({ type: 'shared', count: via.length, via, from: 'profile', ...mutualPage });
+    }
+  }
+
+  return {
+    found: true,
+    confidence: 1, // the profile was named, not guessed at
+    candidates: [],
+    shots,
+    person: {
+      name: profile.name || name,
+      company: profile.company || company || '',
+      headline: profile.headline,
+      url: profile.url || url,
+      degree,
+      via,
+      mutualText: profile.mutual?.text || null,
       mutualPage,
     },
   };

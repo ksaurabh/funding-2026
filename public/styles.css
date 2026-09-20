@@ -784,3 +784,7 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 
 #li-table .missing { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 500; }
 #li-table .missing.none { color: var(--muted); font-weight: 400; }
+
+.nw-row.nw-head { border-bottom: 1px solid var(--line); padding-bottom: 5px; }
+.nw-row.nw-head span { font-weight: 600; }
+.muted.small.warn { color: var(--err); }

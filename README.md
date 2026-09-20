@@ -321,6 +321,15 @@ Each person carries two things you set:
 - **Rank**, a plain number — the order you would ask in. **Renumber 1…n**
   closes the gaps that accumulate, in whatever order is on screen.
 
+Tick people here and **Look up N on LinkedIn** runs them through the agent.
+Because their profile address is already known, this skips the search
+entirely — no name matching, no confidence to weigh, no chance of landing on
+a namesake — going straight to the profile to confirm the connection degree
+and pick up their current title and company. What it learns is folded back
+into the entry; your rank, strength and notes are never touched. Anyone who
+turns out not to be a first-degree connection after all is flagged on their
+row.
+
 The list filters by strength (including *Unrated*) and by text, and sorts by
 rank, reach, strength, name or when they were added. Sorting by rank puts unranked
 people at the bottom rather than treating them as zero. **Download CSV**

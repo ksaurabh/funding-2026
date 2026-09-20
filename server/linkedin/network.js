@@ -59,6 +59,30 @@ export function add(people, source) {
   return { added, merged, total: list.length };
 }
 
+/**
+ * Fold what a lookup learned back into the network entry: their real title,
+ * photo and confirmed degree. Rank, strength and notes are yours and are
+ * never touched.
+ */
+export function refreshByUrl(url, fields) {
+  if (!url) return null;
+  const list = all();
+  const k = keyOf(url, '');
+  const p = list.find((x) => keyOf(x.url, x.name) === k);
+  if (!p) return null;
+
+  if (fields.name) p.name = fields.name;
+  if (fields.headline) p.headline = fields.headline;
+  if (fields.company) p.company = fields.company;
+  if (fields.photo) p.photo = fields.photo;
+  if (fields.degree) p.degree = fields.degree;
+  p.checkedAt = new Date().toISOString();
+  p.updatedAt = p.checkedAt;
+
+  write(KEY, list);
+  return p;
+}
+
 export function patch(id, fields) {
   const list = all();
   const p = list.find((x) => x.id === id);
