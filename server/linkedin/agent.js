@@ -11,7 +11,7 @@ import crypto from 'node:crypto';
 import { chromium } from 'playwright-core';
 import { DATA_DIR } from '../store.js';
 import { SELECTORS, findOne, findAll, textOf } from './selectors.js';
-import { extractPeopleInPage } from './extract.js';
+import { extractPeopleInPage, extractProfileInPage } from './extract.js';
 import { pickBest } from './match.js';
 
 const PROFILE_DIR = path.join(DATA_DIR, 'linkedin-profile');
@@ -358,14 +358,26 @@ async function collectPeopleCards(scope = page) {
 async function readProfile(url) {
   await page.goto(url, { waitUntil: 'domcontentloaded' });
   await wait(PACE.afterNavigation);
-  const body = ((await page.textContent('body')) || '').slice(0, 4000);
-  return {
-    url: page.url().split('?')[0],
-    name: await textOf(page, SELECTORS.profileName),
-    headline: await textOf(page, SELECTORS.profileHeadline),
-    company: await textOf(page, SELECTORS.profileCompany),
-    degree: readDegree(await textOf(page, SELECTORS.profileDegree)) || readDegree(body),
-  };
+
+  let read = null;
+  try {
+    read = await page.evaluate(extractProfileInPage);
+  } catch {
+    read = null;
+  }
+
+  // Fall back to the class-name selectors if the top card could not be read.
+  if (!read?.name) {
+    read = {
+      name: await textOf(page, SELECTORS.profileName),
+      headline: await textOf(page, SELECTORS.profileHeadline),
+      company: await textOf(page, SELECTORS.profileCompany),
+      degree: readDegree(await textOf(page, SELECTORS.profileDegree)),
+      mutual: null,
+    };
+  }
+
+  return { ...read, url: page.url().split('?')[0] };
 }
 
 /** For a 2nd-degree contact, who do we know in common? */
@@ -484,11 +496,11 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
   const degree = profile.degree || best.degree || null;
   onEvent({ type: 'profile', profile: { ...profile, degree } });
 
-  // No link on the card but the profile says 2nd degree: try the profile's own
-  // shared-connections route instead.
-  if (!via.length && degree === '2nd') {
+  // No link on the card but the profile has one (or says 2nd degree): try the
+  // profile's own shared-connections route instead.
+  if (!via.length && (profile.mutual || degree === '2nd')) {
     onEvent({ type: 'shared-start' });
-    via = await readSharedConnections();
+    via = profile.mutual ? (await openMutuals(profile.mutual)).via : await readSharedConnections();
     await shot('Mutual connections');
     onEvent({ type: 'shared', count: via.length, via, from: 'profile' });
   }

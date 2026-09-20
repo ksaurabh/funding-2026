@@ -54,7 +54,13 @@ export const SELECTORS = {
   // and 10 other mutual connections" — matched on that trailing text rather
   // than a class, since the wording is the stable part.
   mutualText: /mutual connections?$/i,
-  sharedLink: ['a[href*="facetConnectionOf"]', 'a[href*="/search/results/people/?facetNetwork"]'],
+  // Real shared-connection links use connectionOf, not facetConnectionOf.
+  sharedLink: [
+    'a[href*="connectionOf"]',
+    'a[href*="SHARED_CONNECTIONS_CANNED_SEARCH"]',
+    'a[href*="MEMBER_PROFILE_CANNED_SEARCH"]',
+    'a[href*="facetConnectionOf"]',
+  ],
   // Where an overlay-style mutual-connections list lands, if it does not navigate.
   overlay: ['div[role="dialog"]', '.artdeco-modal', '.artdeco-modal__content'],
   sharedCard: [
