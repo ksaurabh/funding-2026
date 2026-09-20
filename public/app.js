@@ -96,6 +96,8 @@ async function route() {
     t.href = `#/list/${listId}/${t.dataset.view}`;
     t.classList.toggle('active', t.dataset.view === view);
   }
+  // Home is the lists index, whether or not a list is open.
+  $('#home-tab').classList.toggle('active', view === 'lists');
   $('#settings-tab').classList.toggle('active', view === 'settings');
   $('#playbooks-tab').classList.toggle('active', view === 'playbooks');
   $('#linkedin-tab').classList.toggle('active', view === 'linkedin');
