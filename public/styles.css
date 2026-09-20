@@ -719,3 +719,5 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 }
 .verdict.good { background: #f0f7f2; border-color: #bfdcca; color: var(--ok); }
 .verdict.bad { background: #fdf1f0; border-color: #eec6c2; color: var(--err); }
+
+#li-table td.when { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }

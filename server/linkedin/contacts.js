@@ -13,19 +13,41 @@ export const all = () => read(KEY, []);
 /** The person most recently searched for, so it can be repeated in one click. */
 export const lastSearch = () => read(LAST_KEY, null);
 
+/**
+ * Find the contact a result belongs to. Identity is, in order: the contact
+ * being re-run, the LinkedIn profile itself, what was typed into the search,
+ * and only then the name and company as read back — which drift between runs,
+ * because the profile's own wording is not what you searched for.
+ */
+function indexOfContact(list, record) {
+  const byId = record.id ? list.findIndex((c) => c.id === record.id) : -1;
+  if (byId >= 0) return byId;
+
+  if (record.url) {
+    const byUrl = list.findIndex((c) => c.url && c.url === record.url);
+    if (byUrl >= 0) return byUrl;
+  }
+
+  const asked = keyOf(record.queriedAs || record.name, record.queriedCompany ?? record.company);
+  const byQuery = list.findIndex((c) => keyOf(c.queriedAs || c.name, c.queriedCompany ?? c.company) === asked);
+  if (byQuery >= 0) return byQuery;
+
+  return list.findIndex((c) => keyOf(c.name, c.company) === keyOf(record.name, record.company));
+}
+
 export function upsert(record) {
   const list = all();
-  const i = list.findIndex(
-    (c) => c.id === record.id || keyOf(c.name, c.company) === keyOf(record.name, record.company)
-  );
+  const i = indexOfContact(list, record);
   const merged = {
-    id: record.id || (i >= 0 ? list[i].id : crypto.randomUUID().slice(0, 8)),
     strength: null,
     notes: '',
     ...(i >= 0 ? list[i] : {}),
     ...record,
     updatedAt: new Date().toISOString(),
   };
+  // After the spreads: a record carrying `id: undefined` would otherwise
+  // erase the id it is meant to update.
+  merged.id = record.id || (i >= 0 ? list[i].id : crypto.randomUUID().slice(0, 8));
   if (i >= 0) list[i] = merged;
   else list.push(merged);
   write(KEY, list);
@@ -83,7 +105,12 @@ export const queueStatus = () => ({
 
 export function enqueue(items) {
   const added = items
-    .map((i) => ({ name: String(i.name || '').trim(), company: String(i.company || '').trim() }))
+    .map((i) => ({
+      name: String(i.name || '').trim(),
+      company: String(i.company || '').trim(),
+      // Set when re-running a contact, so the result updates that row.
+      contactId: i.contactId || null,
+    }))
     .filter((i) => i.name);
   queue.push(...added);
   if (added.length) note(`Queued ${added.length} lookup${added.length === 1 ? '' : 's'}.`);
@@ -142,7 +169,8 @@ async function drain() {
       const item = queue.shift();
       current = item;
       note(`Looking up ${item.name}${item.company ? ` · ${item.company}` : ''}…`);
-      write(LAST_KEY, { ...item, at: new Date().toISOString() });
+      write(LAST_KEY, { name: item.name, company: item.company, at: new Date().toISOString() });
+      const startedAt = Date.now();
       // Each lookup gets its own slate; the previous one stays on the contact.
       activity = [];
       record({ type: 'start', name: item.name, company: item.company });
@@ -151,6 +179,11 @@ async function drain() {
         if (!result.found) {
           note(`✗ ${item.name}: ${result.reason}`);
           upsert({
+            id: item.contactId || undefined,
+            queriedAs: item.name,
+            queriedCompany: item.company,
+            ranAt: new Date().toISOString(),
+            tookMs: Date.now() - startedAt,
             name: item.name,
             company: item.company,
             degree: null,
@@ -167,6 +200,11 @@ async function drain() {
         } else {
           const p = result.person;
           upsert({
+            id: item.contactId || undefined,
+            queriedAs: item.name,
+            queriedCompany: item.company,
+            ranAt: new Date().toISOString(),
+            tookMs: Date.now() - startedAt,
             name: p.name,
             company: p.company || item.company,
             headline: p.headline,
@@ -178,7 +216,6 @@ async function drain() {
             confidence: result.confidence,
             status: 'found',
             reason: null,
-            queriedAs: item.name,
             candidates: result.candidates || [],
             shots: result.shots || [],
           });

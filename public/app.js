@@ -2186,6 +2186,15 @@ function liVisible() {
   );
 }
 
+/** Today shows the clock; anything older shows the date too. */
+function lookupTime(iso) {
+  const d = new Date(iso);
+  const today = new Date().toDateString() === d.toDateString();
+  return today
+    ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 function renderLiTable() {
   const rows = liVisible();
   $('#li-table thead').replaceChildren(
@@ -2195,6 +2204,7 @@ function renderLiTable() {
       el('th', { textContent: 'Connection' }),
       el('th', { textContent: 'Via' }),
       el('th', { textContent: 'Strength' }),
+      el('th', { textContent: 'Lookup time' }),
     ])
   );
 
@@ -2220,12 +2230,20 @@ function renderLiTable() {
         c.strength = strength.value ? Number(strength.value) : null;
       });
 
+      const when = c.ranAt || c.updatedAt;
       const tr = el('tr', { className: c.id === li.selected ? 'selected' : '' }, [
         el('td', { textContent: c.name, title: c.headline || '' }),
         el('td', { textContent: c.company || '', title: c.company || '' }),
         el('td', {}, degree),
         el('td', { textContent: c.via?.length ? String(c.via.length) : '' }),
         el('td', {}, strength),
+        el('td', {
+          className: 'when',
+          textContent: when ? lookupTime(when) : '',
+          title: when
+            ? new Date(when).toLocaleString() + (c.tookMs ? ` · took ${(c.tookMs / 1000).toFixed(1)}s` : '')
+            : '',
+        }),
       ]);
       tr.addEventListener('click', () => selectContact(c.id));
       return tr;
@@ -2247,7 +2265,15 @@ function selectContact(id) {
         c.url
           ? el('a', { className: 'btn primary', href: c.url, target: '_blank', rel: 'noreferrer', textContent: 'Open on LinkedIn' })
           : null,
-        button('Look up again', '', () => post('/api/linkedin/lookup', { name: c.queriedAs || c.name, company: c.company }).then(pollLinkedIn)),
+        button('Look up again', '', () =>
+          post('/api/linkedin/lookup', {
+            // Tied to this contact, so the result replaces this row rather
+            // than filing a near-duplicate beside it.
+            contactId: c.id,
+            name: c.queriedAs || c.name,
+            company: c.queriedCompany ?? c.company,
+          }).then(pollLinkedIn)
+        ),
         button('Watch live', '', () => {
           li.selected = null;
           renderLiTable();

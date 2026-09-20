@@ -328,6 +328,13 @@ record; **Watch live** goes back to the running commentary.
   trail says so — those are someone else's connections.
 - **3rd** — recorded as out of reach for now.
 
+The table lists each contact once, with a **Lookup time** column showing when
+it last ran — the clock for today, the date for anything older, and the exact
+time plus how long it took on hover. Looking someone up again updates their
+row rather than adding another: a result is matched to an existing contact by
+the contact being re-run, then its LinkedIn URL, then what was typed into the
+search. Your relationship score and notes survive a re-run.
+
 Selecting a contact walks through the same reasoning in order: **what the
 search turned up**, each result scored, followed by the **verdict** — which
 one cleared the 90% bar, or that none did; then the **connection degree** in
