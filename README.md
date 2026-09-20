@@ -375,6 +375,11 @@ too, so a decision can be reviewed later — particularly useful for a "not
 found", where the near-misses explain why. Selecting a contact shows its
 record; **Watch live** goes back to the running commentary.
 
+If the profile page yields no degree, the search result usually still states
+one, and that card is kept — so the contact shows **Use 1st from the search
+result** and records it in a click, marked as taken from there. New lookups
+fall back to the card automatically.
+
 - **1st degree** — you already know them, so their mutual connections are not
   enumerated: the path through someone else is moot, and walking it is the
   most expensive thing the agent does. The link and the count are recorded,

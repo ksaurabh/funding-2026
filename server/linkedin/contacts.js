@@ -352,6 +352,12 @@ async function drain() {
           });
         } else {
           const p = result.person;
+
+          // The profile page does not always yield a degree, but the search
+          // result card usually states one — and it is already on record.
+          const fromCard = (result.candidates || []).find((x) => (x.confidence ?? 0) >= 0.9 && x.degree)?.degree;
+          const degree = p.degree || fromCard || null;
+
           upsert({
             id: item.contactId || undefined,
             queriedAs: item.name,
@@ -362,7 +368,8 @@ async function drain() {
             company: p.company || item.company,
             headline: p.headline,
             url: p.url,
-            degree: p.degree,
+            degree,
+            degreeSource: p.degree ? null : fromCard ? 'search result' : null,
             via: p.via,
             mutualText: p.mutualText || null,
             mutualPage: p.mutualPage || null,
@@ -384,7 +391,7 @@ async function drain() {
           }
 
           note(
-            `✓ ${p.name} — ${p.degree || 'degree unknown'}` +
+            `✓ ${p.name} — ${degree || 'degree unknown'}` +
               (p.via.length ? `, ${p.via.length} shared connection${p.via.length === 1 ? '' : 's'}` : '') +
               ` (${Math.round(result.confidence * 100)}% confident)`
           );

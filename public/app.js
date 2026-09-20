@@ -2540,6 +2540,16 @@ $('#li-clear-all').addEventListener('click', () => {
   deleteContacts([], { all: true });
 });
 
+/**
+ * The degree the accepted search result carried. LinkedIn states it on the
+ * result card, and that card is kept — so when the profile page yields
+ * nothing, the answer is usually already on record.
+ */
+function searchDegree(c) {
+  const accepted = (c.candidates || []).find((x) => (x.confidence ?? 0) >= 0.9 && x.degree);
+  return accepted?.degree || null;
+}
+
 function selectContact(id) {
   li.selected = id;
   renderLiTable();
@@ -2635,8 +2645,34 @@ function selectContact(id) {
               ? 'A second-degree connection — one introduction away, through the people below.'
               : c.degree === '3rd'
               ? 'Third degree — no direct path through your network.'
-              : 'The connection degree could not be read from the page.',
+              : 'The profile page did not yield a degree.',
         }),
+        c.degreeSource
+          ? el('div', { className: 'muted small', textContent: `Taken from the ${c.degreeSource}.` })
+          : null,
+        // The search result often says plainly what the profile page did not.
+        !c.degree && searchDegree(c)
+          ? el('div', { className: 'body' }, [
+              el('div', {
+                className: 'muted small',
+                textContent: `The search result for them says ${searchDegree(c)}.`,
+              }),
+              button(`Use ${searchDegree(c)} from the search result`, '', async () => {
+                try {
+                  await api(`/api/linkedin/contacts/${c.id}`, {
+                    method: 'PATCH',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ degree: searchDegree(c) }),
+                  });
+                } catch (err) {
+                  return toast(err.message, 'bad');
+                }
+                toast(`Recorded as a ${searchDegree(c)} connection`, 'good');
+                await loadContacts();
+                selectContact(c.id);
+              }),
+            ])
+          : null,
       ])
     );
 

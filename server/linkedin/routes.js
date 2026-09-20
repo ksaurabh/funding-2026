@@ -116,7 +116,22 @@ linkedinRoutes.post('/lookup-from-list', (req, res) => {
 
 linkedinRoutes.get('/contacts', (_req, res) => res.json(contacts.all()));
 
+const DEGREES = new Set(['1st', '2nd', '3rd']);
+
 linkedinRoutes.patch('/contacts/:id', (req, res) => {
+  // Correcting the degree by hand, when the page did not yield one.
+  if ('degree' in (req.body || {})) {
+    const { degree } = req.body;
+    if (degree !== null && !DEGREES.has(degree)) {
+      return res.status(400).json({ error: 'Degree must be 1st, 2nd, 3rd, or null.' });
+    }
+    const found = contacts.all().find((x) => x.id === req.params.id);
+    if (!found) return res.status(404).json({ error: 'Contact not found.' });
+    return res.json(
+      contacts.upsert({ id: found.id, degree, degreeSource: degree ? 'search result' : null })
+    );
+  }
+
   const c = contacts.patch(req.params.id, req.body || {});
   if (!c) return res.status(404).json({ error: 'Contact not found.' });
   res.json(c);
