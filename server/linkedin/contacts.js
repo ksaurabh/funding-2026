@@ -107,11 +107,38 @@ export function clearQueue() {
   return n;
 }
 
+/**
+ * Make sure there is a signed-in browser before the first lookup runs.
+ * Queueing a name is the instruction; opening the window is this job, not
+ * something to be asked about first.
+ */
+async function ensureSession() {
+  let s = await agent.status();
+
+  if (!s.open) {
+    note('Opening the LinkedIn agent window…');
+    s = await agent.openSession();
+  }
+  if (!s.open) return false;
+
+  if (!s.loggedIn) {
+    note('Waiting for you to sign in to LinkedIn in the agent window…');
+    s = await agent.waitForLogin();
+    if (s.loggedIn) note('Signed in — carrying on.');
+  }
+  return !!s.loggedIn;
+}
+
 async function drain() {
   if (running) return;
   running = true;
   try {
     while (queue.length) {
+      // Checked per item: the window can be closed or signed out mid-batch.
+      if (!(await ensureSession())) {
+        note(`Paused — no signed-in LinkedIn session. ${queue.length} lookup${queue.length === 1 ? '' : 's'} waiting.`);
+        break;
+      }
       const item = queue.shift();
       current = item;
       note(`Looking up ${item.name}${item.company ? ` · ${item.company}` : ''}…`);

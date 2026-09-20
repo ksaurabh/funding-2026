@@ -241,8 +241,11 @@ holding each step's full answer.
 A separate section that answers a different question: not "is this investor a
 fit" but "who do I know who can introduce me".
 
-**Start agent session** opens a real Chrome window using your installed
-browser. If you are not signed in to LinkedIn, sign in there yourself — the
+You do not have to start anything: queue a lookup and the agent opens its own
+Chrome window, signs itself in if the session is still good, and gets on with
+it. **Start agent session** is there for when you want the window up front.
+
+The window is a real Chrome, your installed one. If you are not signed in to LinkedIn, sign in there yourself — the
 app never handles your credentials — and the session is kept in
 `data/linkedin-profile/` so you only do it once.
 
@@ -254,8 +257,9 @@ answer came from the cookie or the page. The window stays visible the
 whole time; you can watch what it does and take over at any point.
 
 Give it a **name and company**, or point it at a list and pick the columns
-holding those, and it queues the lookups. You can queue names before starting
-the session — they wait, and run as soon as the agent is signed in.
+holding those, and it queues the lookups. If you are not signed in when the
+first one runs, the agent opens the window and waits for you rather than
+failing the lookup; the queue picks up where it left off once you are in.
 
 The quickest route in is from the list itself. **Find LinkedIn path** on a row
 queues that investor's contact; **Find LinkedIn paths** in the toolbar does the

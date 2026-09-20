@@ -2035,8 +2035,8 @@ function renderLiSession() {
   $('#li-hint').textContent = s.loggedIn
     ? ''
     : s.open
-    ? 'Sign in to LinkedIn in the agent window; queued lookups will start by themselves.'
-    : 'Queue names now — they run once you start the agent session.';
+    ? 'Sign in to LinkedIn in the agent window; queued lookups carry on by themselves.'
+    : 'Queue a name and the agent window opens by itself.';
 }
 
 $('#li-start').addEventListener('click', async () => {
@@ -2080,15 +2080,9 @@ $('#li-recheck').addEventListener('click', async () => {
 $('#li-stop').addEventListener('click', () => liSession('stop'));
 
 async function queueLookup(people) {
+  // The agent opens its own window if it has to — queueing is the instruction.
   await post('/api/linkedin/lookup', Array.isArray(people) ? { people } : people);
   await pollLinkedIn();
-  // Nothing will happen until the browser is up, so offer to bring it up.
-  if (!li.session.loggedIn && confirm('Start the LinkedIn agent session now so these can run?')) {
-    await liSession('start');
-    if (li.session.open && !li.session.loggedIn) await liSession('wait-login');
-    await post('/api/linkedin/queue/resume').catch(() => {});
-    pollLinkedIn();
-  }
 }
 
 $('#li-add').addEventListener('click', async () => {
