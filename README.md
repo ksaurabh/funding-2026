@@ -272,11 +272,15 @@ degree from the page itself.
 It remembers the last person you searched for: **Search again: <name>** sits
 next to the lookup box and repeats that path search in one click.
 
-After each page it reads, it keeps a **screenshot** — the search results, the
-mutual connections, the profile — cached under `data/linkedin-shots/` and
-attached to the contact. They are hidden by default; **Show screenshots**
-reveals them and the choice is remembered. It is the way to check what
-LinkedIn actually showed when a result looks wrong.
+After each page it reads, it keeps a **screenshot and the page's HTML** — the
+search results, the mutual connections, the profile — cached under
+`data/linkedin-shots/` and attached to the contact. Screenshots are hidden by
+default; **Show screenshots** reveals them (the choice is remembered) and each
+one links to the markup behind it. `GET /api/linkedin/cache` lists what is
+cached. The cache keeps its most recent 150 files and prunes the rest.
+
+That pair is what makes a wrong result diagnosable: the screenshot shows what
+LinkedIn displayed, the HTML shows why the agent read it the way it did.
 
 The right-hand pane shows the work as it happens: the search it ran, the **top
 three results it scraped** with each one's name and company score and whether
@@ -302,9 +306,12 @@ know them. **Download CSV** exports the book.
 One lookup runs at a time, paced with pauses between actions — this is meant to
 work at human speed. LinkedIn's terms prohibit automated access and they
 rate-limit and block aggressively, so keep batches small and expect to re-sign
-in periodically. Every LinkedIn-specific selector lives in
-`server/linkedin/selectors.js`: when LinkedIn changes its markup and lookups
-start coming back empty, that one file is what needs updating.
+in periodically. People are read from a page **structurally** — every link to a profile is a
+person, the block around it is their card (`server/linkedin/extract.js`) —
+rather than by LinkedIn's class names, which get renamed. The old class-name
+path in `server/linkedin/selectors.js` is kept as a fallback for anything the
+structural pass misses. When a lookup still comes back empty, the cached HTML
+for that page is the evidence to fix it from.
 
 ## Layout
 

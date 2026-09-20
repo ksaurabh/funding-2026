@@ -135,6 +135,7 @@ async function drain() {
             // Kept so the near-misses can be reviewed later.
             candidates: result.candidates || [],
             shots: result.shots || [],
+            html: result.html || null,
           });
         } else {
           const p = result.person;

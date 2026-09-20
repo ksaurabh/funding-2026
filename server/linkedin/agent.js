@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 import { chromium } from 'playwright-core';
 import { DATA_DIR } from '../store.js';
 import { SELECTORS, findOne, findAll, textOf } from './selectors.js';
+import { extractPeopleInPage } from './extract.js';
 import { pickBest } from './match.js';
 
 const PROFILE_DIR = path.join(DATA_DIR, 'linkedin-profile');
@@ -57,11 +58,53 @@ export const isOpen = () => !!ctx;
 async function capture(label) {
   try {
     fs.mkdirSync(SHOTS_DIR, { recursive: true });
-    const file = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 6)}.png`;
-    await page.screenshot({ path: path.join(SHOTS_DIR, file), fullPage: false });
-    return { label, file, url: page.url() };
+    const stem = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 6)}`;
+    await page.screenshot({ path: path.join(SHOTS_DIR, `${stem}.png`), fullPage: false });
+
+    // The markup as rendered, so a lookup that read the page wrongly can be
+    // worked out afterwards rather than guessed at.
+    let html = null;
+    try {
+      fs.writeFileSync(path.join(SHOTS_DIR, `${stem}.html`), await page.content());
+      html = `${stem}.html`;
+    } catch {
+      /* the picture alone is still useful */
+    }
+
+    prune();
+    return { label, file: `${stem}.png`, html, url: page.url() };
   } catch {
-    return null; // a screenshot is a nicety; never fail a lookup over one
+    return null; // a capture is a nicety; never fail a lookup over one
+  }
+}
+
+const CACHE_LIMIT = 150; // files, roughly the last 25 lookups
+
+/** Keep the cache from growing without bound — LinkedIn pages are large. */
+function prune() {
+  try {
+    const files = fs
+      .readdirSync(SHOTS_DIR)
+      .map((f) => ({ f, t: fs.statSync(path.join(SHOTS_DIR, f)).mtimeMs }))
+      .sort((a, b) => b.t - a.t);
+    for (const { f } of files.slice(CACHE_LIMIT)) fs.rmSync(path.join(SHOTS_DIR, f), { force: true });
+  } catch {
+    /* pruning is housekeeping; never let it break a lookup */
+  }
+}
+
+/** What is in the cache, newest first. */
+export function cachedPages() {
+  try {
+    return fs
+      .readdirSync(SHOTS_DIR)
+      .map((f) => {
+        const st = fs.statSync(path.join(SHOTS_DIR, f));
+        return { file: f, bytes: st.size, at: new Date(st.mtimeMs).toISOString() };
+      })
+      .sort((a, b) => b.at.localeCompare(a.at));
+  } catch {
+    return [];
   }
 }
 
@@ -162,7 +205,28 @@ const readDegree = (text) => {
   return m ? m[1].toLowerCase().replace('3rd+', '3rd') : null;
 };
 
-/** Search people, returning the raw candidate cards. */
+/**
+ * Keep the page for later when something looks wrong — a screenshot shows what
+ * happened, the HTML shows why.
+ */
+async function dumpHtml(tag) {
+  try {
+    fs.mkdirSync(SHOTS_DIR, { recursive: true });
+    const file = `${Date.now().toString(36)}-${tag}.html`;
+    fs.writeFileSync(path.join(SHOTS_DIR, file), await page.content());
+    return file;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Search people and read the result cards.
+ *
+ * Extraction is structural — every profile link is a person, the block around
+ * it is their card — rather than keyed on LinkedIn's class names, which get
+ * renamed. The old selector path runs only if that somehow finds nothing.
+ */
 async function searchPeople(name, company) {
   const q = [name, company].filter(Boolean).join(' ');
   await page.goto(`${BASE}/search/results/people/?keywords=${encodeURIComponent(q)}`, {
@@ -170,6 +234,24 @@ async function searchPeople(name, company) {
   });
   await wait(PACE.afterNavigation);
 
+  let people = [];
+  try {
+    people = await page.evaluate(extractPeopleInPage);
+  } catch {
+    people = [];
+  }
+
+  if (!people.length) people = await searchPeopleBySelector();
+
+  return people.slice(0, 10).map((p) => ({
+    ...p,
+    url: profileUrl(p.url),
+    mutual: p.mutual ? { text: p.mutual.text, url: absolute(p.mutual.url) } : null,
+  }));
+}
+
+/** The original class-name path, kept as a safety net. */
+async function searchPeopleBySelector() {
   const cards = await findAll(page, SELECTORS.resultCard);
   const out = [];
   for (const card of cards.slice(0, 10)) {
@@ -177,8 +259,6 @@ async function searchPeople(name, company) {
     if (!link) continue;
     const href = await link.getAttribute('href');
     if (!href || !href.includes('/in/')) continue;
-    const url = profileUrl(href);
-    if (!url) continue;
 
     const whole = ((await card.textContent()) || '').replace(/\s+/g, ' ').trim();
     out.push({
@@ -187,7 +267,8 @@ async function searchPeople(name, company) {
       headline: await textOf(card, SELECTORS.resultHeadline),
       company: await textOf(card, SELECTORS.resultSubline),
       degree: readDegree(await textOf(card, SELECTORS.resultDegree)) || readDegree(whole),
-      url,
+      url: href,
+      cardText: whole.slice(0, 400),
     });
   }
   return out;
@@ -245,18 +326,31 @@ async function openMutuals(mutual) {
   return overlay ? collectPeopleCards(overlay) : [];
 }
 
-/** Every person listed in the given scope (the page, or an overlay in it). */
+/**
+ * Every person listed on the page. Uses the same structural extraction as the
+ * search results — a mutual-connections list is a people list.
+ */
 async function collectPeopleCards(scope = page) {
-  const cards = await findAll(scope, SELECTORS.sharedCard);
-  const via = [];
-  for (const card of cards.slice(0, 25)) {
-    const a = await findOne(card, SELECTORS.resultLink);
-    if (!a) continue;
-    const href = await a.getAttribute('href');
-    const nm = (await textOf(card, SELECTORS.resultName)) || ((await a.textContent()) || '').trim();
-    if (nm && href?.includes('/in/')) via.push({ name: nm, url: profileUrl(href) });
+  let people = [];
+  try {
+    people = await page.evaluate(extractPeopleInPage);
+  } catch {
+    people = [];
   }
-  return via;
+
+  if (!people.length) {
+    // Fallback: the old class-name path, scoped to an overlay if given one.
+    const cards = await findAll(scope, SELECTORS.sharedCard);
+    for (const card of cards.slice(0, 25)) {
+      const a = await findOne(card, SELECTORS.resultLink);
+      if (!a) continue;
+      const href = await a.getAttribute('href');
+      const nm = (await textOf(card, SELECTORS.resultName)) || ((await a.textContent()) || '').trim();
+      if (nm && href?.includes('/in/')) people.push({ name: nm, url: href });
+    }
+  }
+
+  return people.slice(0, 25).map((p) => ({ name: p.name, url: profileUrl(p.url), headline: p.headline || '' }));
 }
 
 /** Open a profile and read back what it says about itself. */
@@ -300,12 +394,18 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
   if (!candidates.length) {
     const empty = await capture('Search results');
     if (empty) onEvent({ type: 'shot', ...empty });
-    onEvent({ type: 'results', count: 0, top: [] });
+    // Nothing read from a page that may well have shown results: keep the
+    // markup so the extractor can be corrected against the real thing.
+    const html = await dumpHtml('empty-search');
+    onEvent({ type: 'results', count: 0, top: [], html });
     return {
       found: false,
-      reason: 'LinkedIn returned no people for that search.',
+      reason:
+        'Read no people from the results page. If the screenshot shows results, the page markup ' +
+        'has changed — the saved HTML alongside it says how.',
       candidates: [],
       shots: empty ? [empty] : [],
+      html,
     };
   }
 

@@ -2275,6 +2275,17 @@ function selectContact(id) {
       el('div', { className: 'answer' }, [
         el('h4', { textContent: 'No confident match' }),
         el('div', { className: 'body error', textContent: c.reason || 'No match above the confidence bar.' }),
+        c.html
+          ? el('div', { className: 'muted small' }, [
+              document.createTextNode('The page markup was saved: '),
+              el('a', {
+                href: `/api/linkedin/shots/${c.html}`,
+                target: '_blank',
+                rel: 'noreferrer',
+                textContent: c.html,
+              }),
+            ])
+          : null,
       ])
     );
   } else {
@@ -2409,7 +2420,17 @@ function shotBlock(shots) {
       shots.map((sh) =>
         el('figure', { className: 'shot' }, [
           el('img', { src: `/api/linkedin/shots/${sh.file}`, alt: sh.label, loading: 'lazy' }),
-          el('figcaption', { className: 'muted small', textContent: `${sh.label} — ${sh.url || ''}` }),
+          el('figcaption', { className: 'muted small' }, [
+            document.createTextNode(`${sh.label} — ${sh.url || ''} `),
+            sh.html
+              ? el('a', {
+                  href: `/api/linkedin/shots/${sh.html}`,
+                  target: '_blank',
+                  rel: 'noreferrer',
+                  textContent: 'page HTML',
+                })
+              : null,
+          ]),
         ])
       )
     )
