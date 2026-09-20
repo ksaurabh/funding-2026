@@ -2228,6 +2228,22 @@ function liVisible() {
   );
 }
 
+/**
+ * How many of this contact's mutual connections you have not added yet —
+ * what "Add N new to my network" would take.
+ */
+function missingCell(c) {
+  if (!c.via?.length) return el('span', { className: 'muted', textContent: '—' });
+  const n = notYetInNetwork(c.via).length;
+  return el('span', {
+    className: 'missing' + (n ? '' : ' none'),
+    textContent: n ? `${n} of ${c.via.length}` : 'all added',
+    title: n
+      ? `${n} of ${c.via.length} mutual connections are not in your network yet`
+      : 'Every mutual connection is already in your network',
+  });
+}
+
 /** Today shows the clock; anything older shows the date too. */
 function lookupTime(iso) {
   const d = new Date(iso);
@@ -2255,6 +2271,7 @@ function renderLiTable() {
       el('th', { textContent: 'Company' }),
       el('th', { textContent: 'Connection' }),
       el('th', { textContent: 'Via' }),
+      el('th', { textContent: 'Not in network' }),
       el('th', { textContent: 'Strength' }),
       el('th', { textContent: 'Lookup time' }),
     ])
@@ -2326,6 +2343,7 @@ function renderLiTable() {
         el('td', { textContent: c.company || '', title: c.company || '' }),
         el('td', {}, degree),
         el('td', { textContent: c.via?.length ? String(c.via.length) : '' }),
+        el('td', {}, missingCell(c)),
         el('td', {}, strength),
         el('td', {
           className: 'when',

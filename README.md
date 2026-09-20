@@ -370,6 +370,10 @@ Past lookups can be thrown away: tick rows and **Delete selected**, use
 saved HTML cached for a lookup are deleted with it, rather than being left
 behind in the cache.
 
+A **Not in network** column says how many of each contact's mutual
+connections you have not added yet — *"22 of 36"*, or *all added* once there
+is nothing left — which is the same number the bulk button would take.
+
 The table lists each contact once, with a **Lookup time** column showing when
 it last ran — the clock for today, the date for anything older, and the exact
 time plus how long it took on hover. Looking someone up again updates their
