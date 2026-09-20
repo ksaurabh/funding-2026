@@ -273,7 +273,11 @@ carries two more columns: **Connection** — 1st, 2nd or 3rd, matched against
 the LinkedIn contacts by person and company (falling back to the person alone
 when the name is unambiguous) — and **Connected via**, the people who could
 introduce you. A row with no connection established yet shows a **Look up on
-LinkedIn** button in that cell, and one being looked up shows a spinner.
+LinkedIn** button in that cell. Pressing it queues the lookup and leaves you
+where you are — the cell then tracks the agent by itself, showing what it is
+doing (*searching*, *opening the profile*, *mutual connections, page 2*) and
+settling on the degree, with **Connected via** filling in as the pages come
+back.
 
 The quickest route in is from the list itself. **Find LinkedIn path** on a row
 queues that investor's contact; **Find LinkedIn paths** in the toolbar does the

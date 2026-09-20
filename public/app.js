@@ -2076,19 +2076,29 @@ async function queueRowLookups(rows, map) {
     .filter((p) => p.name);
 
   if (!people.length) {
-    return alert(`No name in "${map.nameColumn}" for ${rows.length === 1 ? 'that row' : 'any of those rows'}.`);
+    return toast(
+      `No name in “${map.nameColumn}” for ${rows.length === 1 ? 'that row' : 'any of those rows'}.`,
+      'bad'
+    );
   }
 
   try {
     await post('/api/linkedin/lookup', { people });
   } catch (err) {
-    return alert(err.message);
+    return toast(err.message, 'bad');
   }
 
+  // Stay where you are; the Connection column fills itself in as it runs.
   const who = people.length === 1 ? people[0].name : `${people.length} people`;
-  if (confirm(`Queued ${who} for a LinkedIn path lookup.\n\nOpen the LinkedIn tab?`)) {
-    location.hash = '#/linkedin';
-  }
+  toast(`${who} queued — the Connection column will update as it runs`, 'good');
+  await refreshConnections();
+}
+
+/** Re-read the LinkedIn contacts and repaint the rows that show them. */
+async function refreshConnections() {
+  if (!state.listId) return;
+  await loadLinkedInIndex();
+  if (parseHash().view === 'investors') renderTable();
 }
 
 /** Asked once per list; the answer is saved on the list. */
@@ -3334,8 +3344,24 @@ async function pollLinkedIn() {
   }
 }
 
-setInterval(() => {
-  if (parseHash().view === 'linkedin') pollLinkedIn();
+let liWasBusy = false;
+
+setInterval(async () => {
+  const view = parseHash().view;
+  if (view === 'linkedin') return pollLinkedIn();
+
+  // On a list, the Connection and Connected via columns track the agent
+  // without you having to go and watch it.
+  if (view !== 'investors' || !state.listId || !linkedinMapping()) return;
+  let q;
+  try {
+    q = await api('/api/linkedin/queue');
+  } catch {
+    return;
+  }
+  const busy = !!(q.running || q.pending.length);
+  if (busy || liWasBusy) await refreshConnections();
+  liWasBusy = busy;
 }, 3000);
 
 
