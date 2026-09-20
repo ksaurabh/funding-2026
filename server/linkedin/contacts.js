@@ -174,6 +174,7 @@ async function drain() {
             degree: p.degree,
             via: p.via,
             mutualText: p.mutualText || null,
+            mutualPage: p.mutualPage || null,
             confidence: result.confidence,
             status: 'found',
             reason: null,

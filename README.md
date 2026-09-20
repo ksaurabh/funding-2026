@@ -286,6 +286,11 @@ cached. The cache keeps its most recent 150 files and prunes the rest.
 That pair is what makes a wrong result diagnosable: the screenshot shows what
 LinkedIn displayed, the HTML shows why the agent read it the way it did.
 
+For the mutual connections in particular, the trail and the contact both show
+**the link that was followed** (clickable, so you can open that page yourself),
+**the page it landed on**, **how many contacts were read from it**, and a link
+to **the saved copy of that page's HTML**.
+
 The right-hand pane shows the work as it happens: the search it ran, the **top
 three results it scraped** with each one's name and company score and whether
 it cleared the bar, the profile it opened and what that page said, and the

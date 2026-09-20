@@ -297,7 +297,7 @@ async function openMutuals(mutual) {
   if (mutual.url) {
     await page.goto(mutual.url, { waitUntil: 'domcontentloaded' });
     await wait(PACE.afterNavigation);
-    return { opened: true, via: await collectPeopleCards() };
+    return { opened: true, url: page.url(), via: await collectPeopleCards() };
   }
 
   // No href: click the link where it sits. It may navigate, or open a modal.
@@ -318,12 +318,12 @@ async function openMutuals(mutual) {
   await page.waitForURL((u) => u.toString() !== before, { timeout: 8000 }).catch(() => {});
   await wait(PACE.afterNavigation);
 
-  if (page.url() !== before) return { opened: true, via: await collectPeopleCards() };
+  if (page.url() !== before) return { opened: true, url: page.url(), via: await collectPeopleCards() };
 
   // Still on the search page. Only a modal counts — reading the page itself
   // would hand back the search results dressed up as mutual connections.
   const overlay = await findOne(page, SELECTORS.overlay);
-  if (overlay) return { opened: true, via: await collectPeopleCards(overlay) };
+  if (overlay) return { opened: true, url: page.url(), via: await collectPeopleCards(overlay) };
   return { opened: false, via: [] };
 }
 
@@ -443,6 +443,7 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
       shots.push(s);
       onEvent({ type: 'shot', ...s });
     }
+    return s;
   };
 
   await shot('Search results');
@@ -473,6 +474,7 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
   // Past the bar, so the mutual-connections link on that card is worth
   // opening — and it is right here, on the page already in front of us.
   let via = [];
+  let mutualPage = null;
   if (best.mutual) {
     onEvent({ type: 'mutual-found', text: best.mutual.text, url: best.mutual.url });
     await wait(PACE.betweenActions);
@@ -480,8 +482,9 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
     via = opened.via;
     if (opened.opened) {
       // Only worth capturing once we are actually on that page.
-      await shot('Mutual connections');
-      onEvent({ type: 'shared', count: via.length, via, from: 'search result' });
+      const cap = await shot('Mutual connections');
+      mutualPage = { link: best.mutual.url, text: best.mutual.text, pageUrl: opened.url, html: cap?.html || null };
+      onEvent({ type: 'shared', count: via.length, via, from: 'search result', ...mutualPage });
     } else {
       onEvent({ type: 'mutual-dead', text: best.mutual.text });
     }
@@ -500,9 +503,21 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
   // profile's own shared-connections route instead.
   if (!via.length && (profile.mutual || degree === '2nd')) {
     onEvent({ type: 'shared-start' });
-    via = profile.mutual ? (await openMutuals(profile.mutual)).via : await readSharedConnections();
-    await shot('Mutual connections');
-    onEvent({ type: 'shared', count: via.length, via, from: 'profile' });
+    let landed = null;
+    if (profile.mutual) {
+      landed = await openMutuals(profile.mutual);
+      via = landed.via;
+    } else {
+      via = await readSharedConnections();
+    }
+    const cap = await shot('Mutual connections');
+    mutualPage = {
+      link: profile.mutual?.url || null,
+      text: profile.mutual?.text || null,
+      pageUrl: landed?.url || page.url(),
+      html: cap?.html || null,
+    };
+    onEvent({ type: 'shared', count: via.length, via, from: 'profile', ...mutualPage });
   }
 
   return {
@@ -518,7 +533,9 @@ export async function findPerson({ name, company, threshold = 0.9, onEvent = () 
       url: profile.url || best.url,
       degree,
       via,
-      mutualText: best.mutual?.text || null,
+      mutualText: best.mutual?.text || mutualPage?.text || null,
+      // Where the connections were read from, and the saved copy of it.
+      mutualPage,
     },
   };
 }

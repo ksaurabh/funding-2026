@@ -2298,10 +2298,11 @@ function selectContact(id) {
       ])
     );
 
-    if (c.degree === '2nd') {
+    if (c.degree === '2nd' || c.via?.length || c.mutualPage) {
       parts.push(
         el('div', { className: 'answer' }, [
           el('h4', { textContent: `Paths in (${c.via?.length || 0})` }),
+          pageLinks({ ...(c.mutualPage || {}), text: c.mutualPage?.text || c.mutualText }),
           c.via?.length
             ? el(
                 'div',
@@ -2563,10 +2564,11 @@ function renderActivity(q) {
     } else if (e.type === 'shared') {
       nodes.push(
         step(
-          `${e.count} path${e.count === 1 ? '' : 's'} in`,
-          e.count ? 'People you could be introduced through:' : 'None listed.',
+          `${e.count} contact${e.count === 1 ? '' : 's'} read from the mutual connections page`,
+          e.count ? 'People you could be introduced through:' : 'The page listed nobody.',
           e.t,
           [
+            pageLinks(e),
             el(
               'div',
               { className: 'cites' },
@@ -2584,6 +2586,46 @@ function renderActivity(q) {
   }
 
   pane.replaceChildren(...nodes.filter(Boolean));
+}
+
+/**
+ * Where a set of mutual connections came from: the link that was followed,
+ * the page it landed on, and the copy saved for debugging.
+ */
+function pageLinks(e) {
+  const rows = [];
+  if (e.text) {
+    rows.push(
+      el('div', { className: 'pagelink' }, [
+        el('span', { className: 'muted small', textContent: 'Link followed: ' }),
+        e.link
+          ? el('a', { href: e.link, target: '_blank', rel: 'noreferrer', textContent: e.text })
+          : el('span', { textContent: e.text }),
+      ])
+    );
+  }
+  if (e.pageUrl) {
+    rows.push(
+      el('div', { className: 'pagelink' }, [
+        el('span', { className: 'muted small', textContent: 'Page read: ' }),
+        el('a', { href: e.pageUrl, target: '_blank', rel: 'noreferrer', textContent: e.pageUrl }),
+      ])
+    );
+  }
+  if (e.html) {
+    rows.push(
+      el('div', { className: 'pagelink' }, [
+        el('span', { className: 'muted small', textContent: 'Saved copy: ' }),
+        el('a', {
+          href: `/api/linkedin/shots/${e.html}`,
+          target: '_blank',
+          rel: 'noreferrer',
+          textContent: e.html,
+        }),
+      ])
+    );
+  }
+  return rows.length ? el('div', { className: 'pagelinks' }, rows) : null;
 }
 
 /** One line of the activity trail, optionally with content underneath. */

@@ -646,3 +646,13 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 }
 .shot figcaption { margin-top: 4px; word-break: break-all; }
 #li-again { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.pagelinks {
+  margin: 6px 0 8px;
+  padding: 6px 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.pagelink { font-size: 12px; margin: 2px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pagelink a { color: var(--accent); }
