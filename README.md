@@ -519,6 +519,46 @@ and fields come and go with it.
 If the token is missing or has been revoked, the tab says so and keeps
 showing the last pull rather than blanking the table.
 
+### A board's rows
+
+Click a board — anywhere but its name, which links out to Monday.com — and
+its rows come in: every column the board has, plus the group each item is in
+and when it last changed. The rows are cached per board in
+`data/monday-boards/<id>.json`, so coming back is instant, but opening a
+board always asks Monday for the current rows behind that. **Refresh rows**
+does it again on demand, and the search box filters on any cell. Items come
+back 250 at a time behind a cursor, so a big board takes a few round trips.
+
+### Sync a board to a Google Sheet
+
+**Sync to Google Spreadsheet** asks once for the sheet URL, then remembers it
+for that board: after the first sync the button just repeats it, and **Sync
+to a new sheet…** points the same board at a different spreadsheet. The
+toolbar says where it last went and when.
+
+A sync pulls the board fresh and **replaces everything on the sheet** — it
+clears the tab first, so a board that has shrunk does not leave the tail of
+the last sync behind. The header row is `Item ID, Name, Group, <each board
+column>, Last updated`. Paste the URL straight from the address bar: the tab
+in it (`#gid=…`) is the one written to, otherwise the first tab. Nothing is
+read back from the sheet and nothing else on it is touched, so a sheet used
+for a sync should be one the sync owns. Targets live in
+`data/monday-sync.json`, one per board.
+
+Writing needs a Google account connected in **Settings → Google Sheets**:
+
+1. Google Cloud console → *APIs & Services* → *Credentials* → **OAuth client
+   ID**, type **Web application**. Add the redirect URI the settings page
+   shows (`http://localhost:4000/api/google/callback`, with whatever port you
+   run on) — it has to match exactly.
+2. Enable the **Google Sheets API** for that project.
+3. Paste the client id and secret into Settings, save, then **Connect Google
+   account**. A tab opens, you approve, and it closes itself.
+
+The refresh token is stored in `data/google-token.json` and access tokens are
+refreshed a minute before they expire. Writes go as you, so any sheet you can
+already edit works with no sharing step. **Disconnect** forgets the token.
+
 ## Layout
 
 ```
@@ -529,7 +569,8 @@ server/
   pricing.js  per-model token prices
   runner.js   template rendering, job queue, per-step persistence
   llm.js      Anthropic call (adaptive thinking, effort, web search, pause_turn)
-  monday.js   Monday.com GraphQL client + routes (read-only board listing)
+  monday.js   Monday.com GraphQL client + routes (boards, rows, sheet sync)
+  google.js   Google OAuth + Sheets writes (overwrite a tab with a grid)
   csv.js      RFC-4180 parse/serialize
   store.js    atomic JSON file store
 public/       single-page UI, hash-routed, no build step
@@ -538,6 +579,9 @@ data/                          (gitignored)
   settings.json                global (Anthropic key, Monday.com token, model)
   monday.json                  the last pull of Monday.com boards
   monday-favorites.json        the board ids you starred
+  monday-boards/<id>.json      one board's rows, as last pulled
+  monday-sync.json             which Google Sheet each board syncs to
+  google-token.json            the Google refresh token
   lists.json                   the list index
   lists/<id>/investors.json    rows, exactly as imported
   lists/<id>/edits.json        cell values you or a step wrote

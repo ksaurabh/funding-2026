@@ -629,6 +629,12 @@ th.star, td.star { width: 24px; padding-right: 0; }
 }
 .star-btn:hover { color: var(--accent); }
 .star-btn.on { color: #c8951a; }
+
+#mon-table tbody tr.clickable, #mon-fav-table tbody tr.clickable { cursor: pointer; }
+#mon-table tbody tr.clickable:hover, #mon-fav-table tbody tr.clickable:hover { background: #f5f2ec; }
+#mb-name { margin-right: 4px; }
+#mb-table td { max-width: 260px; }
+#google-redirect { word-break: break-all; }
 .badge.deg-1st { color: #1c6b40; border-color: #bfdcca; background: #eef7f1; }
 .badge.deg-2nd { color: #8a5a17; border-color: #e6d4b0; background: #fdf6e8; }
 .badge.deg-3rd { color: var(--muted); }

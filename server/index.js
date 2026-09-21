@@ -25,6 +25,7 @@ import {
 import { startRun, jobStatus, cancelJob, renderTemplate, slugify } from './runner.js';
 import { linkedinRoutes } from './linkedin/routes.js';
 import { mondayRoutes } from './monday.js';
+import { googleRoutes } from './google.js';
 import { costOf, knownModel } from './pricing.js';
 
 const app = express();
@@ -41,6 +42,7 @@ app.use(
 
 app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/monday', mondayRoutes);
+app.use('/api/google', googleRoutes);
 
 // ------------------------------------------------------------------ helpers
 
@@ -277,6 +279,8 @@ app.get('/api/settings', (_req, res) => {
     mondayToken: undefined,
     mondayTokenSet: !!s.mondayToken,
     mondayTokenHint: s.mondayToken ? `…${s.mondayToken.slice(-4)}` : '',
+    googleClientSecret: undefined,
+    googleClientSecretSet: !!s.googleClientSecret,
   });
 });
 
@@ -295,6 +299,11 @@ app.put('/api/settings', (req, res) => {
   if (body.clearApiKey) next.apiKey = '';
   if (typeof body.mondayToken === 'string' && body.mondayToken.trim()) next.mondayToken = body.mondayToken.trim();
   if (body.clearMondayToken) next.mondayToken = '';
+  // The client id is not a secret and is shown back; the secret is not.
+  if (typeof body.googleClientId === 'string') next.googleClientId = body.googleClientId.trim();
+  if (typeof body.googleClientSecret === 'string' && body.googleClientSecret.trim()) {
+    next.googleClientSecret = body.googleClientSecret.trim();
+  }
   write('settings', next);
   res.json({ ok: true });
 });

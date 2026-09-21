@@ -290,6 +290,49 @@
   </div>
 </main>
 
+<!-- -------------------------------------------------------- monday board -->
+<main id="view-board" class="view hidden">
+  <div class="toolbar">
+    <a href="#/monday" class="btn">← All boards</a>
+    <strong id="mb-name"></strong>
+    <input id="mb-search" type="search" placeholder="Filter rows…" />
+    <span id="mb-count" class="muted small"></span>
+    <span class="spacer"></span>
+    <span id="mb-sync-note" class="muted small"></span>
+    <button id="mb-sync" class="primary">Sync to Google Spreadsheet</button>
+    <button id="mb-sync-new" class="hidden">Sync to a new sheet…</button>
+    <button id="mb-refresh">Refresh rows</button>
+    <a id="mb-open" href="#" target="_blank" rel="noreferrer" class="btn">Open in Monday.com</a>
+  </div>
+  <div class="scroll pad">
+    <p id="mb-status" class="muted"></p>
+    <table id="mb-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
+<dialog id="sheet-dialog">
+  <form method="dialog" class="dialog-head">
+    <h3>Sync to Google Spreadsheet</h3>
+    <button value="close">Cancel</button>
+  </form>
+  <p class="muted small">
+    Every row on the sheet is replaced with this board as it stands right now. Paste the sheet URL from
+    your browser's address bar — the tab in the URL (<code>#gid=…</code>) is the one written to, otherwise
+    the first tab.
+  </p>
+  <label class="field">
+    <span>Google Sheet URL</span>
+    <input id="sheet-url" type="url" placeholder="https://docs.google.com/spreadsheets/d/…" />
+  </label>
+  <p id="sheet-google" class="muted small"></p>
+  <div class="dialog-foot">
+    <button id="sheet-go" class="primary">Overwrite the sheet</button>
+  </div>
+</dialog>
+
 <main id="view-settings" class="view hidden">
   <div class="scroll pad narrow">
     <h2>Anthropic API</h2>
@@ -337,6 +380,27 @@
       whatever your own account can see.
     </p>
     <button id="clear-monday" class="danger">Clear stored token</button>
+
+    <h2>Google Sheets</h2>
+    <p id="google-state" class="muted small"></p>
+    <div class="row">
+      <label class="field">
+        <span>OAuth client id</span>
+        <input id="googleClientId" type="text" placeholder="…apps.googleusercontent.com" autocomplete="off" />
+      </label>
+      <label class="field">
+        <span>Client secret <em id="googlesecrethint"></em></span>
+        <input id="googleClientSecret" type="password" placeholder="GOCSPX-…" autocomplete="off" />
+      </label>
+    </div>
+    <p class="muted small">
+      Google Cloud console → APIs &amp; Services → Credentials → <strong>OAuth client ID</strong>, type
+      <strong>Web application</strong>, with this exact redirect URI:
+      <code id="google-redirect"></code>. Enable the <strong>Google Sheets API</strong> for the project.
+      Save the id and secret below first, then connect.
+    </p>
+    <button id="google-connect">Connect Google account</button>
+    <button id="google-disconnect" class="danger hidden">Disconnect</button>
 
     <h2>Save</h2>
     <button id="save-settings" class="primary">Save settings</button>

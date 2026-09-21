@@ -78,12 +78,13 @@ const state = {
 function parseHash() {
   const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
   if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
+  if (parts[0] === 'monday' && parts[1]) return { view: 'board', listId: null, boardId: parts[1] };
   const top = ['settings', 'playbooks', 'linkedin', 'network', 'monday'].includes(parts[0]) ? parts[0] : 'lists';
   return { view: top, listId: null };
 }
 
 async function route() {
-  const { view, listId } = parseHash();
+  const { view, listId, boardId } = parseHash();
 
   if (listId && listId !== state.listId) {
     state.listId = listId;
@@ -123,7 +124,7 @@ async function route() {
   $('#playbooks-tab').classList.toggle('active', view === 'playbooks');
   $('#linkedin-tab').classList.toggle('active', view === 'linkedin');
   $('#network-tab').classList.toggle('active', view === 'network');
-  $('#monday-tab').classList.toggle('active', view === 'monday');
+  $('#monday-tab').classList.toggle('active', view === 'monday' || view === 'board');
   $('#export').href = `/api/lists/${listId}/export.csv`;
 
   await loadCost();
@@ -135,6 +136,7 @@ async function route() {
   }
   if (view === 'network') await loadNetwork();
   if (view === 'monday') await loadMonday();
+  if (view === 'board') await loadBoard(boardId);
   if (view === 'playbook') {
     renderSteps(); // the column dropdowns depend on the current schema
     renderTokens();
@@ -2086,7 +2088,46 @@ async function loadSettings() {
   $('#mondayhint').textContent = s.mondayTokenSet
     ? `— a token ending ${s.mondayTokenHint} is stored; leave blank to keep it`
     : '— not set';
+  $('#googleClientId').value = s.googleClientId || '';
+  $('#googlesecrethint').textContent = s.googleClientSecretSet ? '— stored; leave blank to keep it' : '— not set';
+  await loadGoogle();
 }
+
+/** The Google half of Settings: is there a client, and are we connected. */
+async function loadGoogle() {
+  let g;
+  try {
+    g = await api('/api/google/status');
+  } catch (err) {
+    $('#google-state').textContent = err.message;
+    return;
+  }
+  state.google = g;
+  $('#google-redirect').textContent = g.redirectUri;
+  $('#google-state').textContent = g.connected
+    ? `Connected as ${g.email || 'your Google account'}${g.connectedAt ? ` since ${new Date(g.connectedAt).toLocaleString()}` : ''}.`
+    : g.clientConfigured
+    ? 'Client saved, not connected yet.'
+    : 'Not set up. Sheets syncing needs an OAuth client.';
+  $('#google-connect').textContent = g.connected ? 'Reconnect' : 'Connect Google account';
+  $('#google-connect').disabled = !g.clientConfigured;
+  $('#google-connect').title = g.clientConfigured ? '' : 'Save the client id and secret first';
+  $('#google-disconnect').classList.toggle('hidden', !g.connected);
+}
+
+// Google's consent screen will not run in a frame, so it gets its own tab;
+// the callback page closes itself when it is done.
+$('#google-connect').addEventListener('click', () => {
+  window.open('/api/google/connect', '_blank');
+  toast('Approve the app in the tab that opened, then come back.');
+});
+
+$('#google-disconnect').addEventListener('click', async () => {
+  if (!confirm('Forget the stored Google token? Sheets syncing stops until you connect again.')) return;
+  await post('/api/google/disconnect');
+  toast('Disconnected from Google.');
+  loadGoogle();
+});
 
 $('#save-settings').addEventListener('click', async () => {
   await api('/api/settings', {
@@ -2095,6 +2136,8 @@ $('#save-settings').addEventListener('click', async () => {
     body: JSON.stringify({
       apiKey: $('#apiKey').value,
       mondayToken: $('#mondayToken').value,
+      googleClientId: $('#googleClientId').value,
+      googleClientSecret: $('#googleClientSecret').value,
       model: $('#model').value,
       effort: $('#effort').value,
       maxTokens: $('#maxTokens').value,
@@ -2103,6 +2146,7 @@ $('#save-settings').addEventListener('click', async () => {
   });
   $('#apiKey').value = '';
   $('#mondayToken').value = '';
+  $('#googleClientSecret').value = '';
   $('#settings-status').textContent = 'Saved.';
   loadSettings();
 });
@@ -3876,8 +3920,8 @@ function fillBoardTable(sel, rows) {
   );
 
   $(sel + ' tbody').replaceChildren(
-    ...rows.map((b) =>
-      el('tr', {}, [
+    ...rows.map((b) => {
+      const tr = el('tr', { className: 'clickable', title: 'Open this board' }, [
         el('td', { className: 'star' }, starFor(b)),
         el('td', {}, [
           el('a', { href: b.url, target: '_blank', rel: 'noreferrer', textContent: b.name }),
@@ -3891,8 +3935,14 @@ function fillBoardTable(sel, rows) {
         el('td', { textContent: b.items ?? '—' }),
         el('td', { textContent: (b.owners || []).join(', ') || '—' }),
         el('td', { textContent: b.updatedAt ? new Date(b.updatedAt).toLocaleString() : '—' }),
-      ])
-    )
+      ]);
+      // The name is a link out to Monday; anywhere else opens the rows here.
+      tr.addEventListener('click', (e) => {
+        if (e.target.closest('a, .star-btn')) return;
+        location.hash = `#/monday/${encodeURIComponent(b.id)}`;
+      });
+      return tr;
+    })
   );
 
   if (!rows.length && sel === '#mon-table') {
@@ -3952,6 +4002,189 @@ $('#mon-refresh').addEventListener('click', async () => {
     renderMonday();
   }
 });
+
+// --------------------------------------------------- one Monday.com board
+
+const board = {
+  id: null,
+  name: '',
+  url: '',
+  columns: [],
+  items: [],
+  fetchedAt: null,
+  sync: null,
+  filter: '',
+  busy: '',
+  error: '',
+};
+
+async function loadBoard(id) {
+  const fresh = id !== board.id;
+  if (fresh) {
+    Object.assign(board, { id, name: '', url: '', columns: [], items: [], fetchedAt: null, sync: null, filter: '', error: '' });
+    $('#mb-search').value = '';
+    // Name it from the board list while the rows are on their way.
+    const known = mon.boards.find((b) => String(b.id) === String(id));
+    if (known) Object.assign(board, { name: known.name, url: known.url });
+  }
+  renderBoard();
+
+  // Show whatever was cached, then go and get the current rows — clicking a
+  // board means "show me this board", not "show me last week's copy".
+  try {
+    Object.assign(board, await api(`/api/monday/boards/${encodeURIComponent(id)}/items`), { id });
+  } catch (err) {
+    board.error = err.message;
+  }
+  renderBoard();
+  await refreshBoard({ quiet: !!board.items.length });
+}
+
+async function refreshBoard({ quiet = false } = {}) {
+  board.busy = 'rows';
+  board.error = '';
+  renderBoard();
+  try {
+    Object.assign(board, await post(`/api/monday/boards/${encodeURIComponent(board.id)}/items/refresh`));
+    if (!quiet) toast(`${board.items.length} row${board.items.length === 1 ? '' : 's'} from ${board.name}`, 'good');
+  } catch (err) {
+    board.error = err.message;
+  } finally {
+    board.busy = '';
+    renderBoard();
+  }
+}
+
+function boardVisible() {
+  const q = board.filter.trim().toLowerCase();
+  if (!q) return board.items;
+  return board.items.filter((it) =>
+    [it.name, it.group, ...Object.values(it.cells || {})].some((v) =>
+      String(v ?? '').toLowerCase().includes(q)
+    )
+  );
+}
+
+function renderBoard() {
+  const rows = boardVisible();
+  const syncing = board.busy === 'sync';
+
+  $('#mb-name').textContent = board.name || 'Board';
+  const listed = mon.boards.find((b) => String(b.id) === String(board.id));
+  $('#mb-open').href = board.url || listed?.url || '#';
+  $('#mb-count').textContent = board.items.length
+    ? `${rows.length} of ${board.items.length} row${board.items.length === 1 ? '' : 's'}`
+    : '';
+  $('#mb-refresh').disabled = !!board.busy;
+  $('#mb-refresh').textContent = board.busy === 'rows' ? 'Refreshing…' : 'Refresh rows';
+
+  // Once a board has a sheet, the main button repeats that sync and a second
+  // button offers a different one.
+  const target = board.sync;
+  $('#mb-sync').disabled = !!board.busy;
+  $('#mb-sync').textContent = syncing
+    ? 'Writing to the sheet…'
+    : target
+    ? 'Sync to Google Spreadsheet'
+    : 'Sync to Google Spreadsheet…';
+  $('#mb-sync').title = target
+    ? `Overwrite ${target.file || 'the sheet'}${target.tab ? ` · ${target.tab}` : ''} with this board`
+    : 'Pick a Google Sheet and overwrite it with this board';
+  $('#mb-sync-new').classList.toggle('hidden', !target);
+  $('#mb-sync-new').disabled = !!board.busy;
+  $('#mb-sync-note').textContent = target
+    ? `Last synced ${new Date(target.lastSyncedAt).toLocaleString()} → ${target.file || 'sheet'}` +
+      `${target.tab ? ` · ${target.tab}` : ''}`
+    : '';
+
+  $('#mb-status').className = board.error ? 'mon-error' : 'muted';
+  $('#mb-status').textContent = board.error
+    ? board.error
+    : board.busy === 'rows' && !board.items.length
+    ? 'Pulling rows from Monday.com…'
+    : board.items.length
+    ? `${board.items.length} row${board.items.length === 1 ? '' : 's'}, pulled ${new Date(board.fetchedAt).toLocaleString()}.`
+    : board.busy
+    ? ''
+    : 'This board has no rows.';
+
+  $('#mb-table thead').replaceChildren(
+    el('tr', {}, [
+      el('th', { textContent: 'Item' }),
+      el('th', { textContent: 'Group' }),
+      ...board.columns.map((c) => el('th', { textContent: c.title, title: `${c.title} · ${c.type}` })),
+      el('th', { textContent: 'Updated' }),
+    ])
+  );
+
+  $('#mb-table tbody').replaceChildren(
+    ...rows.map((it) =>
+      el('tr', {}, [
+        el('td', { textContent: it.name }),
+        el('td', { textContent: it.group || '—' }),
+        ...board.columns.map((c) => el('td', { textContent: it.cells?.[c.id] ?? '' })),
+        el('td', { textContent: it.updatedAt ? new Date(it.updatedAt).toLocaleString() : '' }),
+      ])
+    )
+  );
+}
+
+$('#mb-search').addEventListener('input', (e) => {
+  board.filter = e.target.value;
+  renderBoard();
+});
+
+$('#mb-refresh').addEventListener('click', () => refreshBoard());
+
+// Repeat the last sync without asking; ask the first time.
+$('#mb-sync').addEventListener('click', () => (board.sync ? syncBoard(board.sync.url) : askForSheet()));
+$('#mb-sync-new').addEventListener('click', () => askForSheet({ blank: true }));
+
+async function askForSheet({ blank = false } = {}) {
+  $('#sheet-url').value = blank ? '' : board.sync?.url || '';
+  // Say plainly whether the Google side is ready, rather than failing later.
+  let g = null;
+  try {
+    g = await api('/api/google/status');
+  } catch {
+    // leave it unsaid rather than wrong
+  }
+  $('#sheet-google').textContent = !g
+    ? ''
+    : g.connected
+    ? `Writing as ${g.email || 'your connected Google account'}.`
+    : g.clientConfigured
+    ? 'Not connected to Google yet — connect on the Settings tab first.'
+    : 'No Google OAuth client yet — set one up on the Settings tab first.';
+  $('#sheet-go').disabled = !!g && !g.connected;
+  $('#sheet-dialog').showModal();
+}
+
+$('#sheet-go').addEventListener('click', (e) => {
+  e.preventDefault();
+  const url = $('#sheet-url').value.trim();
+  if (!url) return;
+  $('#sheet-dialog').close();
+  syncBoard(url);
+});
+
+async function syncBoard(url) {
+  board.busy = 'sync';
+  board.error = '';
+  renderBoard();
+  try {
+    const r = await post(`/api/monday/boards/${encodeURIComponent(board.id)}/sync`, { url });
+    // The sync pulls the board fresh, so take those rows too.
+    Object.assign(board, r.board, { sync: r.target });
+    toast(`${r.rows - 1} row${r.rows - 1 === 1 ? '' : 's'} written to ${r.file || 'the sheet'} · ${r.tab}`, 'good');
+  } catch (err) {
+    board.error = err.message;
+    toast(err.message, 'bad');
+  } finally {
+    board.busy = '';
+    renderBoard();
+  }
+}
 
 // --------------------------------------------------------------------- boot
 

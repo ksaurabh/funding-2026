@@ -3,6 +3,7 @@
 // out every time you open it.
 import express from 'express';
 import { read, write, DEFAULT_SETTINGS } from './store.js';
+import * as google from './google.js';
 
 const API = process.env.MONDAY_API_URL || 'https://api.monday.com/v2';
 // Pin the API version: Monday moves the default forward and fields come and
@@ -78,6 +79,122 @@ const BOARDS_QUERY = `
 `;
 
 const ME_QUERY = `query { me { id name email account { id name slug } } }`;
+
+// Items come back a page at a time behind a cursor, and the columns are
+// described once for the whole board rather than per item.
+const ITEMS_QUERY = `
+  query ($ids: [ID!], $limit: Int!, $cursor: String) {
+    boards(ids: $ids) {
+      id
+      name
+      url
+      columns { id title type }
+      items_page(limit: $limit, cursor: $cursor) {
+        cursor
+        items {
+          id
+          name
+          updated_at
+          group { id title }
+          column_values { id text type }
+        }
+      }
+    }
+  }
+`;
+
+const ITEM_PAGE = 250;
+const MAX_ITEM_PAGES = 200; // 50,000 rows
+
+/** Every row of one board, flattened to { id, name, group, cells: {colId: text} }. */
+export async function fetchItems(boardId) {
+  let cursor = null;
+  let board = null;
+  const items = [];
+  for (let page = 0; page < MAX_ITEM_PAGES; page++) {
+    const data = await graphql(ITEMS_QUERY, { ids: [String(boardId)], limit: ITEM_PAGE, cursor });
+    const b = data?.boards?.[0];
+    if (!b) throw new Error('That board is not there any more — pull the board list again.');
+    board = board || {
+      id: String(b.id),
+      name: b.name,
+      url: b.url || `https://monday.com/boards/${b.id}`,
+      columns: (b.columns || []).map(shapeColumn),
+    };
+    for (const it of b.items_page?.items || []) items.push(shapeItem(it));
+    cursor = b.items_page?.cursor || null;
+    if (!cursor) break;
+  }
+  return { ...board, items, fetchedAt: new Date().toISOString() };
+}
+
+const shapeColumn = (c) => ({ id: c.id, title: c.title || c.id, type: c.type || '' });
+
+const shapeItem = (it) => ({
+  id: String(it.id),
+  name: it.name || '',
+  group: it.group?.title || '',
+  updatedAt: it.updated_at || '',
+  // `text` is the rendered value — the same string the board shows.
+  cells: Object.fromEntries((it.column_values || []).map((cv) => [cv.id, cv.text ?? ''])),
+});
+
+const itemsFile = (boardId) => `monday-boards/${String(boardId).replace(/[^A-Za-z0-9_-]/g, '')}`;
+
+export const cachedItems = (boardId) => read(itemsFile(boardId), null);
+
+export async function refreshItems(boardId) {
+  return write(itemsFile(boardId), await fetchItems(boardId));
+}
+
+// ------------------------------------------------- syncing a board to Sheets
+
+/** Where each board was last synced: board id → { url, … }. */
+const syncTargets = () => read('monday-sync', {});
+
+export function syncTarget(boardId) {
+  return syncTargets()[String(boardId)] || null;
+}
+
+function rememberTarget(boardId, target) {
+  const all = syncTargets();
+  all[String(boardId)] = target;
+  write('monday-sync', all);
+  return target;
+}
+
+/** The board as a grid: a header row, then one row per item. */
+export function toGrid(board) {
+  const header = ['Item ID', 'Name', 'Group', ...board.columns.map((c) => c.title), 'Last updated'];
+  const rows = board.items.map((it) => [
+    it.id,
+    it.name,
+    it.group,
+    ...board.columns.map((c) => it.cells[c.id] ?? ''),
+    it.updatedAt,
+  ]);
+  return [header, ...rows];
+}
+
+/**
+ * Pull the board fresh and replace the sheet's contents with it. Fresh
+ * deliberately: "sync" should never write yesterday's rows.
+ */
+export async function syncToSheet(boardId, url) {
+  const parsed = google.parseSheetUrl(url);
+  const board = await refreshItems(boardId);
+  const written = await google.overwriteSheet({ ...parsed, rows: toGrid(board) });
+  const target = rememberTarget(boardId, {
+    url: parsed.url,
+    spreadsheetId: parsed.spreadsheetId,
+    gid: parsed.gid,
+    tab: written.tab,
+    file: written.file,
+    lastSyncedAt: new Date().toISOString(),
+    rows: board.items.length,
+  });
+  return { ...written, target, board };
+}
 
 /** Every board the token can see, oldest first, one page of 100 at a time. */
 export async function fetchBoards() {
@@ -159,6 +276,30 @@ mondayRoutes.get('/boards', (_req, res) => {
 mondayRoutes.post('/boards/refresh', async (_req, res) => {
   try {
     res.json({ ...(await refresh()), tokenSet: true, favorites: favorites() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// The rows of one board. Cached, so coming back to a board is instant.
+mondayRoutes.get('/boards/:id/items', (req, res) => {
+  const cache = cachedItems(req.params.id);
+  res.json({ ...(cache || { items: [], columns: [], fetchedAt: null }), tokenSet: tokenSet(), sync: syncTarget(req.params.id) });
+});
+
+mondayRoutes.post('/boards/:id/items/refresh', async (req, res) => {
+  try {
+    res.json({ ...(await refreshItems(req.params.id)), tokenSet: true, sync: syncTarget(req.params.id) });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// Overwrite a Google Sheet with this board, as it stands right now.
+mondayRoutes.post('/boards/:id/sync', async (req, res) => {
+  try {
+    const url = req.body?.url || syncTarget(req.params.id)?.url;
+    res.json(await syncToSheet(req.params.id, url));
   } catch (err) {
     fail(res, err);
   }
