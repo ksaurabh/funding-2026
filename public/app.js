@@ -78,7 +78,7 @@ const state = {
 function parseHash() {
   const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
   if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
-  const top = ['settings', 'playbooks', 'linkedin', 'network'].includes(parts[0]) ? parts[0] : 'lists';
+  const top = ['settings', 'playbooks', 'linkedin', 'network', 'monday'].includes(parts[0]) ? parts[0] : 'lists';
   return { view: top, listId: null };
 }
 
@@ -123,6 +123,7 @@ async function route() {
   $('#playbooks-tab').classList.toggle('active', view === 'playbooks');
   $('#linkedin-tab').classList.toggle('active', view === 'linkedin');
   $('#network-tab').classList.toggle('active', view === 'network');
+  $('#monday-tab').classList.toggle('active', view === 'monday');
   $('#export').href = `/api/lists/${listId}/export.csv`;
 
   await loadCost();
@@ -133,6 +134,7 @@ async function route() {
     await pollLinkedIn();
   }
   if (view === 'network') await loadNetwork();
+  if (view === 'monday') await loadMonday();
   if (view === 'playbook') {
     renderSteps(); // the column dropdowns depend on the current schema
     renderTokens();
@@ -2081,6 +2083,9 @@ async function loadSettings() {
   $('#keyhint').textContent = s.apiKeySet
     ? `— a key ending ${s.apiKeyHint} is stored; leave blank to keep it`
     : '— not set';
+  $('#mondayhint').textContent = s.mondayTokenSet
+    ? `— a token ending ${s.mondayTokenHint} is stored; leave blank to keep it`
+    : '— not set';
 }
 
 $('#save-settings').addEventListener('click', async () => {
@@ -2089,6 +2094,7 @@ $('#save-settings').addEventListener('click', async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       apiKey: $('#apiKey').value,
+      mondayToken: $('#mondayToken').value,
       model: $('#model').value,
       effort: $('#effort').value,
       maxTokens: $('#maxTokens').value,
@@ -2096,6 +2102,7 @@ $('#save-settings').addEventListener('click', async () => {
     }),
   });
   $('#apiKey').value = '';
+  $('#mondayToken').value = '';
   $('#settings-status').textContent = 'Saved.';
   loadSettings();
 });
@@ -2108,6 +2115,17 @@ $('#clear-key').addEventListener('click', async () => {
     body: JSON.stringify({ clearApiKey: true }),
   });
   $('#settings-status').textContent = 'Key cleared.';
+  loadSettings();
+});
+
+$('#clear-monday').addEventListener('click', async () => {
+  if (!confirm('Remove the stored Monday.com token?')) return;
+  await api('/api/settings', {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ clearMondayToken: true }),
+  });
+  $('#settings-status').textContent = 'Monday.com token cleared.';
   loadSettings();
 });
 
@@ -3756,6 +3774,118 @@ $('#nw-renumber').addEventListener('click', async () => {
   if (!confirm(`Renumber these ${rows.length} as 1…${rows.length}, in the order shown?`)) return;
   await post('/api/linkedin/network/renumber', { ids: rows.map((p) => p.id) });
   loadNetwork();
+});
+
+// ---------------------------------------------------------------- monday.com
+// Read-only: the boards the stored token can see. The last pull is kept on
+// the server, so opening the tab shows something without calling out.
+
+const mon = { boards: [], account: null, fetchedAt: null, tokenSet: false, filter: '', busy: false, error: '' };
+
+async function loadMonday() {
+  try {
+    mon.error = '';
+    Object.assign(mon, await api('/api/monday/boards'));
+  } catch (err) {
+    mon.error = err.message;
+  }
+  renderMonday();
+}
+
+function mondayVisible() {
+  const q = mon.filter.trim().toLowerCase();
+  if (!q) return mon.boards;
+  return mon.boards.filter((b) =>
+    [b.name, b.workspace, b.description, b.kind, ...(b.owners || [])].some((v) =>
+      String(v ?? '').toLowerCase().includes(q)
+    )
+  );
+}
+
+function renderMonday() {
+  const rows = mondayVisible();
+  const noToken = 'No Monday.com token — add a personal access token on the Settings tab, then pull the boards.';
+
+  $('#mon-refresh').disabled = mon.busy || !mon.tokenSet;
+  $('#mon-refresh').title = mon.tokenSet ? 'Ask Monday.com for the boards your token can see' : noToken;
+  $('#mon-refresh').textContent = mon.busy
+    ? 'Pulling…'
+    : mon.boards.length
+    ? 'Pull boards again'
+    : 'Pull boards from Monday.com';
+  $('#mon-account').textContent = mon.account
+    ? `${mon.account.account || 'Monday.com'} · ${mon.account.name || mon.account.email || ''}`.trim()
+    : '';
+  $('#mon-count').textContent = mon.boards.length
+    ? `${rows.length} of ${mon.boards.length} board${mon.boards.length === 1 ? '' : 's'}`
+    : '';
+
+  // Where things stand. Boards on screen are the last pull, so say when that
+  // was even if the token has since gone — the table is not wrong, it is
+  // just not live.
+  $('#mon-status').className = mon.error ? 'mon-error' : 'muted';
+  $('#mon-status').textContent = mon.error
+    ? mon.error
+    : mon.busy
+    ? 'Asking Monday.com for your boards…'
+    : mon.boards.length
+    ? `Pulled ${mon.boards.length} board${mon.boards.length === 1 ? '' : 's'} on ` +
+      `${new Date(mon.fetchedAt).toLocaleString()}.` +
+      (mon.tokenSet ? '' : ' ' + noToken)
+    : mon.tokenSet
+    ? 'No boards pulled yet.'
+    : noToken;
+
+  $('#mon-table thead').replaceChildren(
+    el('tr', {}, [
+      el('th', { textContent: 'Board' }),
+      el('th', { textContent: 'Workspace' }),
+      el('th', { textContent: 'Kind' }),
+      el('th', { textContent: 'Items' }),
+      el('th', { textContent: 'Owners' }),
+      el('th', { textContent: 'Updated' }),
+    ])
+  );
+
+  $('#mon-table tbody').replaceChildren(
+    ...rows.map((b) =>
+      el('tr', {}, [
+        el('td', {}, [
+          el('a', { href: b.url, target: '_blank', rel: 'noreferrer', textContent: b.name }),
+          b.state && b.state !== 'active'
+            ? el('span', { className: 'badge err', textContent: b.state })
+            : null,
+          b.description ? el('div', { className: 'muted small', textContent: b.description }) : null,
+        ]),
+        el('td', { textContent: b.workspace || '—' }),
+        el('td', { textContent: b.kind || '—' }),
+        el('td', { textContent: b.items ?? '—' }),
+        el('td', { textContent: (b.owners || []).join(', ') || '—' }),
+        el('td', { textContent: b.updatedAt ? new Date(b.updatedAt).toLocaleString() : '—' }),
+      ])
+    )
+  );
+}
+
+$('#mon-search').addEventListener('input', (e) => {
+  mon.filter = e.target.value;
+  renderMonday();
+});
+
+$('#mon-refresh').addEventListener('click', async () => {
+  mon.busy = true;
+  renderMonday();
+  try {
+    mon.error = '';
+    Object.assign(mon, await post('/api/monday/boards/refresh'));
+    toast(`${mon.boards.length} board${mon.boards.length === 1 ? '' : 's'} from Monday.com`, 'good');
+  } catch (err) {
+    mon.error = err.message;
+    toast(err.message, 'bad');
+  } finally {
+    mon.busy = false;
+    renderMonday();
+  }
 });
 
 // --------------------------------------------------------------------- boot

@@ -18,6 +18,7 @@
   <a href="#/playbooks" class="tab" id="playbooks-tab">Playbooks</a>
   <a href="#/linkedin" class="tab" id="linkedin-tab">LinkedIn</a>
   <a href="#/network" class="tab" id="network-tab">My network</a>
+  <a href="#/monday" class="tab" id="monday-tab">Monday.com</a>
   <a href="#/settings" class="tab" id="settings-tab">Settings</a>
   <a href="#/lists" id="spend" class="pill cost" title="Total spent on research so far">—</a>
   <div id="runpill" class="pill idle">Idle</div>
@@ -263,6 +264,24 @@
 </main>
 
 <!-- -------------------------------------------------------------- settings -->
+<!-- ------------------------------------------------------------- monday -->
+<main id="view-monday" class="view hidden">
+  <div class="toolbar">
+    <input id="mon-search" type="search" placeholder="Filter boards…" />
+    <span id="mon-count" class="muted small"></span>
+    <span class="spacer"></span>
+    <span id="mon-account" class="muted small"></span>
+    <button id="mon-refresh" class="primary">Pull boards from Monday.com</button>
+  </div>
+  <div class="scroll pad">
+    <p id="mon-status" class="muted"></p>
+    <table id="mon-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
 <main id="view-settings" class="view hidden">
   <div class="scroll pad narrow">
     <h2>Anthropic API</h2>
@@ -298,10 +317,23 @@
         <input id="concurrency" type="number" min="1" max="8" />
       </label>
     </div>
-    <button id="save-settings" class="primary">Save settings</button>
     <button id="clear-key" class="danger">Clear stored key</button>
+
+    <h2>Monday.com</h2>
+    <label class="field">
+      <span>Personal access token <em id="mondayhint"></em></span>
+      <input id="mondayToken" type="password" placeholder="eyJhbGciOi…" autocomplete="off" />
+    </label>
+    <p class="muted small">
+      Monday.com → your avatar → <strong>Developers</strong> → <strong>My access tokens</strong>. It is read with
+      whatever your own account can see.
+    </p>
+    <button id="clear-monday" class="danger">Clear stored token</button>
+
+    <h2>Save</h2>
+    <button id="save-settings" class="primary">Save settings</button>
     <p id="settings-status" class="muted"></p>
-    <p class="muted small">Settings are global. The key is stored in <code>data/settings.json</code> on this machine only.</p>
+    <p class="muted small">Settings are global. The key and the token are stored in <code>data/settings.json</code> on this machine only.</p>
   </div>
 </main>
 

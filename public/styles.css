@@ -604,6 +604,15 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 #li-search { max-width: 220px; }
 #li-list, #li-name-col, #li-company-col { width: auto; max-width: 170px; font-size: 12px; }
 #li-table th, #li-table td { white-space: nowrap; max-width: 260px; }
+
+/* Monday.com: board names and descriptions want room, unlike the LinkedIn
+   table where every column is a short fact. */
+#mon-table td { white-space: normal; vertical-align: top; }
+#mon-table td:first-child { max-width: 420px; }
+#mon-table tbody tr { cursor: default; }
+#mon-table tbody tr:hover { background: none; }
+#mon-table .badge.err { margin-left: 6px; }
+.mon-error { color: var(--err); }
 .badge.deg-1st { color: #1c6b40; border-color: #bfdcca; background: #eef7f1; }
 .badge.deg-2nd { color: #8a5a17; border-color: #e6d4b0; background: #fdf6e8; }
 .badge.deg-3rd { color: var(--muted); }

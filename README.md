@@ -489,6 +489,27 @@ path in `server/linkedin/selectors.js` is kept as a fallback for anything the
 structural pass misses. When a lookup still comes back empty, the cached HTML
 for that page is the evidence to fix it from.
 
+## Monday.com
+
+The **Monday.com** tab lists the boards your account can see. Put a personal
+access token in **Settings → Monday.com** (in Monday: your avatar →
+*Developers* → *My access tokens*), then press **Pull boards from
+Monday.com**. Nothing is written back — this is read-only.
+
+Each board shows its workspace, kind, item count, owners and when it last
+changed, and its name links straight to the board. The search box filters on
+any of those. Boards come back in pages of 100, so a large account takes a
+moment.
+
+The pull is cached in `data/monday.json`, so the tab opens on the last set of
+boards without calling out; the line above the table says when they were
+fetched. Press the button again to bring it up to date. The GraphQL API
+version is pinned in `server/monday.js` — Monday moves the default forward
+and fields come and go with it.
+
+If the token is missing or has been revoked, the tab says so and keeps
+showing the last pull rather than blanking the table.
+
 ## Layout
 
 ```
@@ -499,12 +520,14 @@ server/
   pricing.js  per-model token prices
   runner.js   template rendering, job queue, per-step persistence
   llm.js      Anthropic call (adaptive thinking, effort, web search, pause_turn)
+  monday.js   Monday.com GraphQL client + routes (read-only board listing)
   csv.js      RFC-4180 parse/serialize
   store.js    atomic JSON file store
 public/       single-page UI, hash-routed, no build step
   markdown.js small Markdown renderer; builds DOM nodes, never innerHTML
 data/                          (gitignored)
-  settings.json                global
+  settings.json                global (Anthropic key, Monday.com token, model)
+  monday.json                  the last pull of Monday.com boards
   lists.json                   the list index
   lists/<id>/investors.json    rows, exactly as imported
   lists/<id>/edits.json        cell values you or a step wrote

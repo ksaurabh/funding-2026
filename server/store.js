@@ -200,6 +200,7 @@ export function writeCell(listId, rowId, column, value) {
 
 export const DEFAULT_SETTINGS = {
   apiKey: '',
+  mondayToken: '',
   model: 'claude-opus-5',
   effort: 'high',
   maxTokens: 8000,

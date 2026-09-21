@@ -24,6 +24,7 @@ import {
 } from './store.js';
 import { startRun, jobStatus, cancelJob, renderTemplate, slugify } from './runner.js';
 import { linkedinRoutes } from './linkedin/routes.js';
+import { mondayRoutes } from './monday.js';
 import { costOf, knownModel } from './pricing.js';
 
 const app = express();
@@ -39,6 +40,7 @@ app.use(
 );
 
 app.use('/api/linkedin', linkedinRoutes);
+app.use('/api/monday', mondayRoutes);
 
 // ------------------------------------------------------------------ helpers
 
@@ -272,6 +274,9 @@ app.get('/api/settings', (_req, res) => {
     apiKey: undefined,
     apiKeySet: !!s.apiKey,
     apiKeyHint: s.apiKey ? `…${s.apiKey.slice(-4)}` : '',
+    mondayToken: undefined,
+    mondayTokenSet: !!s.mondayToken,
+    mondayTokenHint: s.mondayToken ? `…${s.mondayToken.slice(-4)}` : '',
   });
 });
 
@@ -285,9 +290,11 @@ app.put('/api/settings', (req, res) => {
     maxTokens: Number(body.maxTokens) || current.maxTokens,
     concurrency: Math.max(1, Math.min(8, Number(body.concurrency) || current.concurrency)),
   };
-  // Only overwrite the key when a new one is actually supplied.
+  // Only overwrite a secret when a new one is actually supplied.
   if (typeof body.apiKey === 'string' && body.apiKey.trim()) next.apiKey = body.apiKey.trim();
   if (body.clearApiKey) next.apiKey = '';
+  if (typeof body.mondayToken === 'string' && body.mondayToken.trim()) next.mondayToken = body.mondayToken.trim();
+  if (body.clearMondayToken) next.mondayToken = '';
   write('settings', next);
   res.json({ ok: true });
 });
