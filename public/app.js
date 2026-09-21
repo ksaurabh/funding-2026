@@ -3780,7 +3780,18 @@ $('#nw-renumber').addEventListener('click', async () => {
 // Read-only: the boards the stored token can see. The last pull is kept on
 // the server, so opening the tab shows something without calling out.
 
-const mon = { boards: [], account: null, fetchedAt: null, tokenSet: false, filter: '', busy: false, error: '' };
+const mon = {
+  boards: [],
+  favorites: [],
+  account: null,
+  fetchedAt: null,
+  tokenSet: false,
+  filter: '',
+  busy: false,
+  error: '',
+};
+
+const isFavorite = (b) => mon.favorites.includes(String(b.id));
 
 async function loadMonday() {
   try {
@@ -3836,8 +3847,25 @@ function renderMonday() {
     ? 'No boards pulled yet.'
     : noToken;
 
-  $('#mon-table thead').replaceChildren(
+  // Favorites sit above the full list, in the order you starred them. They
+  // stay in the list below too, so a board is only ever in one place you
+  // have to look for it.
+  const favorites = mon.favorites.map((id) => mon.boards.find((b) => String(b.id) === id)).filter(Boolean);
+  const shownFavorites = favorites.filter((b) => rows.includes(b));
+
+  $('#mon-favs').classList.toggle('hidden', !shownFavorites.length);
+  $('#mon-all-head').classList.toggle('hidden', !shownFavorites.length);
+  $('#mon-fav-count').textContent = shownFavorites.length < favorites.length
+    ? `— ${shownFavorites.length} of ${favorites.length} match the filter`
+    : '';
+  fillBoardTable('#mon-fav-table', shownFavorites);
+  fillBoardTable('#mon-table', rows);
+}
+
+function fillBoardTable(sel, rows) {
+  $(sel + ' thead').replaceChildren(
     el('tr', {}, [
+      el('th', { className: 'star' }),
       el('th', { textContent: 'Board' }),
       el('th', { textContent: 'Workspace' }),
       el('th', { textContent: 'Kind' }),
@@ -3847,9 +3875,10 @@ function renderMonday() {
     ])
   );
 
-  $('#mon-table tbody').replaceChildren(
+  $(sel + ' tbody').replaceChildren(
     ...rows.map((b) =>
       el('tr', {}, [
+        el('td', { className: 'star' }, starFor(b)),
         el('td', {}, [
           el('a', { href: b.url, target: '_blank', rel: 'noreferrer', textContent: b.name }),
           b.state && b.state !== 'active'
@@ -3865,6 +3894,42 @@ function renderMonday() {
       ])
     )
   );
+
+  if (!rows.length && sel === '#mon-table') {
+    $(sel + ' tbody').replaceChildren(
+      el('tr', {}, el('td', { colSpan: 7, className: 'muted', textContent: 'No boards match that filter.' }))
+    );
+  }
+}
+
+/** The star toggles straight away; the server call just records it. */
+function starFor(b) {
+  const on = isFavorite(b);
+  const star = el('button', {
+    className: 'star-btn' + (on ? ' on' : ''),
+    textContent: on ? '★' : '☆',
+    title: on ? 'Remove from favorites' : 'Add to favorites',
+  });
+  star.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const id = String(b.id);
+    mon.favorites = on ? mon.favorites.filter((x) => x !== id) : [...mon.favorites, id];
+    renderMonday();
+    try {
+      const r = await api(`/api/monday/boards/${encodeURIComponent(id)}/favorite`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ favorite: !on }),
+      });
+      mon.favorites = r.favorites;
+    } catch (err) {
+      // Put the star back rather than leaving the screen lying about it.
+      mon.favorites = on ? [...mon.favorites, id] : mon.favorites.filter((x) => x !== id);
+      toast(err.message, 'bad');
+    }
+    renderMonday();
+  });
+  return star;
 }
 
 $('#mon-search').addEventListener('input', (e) => {

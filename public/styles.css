@@ -607,12 +607,28 @@ tbody tr.ticked.selected { background: var(--accent-soft); }
 
 /* Monday.com: board names and descriptions want room, unlike the LinkedIn
    table where every column is a short fact. */
-#mon-table td { white-space: normal; vertical-align: top; }
-#mon-table td:first-child { max-width: 420px; }
-#mon-table tbody tr { cursor: default; }
-#mon-table tbody tr:hover { background: none; }
-#mon-table .badge.err { margin-left: 6px; }
+#mon-table td, #mon-fav-table td { white-space: normal; vertical-align: top; }
+#mon-table td:nth-child(2), #mon-fav-table td:nth-child(2) { max-width: 420px; }
+#mon-table tbody tr, #mon-fav-table tbody tr { cursor: default; }
+#mon-table tbody tr:hover, #mon-fav-table tbody tr:hover { background: none; }
+#mon-table .badge.err, #mon-fav-table .badge.err { margin-left: 6px; }
 .mon-error { color: var(--err); }
+
+h3.section { margin: 18px 0 4px; font-size: 13px; font-weight: 600; }
+h3.section:first-child { margin-top: 0; }
+#mon-favs { margin-bottom: 4px; }
+th.star, td.star { width: 24px; padding-right: 0; }
+.star-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+.star-btn:hover { color: var(--accent); }
+.star-btn.on { color: #c8951a; }
 .badge.deg-1st { color: #1c6b40; border-color: #bfdcca; background: #eef7f1; }
 .badge.deg-2nd { color: #8a5a17; border-color: #e6d4b0; background: #fdf6e8; }
 .badge.deg-3rd { color: var(--muted); }

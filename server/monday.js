@@ -114,7 +114,20 @@ export async function whoami() {
 /** The last pull, as stored. */
 export const cached = () => read('monday', { boards: [], fetchedAt: null, account: null });
 
-/** Pull boards live and remember them. */
+/**
+ * Which boards you starred. Kept in their own file so a refresh — which
+ * replaces the whole cache — cannot lose them, and so a board that
+ * disappears from Monday and comes back is still a favorite.
+ */
+export const favorites = () => read('monday-favorites', []).map(String);
+
+export function setFavorite(id, on) {
+  const ids = favorites().filter((x) => x !== String(id));
+  if (on) ids.push(String(id));
+  return write('monday-favorites', ids);
+}
+
+/** Pull boards live and remember them. Favorites are untouched. */
 export async function refresh() {
   const [account, boards] = [await whoami(), await fetchBoards()];
   return write('monday', { boards, account, fetchedAt: new Date().toISOString() });
@@ -128,18 +141,34 @@ const fail = (res, err) => res.status(err.status || 400).json({ error: err.messa
 
 mondayRoutes.get('/status', (_req, res) => {
   const c = cached();
-  res.json({ tokenSet: tokenSet(), fetchedAt: c.fetchedAt, account: c.account, boardCount: c.boards.length });
+  res.json({
+    tokenSet: tokenSet(),
+    fetchedAt: c.fetchedAt,
+    account: c.account,
+    boardCount: c.boards.length,
+    favorites: favorites(),
+  });
 });
 
 // What we already have. Opening the tab costs nothing.
 mondayRoutes.get('/boards', (_req, res) => {
-  res.json({ ...cached(), tokenSet: tokenSet() });
+  res.json({ ...cached(), tokenSet: tokenSet(), favorites: favorites() });
 });
 
 // Go and ask Monday.com.
 mondayRoutes.post('/boards/refresh', async (_req, res) => {
   try {
-    res.json({ ...(await refresh()), tokenSet: true });
+    res.json({ ...(await refresh()), tokenSet: true, favorites: favorites() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// Star or unstar one board. The id need not be in the cache — you can star a
+// board and refresh later.
+mondayRoutes.put('/boards/:id/favorite', (req, res) => {
+  try {
+    res.json({ favorites: setFavorite(req.params.id, !!req.body?.favorite) });
   } catch (err) {
     fail(res, err);
   }

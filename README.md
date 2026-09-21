@@ -501,6 +501,15 @@ changed, and its name links straight to the board. The search box filters on
 any of those. Boards come back in pages of 100, so a large account takes a
 moment.
 
+The star at the left of a row makes a board a favorite. Favorites get their
+own **Favorites** section above the full list, in the order you starred them,
+and they stay in the list below as well — a board is only ever in one place
+you have to look for it. The search box filters both sections, and the
+Favorites heading says so when a starred board is filtered out. Stars live in
+`data/monday-favorites.json`, separate from the cache, so a refresh cannot
+lose them and a board that disappears from Monday and comes back is still a
+favorite.
+
 The pull is cached in `data/monday.json`, so the tab opens on the last set of
 boards without calling out; the line above the table says when they were
 fetched. Press the button again to bring it up to date. The GraphQL API
@@ -528,6 +537,7 @@ public/       single-page UI, hash-routed, no build step
 data/                          (gitignored)
   settings.json                global (Anthropic key, Monday.com token, model)
   monday.json                  the last pull of Monday.com boards
+  monday-favorites.json        the board ids you starred
   lists.json                   the list index
   lists/<id>/investors.json    rows, exactly as imported
   lists/<id>/edits.json        cell values you or a step wrote
