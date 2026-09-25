@@ -42,6 +42,7 @@
     <span id="count" class="muted small"></span>
     <span id="list-spend" class="muted small"></span>
     <button id="clear-selection" class="hidden">Clear selection</button>
+    <button id="add-investor">Add investor…</button>
     <button id="columns-btn">Columns…</button>
     <span class="spacer"></span>
     <button id="run-all">Run all</button>
@@ -95,6 +96,43 @@
     </label>
     <div class="dialog-foot">
       <button id="li-map-save" class="primary">Save and queue</button>
+    </div>
+  </dialog>
+
+  <dialog id="add-investor-dialog">
+    <form method="dialog" class="dialog-head">
+      <h3>Add an investor</h3>
+      <button value="close">Cancel</button>
+    </form>
+    <p class="muted small">
+      The row joins the bottom of the list with every other column blank, ready for a playbook run or your own
+      edits.
+    </p>
+    <label class="field">
+      <span>Investor name</span>
+      <input id="add-inv-name" type="text" placeholder="Jane Roe" autocomplete="off" />
+    </label>
+    <label class="field">
+      <span>Firm</span>
+      <input id="add-inv-firm" type="text" placeholder="Acme Ventures" autocomplete="off" />
+    </label>
+    <details id="add-inv-cols">
+      <summary class="muted small">Which columns these go in</summary>
+      <div class="row">
+        <label class="field">
+          <span>Name column</span>
+          <select id="add-inv-name-col"></select>
+        </label>
+        <label class="field">
+          <span>Firm column</span>
+          <select id="add-inv-firm-col"></select>
+        </label>
+      </div>
+      <p class="muted small">Asked once per list, then remembered — the same pair a LinkedIn lookup uses.</p>
+    </details>
+    <p id="add-inv-error" class="mon-error small"></p>
+    <div class="dialog-foot">
+      <button id="add-inv-save" class="primary">Add investor</button>
     </div>
   </dialog>
 

@@ -2180,7 +2180,7 @@ $('#clear-monday').addEventListener('click', async () => {
 // Guesses for which column holds a person and which holds their firm, so the
 // one-time mapping dialog usually just needs confirming.
 const PERSON_HINTS = ['main investor', 'contact', 'partner', 'person', 'name', 'who', 'lead partner'];
-const COMPANY_HINTS = ['lead investor', 'company', 'firm', 'investor', 'organization', 'organisation'];
+const COMPANY_HINTS = ['lead investor', 'company', 'firm', 'fund', 'investor', 'organization', 'organisation'];
 
 const guessColumn = (columns, hints) =>
   columns.find((c) => hints.some((h) => c.toLowerCase().trim() === h)) ||
@@ -2239,6 +2239,75 @@ async function refreshConnections() {
   await loadLinkedInIndex();
   if (parseHash().view === 'investors') renderTable();
 }
+
+// ------------------------------------------------- adding one investor by hand
+
+/**
+ * A row for someone who was not in the CSV. Only two things are asked for —
+ * the person and their firm — which go into the same two columns a LinkedIn
+ * lookup uses, guessed the first time and remembered after that.
+ */
+function openAddInvestor() {
+  const columns = state.investors.csvColumns || state.investors.columns || [];
+  if (!columns.length) return toast('This list has no columns to write into.', 'bad');
+
+  const saved = state.list?.linkedin || {};
+  const keep = (c) => (columns.includes(c) ? c : '');
+  const fill = (sel, guess, blank) =>
+    sel.replaceChildren(
+      el('option', { value: '', textContent: blank }),
+      ...columns.map((c) => el('option', { value: c, textContent: c || '(unnamed)', selected: c === guess }))
+    );
+  const nameGuess = keep(saved.nameColumn) || guessColumn(columns, PERSON_HINTS) || columns[0];
+  const firmGuess = keep(saved.companyColumn) || guessColumn(columns, COMPANY_HINTS);
+  fill($('#add-inv-name-col'), nameGuess, '— choose —');
+  fill($('#add-inv-firm-col'), firmGuess, '— none —');
+
+  // Only make you look at the column pickers when they are not already known.
+  $('#add-inv-cols').open = !keep(saved.nameColumn);
+  $('#add-inv-name').value = '';
+  $('#add-inv-firm').value = '';
+  $('#add-inv-error').textContent = '';
+  $('#add-investor-dialog').showModal();
+  $('#add-inv-name').focus();
+}
+
+$('#add-investor').addEventListener('click', openAddInvestor);
+
+$('#add-inv-save').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const name = $('#add-inv-name').value.trim();
+  const firm = $('#add-inv-firm').value.trim();
+  const nameColumn = $('#add-inv-name-col').value;
+  const companyColumn = $('#add-inv-firm-col').value;
+  const say = (msg) => {
+    $('#add-inv-error').textContent = msg;
+    $('#add-inv-cols').open = true;
+  };
+  if (!name) return say('Give the investor a name.');
+  if (!nameColumn) return say('Pick the column the name goes in.');
+  if (firm && !companyColumn) return say('Pick the column the firm goes in, or leave the firm blank.');
+
+  let added;
+  try {
+    added = await post(`/api/lists/${state.listId}/investors`, { name, firm, nameColumn, companyColumn });
+  } catch (err) {
+    return say(err.message);
+  }
+
+  $('#add-investor-dialog').close();
+  state.list = { ...state.list, linkedin: { nameColumn, companyColumn } };
+  await loadInvestors();
+  await loadLists(); // the row count on the index moves too
+  selectInvestor(added.investorId);
+  // A blank new row usually fails whatever filter is on, so say where it went
+  // rather than leaving you looking for it.
+  const shown = visibleRows().some((r) => r.__id === added.investorId);
+  toast(
+    `Added ${name}${firm ? ` · ${firm}` : ''}` + (shown ? '' : ' — the current filters are hiding it'),
+    shown ? 'good' : ''
+  );
+});
 
 /** Asked once per list; the answer is saved on the list. */
 function askColumnMapping(rowToQueueAfter) {

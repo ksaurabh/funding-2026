@@ -261,6 +261,20 @@ again as it starts. This is what makes an *on request* step usable mid-run —
 press its button and it simply goes after whatever is in flight. **Cancel**
 stops the run in progress and drops everything waiting behind it.
 
+**Add investor…** puts someone on the list who was not in the CSV. It asks for
+two things, an investor name and a firm, and writes them into the two columns
+that hold a person and their firm — guessed the first time, shown in the
+dialog under *Which columns these go in*, and remembered on the list
+afterwards (the same pair a LinkedIn lookup uses, so setting it here makes
+**Look up on LinkedIn** work on the new row too). Every other column starts
+blank, ready for a playbook run or your own edits, and the row joins the
+bottom of the list. Adding the same person at the same firm twice is refused
+rather than duplicated. A blank row usually fails whatever filter is on, so
+the confirmation says when the filters are hiding what you just added.
+
+Added rows live in the same `investors.json` as the imported ones, so
+re-importing a CSV over the list replaces them along with everything else.
+
 **Download CSV** gives you the whole list -- imported columns, your edits, and
 the columns the playbook filled in -- plus one `<step name> (answer)` column
 holding each step's full answer.

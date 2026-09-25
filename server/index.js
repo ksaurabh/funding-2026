@@ -707,6 +707,79 @@ app.get('/api/lists/:listId/investors', (req, res) => {
   }
 });
 
+/**
+ * Add one investor by hand: a person and the firm they are at. Everything
+ * else on the row starts blank, to be filled in by you or by a playbook.
+ *
+ * The two columns are named by the caller and remembered on the list (the
+ * same mapping a LinkedIn lookup uses), so adding a second investor does not
+ * ask again.
+ */
+app.post('/api/lists/:listId/investors', (req, res) => {
+  try {
+    const lists = getLists();
+    const list = lists.find((l) => l.id === req.params.listId);
+    if (!list) return res.status(404).json({ error: 'List not found.' });
+
+    const body = req.body || {};
+    const name = String(body.name ?? '').trim();
+    const firm = String(body.firm ?? '').trim();
+    if (!name) throw new Error('Give the investor a name.');
+
+    const key = listFile(list.id, 'investors');
+    const investors = read(key, { columns: [], rows: [] });
+    if (!investors.columns.length) throw new Error('That list has no columns to write into.');
+
+    const nameColumn = String(body.nameColumn || list.linkedin?.nameColumn || investors.columns[0]).trim();
+    const companyColumn = String(body.companyColumn || list.linkedin?.companyColumn || '').trim();
+    if (!investors.columns.includes(nameColumn)) throw new Error(`This list has no column called "${nameColumn}".`);
+    if (companyColumn && !investors.columns.includes(companyColumn)) {
+      throw new Error(`This list has no column called "${companyColumn}".`);
+    }
+    if (firm && !companyColumn) throw new Error('Say which column holds the firm.');
+
+    // Adding the same person at the same firm twice is a slip, not an intent.
+    const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+    const existing = investors.rows.find(
+      (r) =>
+        same(String(r[nameColumn] ?? ''), name) &&
+        (!companyColumn || !firm || same(String(r[companyColumn] ?? ''), firm))
+    );
+    if (existing) {
+      return res.status(409).json({
+        error: `${name}${firm ? ` at ${firm}` : ''} is already on this list.`,
+        investorId: existing.__id,
+      });
+    }
+
+    // Every column present, so the row looks like an imported one.
+    const row = { __id: '', __addedAt: new Date().toISOString() };
+    for (const c of investors.columns) row[c] = '';
+    row[nameColumn] = name;
+    if (companyColumn && firm) row[companyColumn] = firm;
+
+    const taken = new Set(investors.rows.map((r) => r.__id));
+    let id = crypto.createHash('sha1').update(`${name}|${firm}`.toLowerCase()).digest('hex').slice(0, 12);
+    while (taken.has(id)) id += '_a';
+    row.__id = id;
+
+    investors.rows.push(row);
+    write(key, investors);
+    Object.assign(list, { rowCount: investors.rows.length });
+    write('lists', lists);
+
+    // Remember the mapping, so the next one just asks for name and firm.
+    if (!list.linkedin?.nameColumn && (nameColumn || companyColumn)) {
+      list.linkedin = { nameColumn, companyColumn };
+      write('lists', lists);
+    }
+
+    res.json({ investorId: id, row, rowCount: investors.rows.length, nameColumn, companyColumn });
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+});
+
 app.get('/api/lists/:listId/investors/:id', (req, res) => {
   const investors = readRowsMerged(req.params.listId);
   const row = investors.rows.find((r) => r.__id === req.params.id);
