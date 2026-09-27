@@ -1080,7 +1080,7 @@ async function applyConnectionsOfFilter(personName) {
  * actually applied; a caller must not treat an unconstrained page as a result,
  * because it is every match on LinkedIn rather than the ones they can reach.
  */
-export async function searchConnectionsOf({ term, introducerName, limit = 0, onPage } = {}) {
+export async function searchConnectionsOf({ term, introducerName, limit = 0, onPage, shouldStop } = {}) {
   await ready();
   await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(term)}`);
 
@@ -1137,6 +1137,8 @@ export async function searchConnectionsOf({ term, introducerName, limit = 0, onP
     // Nobody new means the list has run out, or LinkedIn is repeating itself.
     if (!added) break;
     if (limit && seen.size >= limit) break;
+    // Asked to stop: keep the pages already read rather than the next one.
+    if (shouldStop?.()) break;
   }
 
   const people = [...seen.values()];

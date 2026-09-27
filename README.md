@@ -505,8 +505,9 @@ for that page is the evidence to fix it from.
 
 ## Ask for Intro
 
-Two panes: the fetch jobs down the left, and what the selected one found on the
-right.
+Two halves, picked with the buttons at the top left: **Fetch jobs** — the jobs
+down the left, and what the selected one found on the right — and **All 2nd
+degree connections**, everyone found across every job.
 
 **+ New fetch job** asks for a **1st degree connection** by name, a **search
 term** for their 2nd-degree connections, and — if you want it — a **Jev
@@ -606,8 +607,26 @@ shows it with the paths of both files. It needs the agent window to be open;
 when something goes wrong in a way no error message covers, that capture is
 the thing to look at — and the thing worth pasting.
 
+### All 2nd degree connections
+
+The same table, over everything: one entry per person rather than one per
+introduction. Somebody two of your connections both know is a single row with
+a **Connected via** column naming both, and *2 ways in* underneath.
+
+Your marks belong to the person, not to the path. Relevance or a note set on
+one job's row shows here; set here, it is written back to every row for them,
+so it shows on each job too. Whatever any job learned about them — the title,
+the company, Jev's answer — fills the entry, so a person qualified under one
+connection is not blank under another. The relevance chips and the search box
+work as they do on a job, and the search matches the connecting names too, so
+typing a connection's name lists who they can introduce you to. **Download
+CSV** takes the merged view.
+
 Jobs run one at a time, paced by the same randomised delay as the rest of the
-agent; **Clear queue** drops what has not started. State lives in
+agent; **Clear queue** drops what has not started, and **Stop job** ends the
+one that is running at its next step — between pages, between people, or in
+the middle of a model call — keeping everything collected up to that point.
+The job is then marked *stopped by you*, and **Re-run** picks it up again. State lives in
 `data/linkedin-intro.json`, and the spend on answers is shown in the toolbar.
 
 ## Tab icon

@@ -70,6 +70,10 @@ let queue = [];
 let running = false;
 let current = null;
 let log = [];
+// Set while a stop has been asked for; the run checks it between steps, and
+// the controller cuts short whatever call is in flight.
+let stopping = false;
+let inFlight = null;
 
 const note = (msg) => {
   log.push({ t: new Date().toISOString(), msg });
@@ -79,9 +83,25 @@ const note = (msg) => {
 export const status = () => ({
   running,
   current,
+  stopping,
   pending: queue.length,
   log: log.slice(-120),
 });
+
+/**
+ * Stop the job that is running. It gives up at the next step it reaches —
+ * between pages, between people, or in the middle of a model call, which the
+ * controller cuts short — and keeps everything it had collected up to there.
+ */
+export function stopCurrent() {
+  if (!running) return { ...state(), stopped: false };
+  stopping = true;
+  inFlight?.abort();
+  note('Stopping at the next step…');
+  return { ...state(), stopped: true };
+}
+
+const stopRequested = () => stopping;
 
 export function state() {
   const s = load();
@@ -390,6 +410,7 @@ async function drain() {
       const job = queue.shift();
       if (!job) break;
       current = job.label;
+      stopping = false;
       try {
         if (job.kind === 'introducer') await runIntroducer(job);
         else if (job.kind === 'qualify') await runQualify(job);
@@ -403,6 +424,8 @@ async function drain() {
   } finally {
     running = false;
     current = null;
+    stopping = false;
+    inFlight = null;
   }
 }
 
@@ -531,6 +554,7 @@ async function runJob(job) {
     // Say how it is going: ten pages is a few minutes of paced loading.
     onPage: ({ page, added, total }) =>
       note(`Page ${page} via ${introducer.name}: ${added} new, ${total} so far.`),
+    shouldStop: stopRequested,
   });
 
   // Without the "Connections of" filter this page is every match on LinkedIn,
@@ -555,6 +579,11 @@ async function runJob(job) {
       },
       lastRunAt: new Date().toISOString(),
     });
+    return;
+  }
+  if (stopRequested()) {
+    note(`Stopped ${jobLabel(entry)} before it read anyone.`);
+    patchJob({ status: 'stopped', lastRunAt: new Date().toISOString() });
     return;
   }
   if (picked) {
@@ -587,6 +616,15 @@ async function runJob(job) {
   let carried = 0;
 
   for (const target of targets) {
+    if (stopRequested()) {
+      note(`Stopped ${jobLabel(entry)} — ${load().rows.filter((r) => r.jobId === entry.id).length} kept.`);
+      patchJob({
+        status: 'stopped',
+        lastRunAt: new Date().toISOString(),
+        found: load().rows.filter((r) => r.jobId === entry.id).length,
+      });
+      return;
+    }
     // The same person through the same connection is the same row, re-read and
     // re-asked; through a different connection it is a different introduction.
     const existing = load().rows.find((r) => r.jobId === entry.id && r.url === shortUrl(target.url));
@@ -769,11 +807,14 @@ async function ask(row, prompt) {
   if (!s.apiKey) return { answer: '', error: 'No Anthropic API key. Add one on the Settings tab.' };
   try {
     const client = makeClient(s.apiKey);
+    inFlight = new AbortController();
     const result = await askLLM(client, {
       system: DEFAULT_SYSTEM,
       messages: [{ role: 'user', content: renderPrompt(prompt, row) }],
       settings: s,
+      signal: inFlight.signal,
     });
+    inFlight = null;
     const cost = costOf(s.model, result.usage);
     return {
       answer: (result.text || '').trim(),
@@ -785,8 +826,82 @@ async function ask(row, prompt) {
       answeredAt: new Date().toISOString(),
     };
   } catch (err) {
-    return { answer: '', error: err.message };
+    inFlight = null;
+    return { answer: '', error: stopRequested() ? 'Stopped before an answer came back.' : err.message };
   }
+}
+
+// --------------------------------------------- everyone, across every job
+
+/**
+ * The rows merged into one person each. Reached through two connections is
+ * one person with two ways in, not two rows — and the whole point of the view
+ * is seeing which of your connections can make the introduction.
+ *
+ * Your own marks travel with the person: a relevance or note set on any of
+ * their rows shows on all of them, since it was a judgement about them rather
+ * than about the path.
+ */
+export function people() {
+  const s = load();
+  const jobs = new Map(s.jobs.map((j) => [j.id, j]));
+  const byKey = new Map();
+
+  for (const row of s.rows) {
+    // Same link, or same name and title: the same person.
+    const key = row.url || personKey(row.name, row.title || row.headline);
+    let person = byKey.get(key);
+    if (!person) {
+      person = {
+        key,
+        name: row.name,
+        title: row.title || row.headline || '',
+        company: row.company || '',
+        url: row.url,
+        degree: row.degree || null,
+        answer: '',
+        relevance: '',
+        note: '',
+        via: [],
+        rowIds: [],
+        firstSeen: row.at || null,
+      };
+      byKey.set(key, person);
+    }
+
+    person.rowIds.push(row.id);
+    // Whichever row knows more fills the gaps.
+    person.title = person.title || row.title || row.headline || '';
+    person.company = person.company || row.company || '';
+    person.answer = person.answer || row.answer || '';
+    person.degree = person.degree || row.degree || null;
+    // A mark you made anywhere is the mark on the person.
+    if (!person.relevance || person.relevance === RELEVANCE[0]) person.relevance = row.relevance || person.relevance;
+    person.note = person.note || row.note || '';
+
+    const name = row.introducerName || jobs.get(row.jobId)?.introducerName;
+    if (name && !person.via.some((v) => v.name === name)) {
+      person.via.push({ name, url: row.introducerUrl || '', term: row.term || jobs.get(row.jobId)?.term || '' });
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) => b.via.length - a.via.length || a.name.localeCompare(b.name));
+}
+
+/** Set relevance or a note on a person, which means on every row for them. */
+export function markPerson(rowIds, fields) {
+  const ids = [].concat(rowIds || []);
+  if (!ids.length) throw new Error('No rows to mark.');
+  let last = null;
+  for (const id of ids) {
+    try {
+      last = markRow(id, fields);
+    } catch {
+      // A row deleted since the view was drawn is not worth failing over.
+    }
+  }
+  if (!last) throw new Error('Those rows are gone — reload the tab.');
+  return last;
 }
 
 /** What the rows cost to answer, all together. */

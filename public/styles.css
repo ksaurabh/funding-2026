@@ -713,6 +713,23 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-table tbody tr:hover { background: none; }
 .category { font-weight: 500; }
 .field.dimmed { opacity: .45; }
+.subtabs { display: flex; gap: 4px; margin-right: 8px; }
+.subtab {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.subtab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.people-view { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+#in-people-table td { white-space: normal; vertical-align: top; }
+#in-people-table tbody tr { cursor: default; }
+#in-people-table tbody tr:hover { background: none; }
+.via-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.via { font-size: 11px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); }
+#in-people-filter { font-size: 12px; }
 .rel-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .rel-bar .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .rel-bar .chip { font-size: 11px; padding: 2px 9px; }

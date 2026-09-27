@@ -308,14 +308,36 @@
 <!-- -------------------------------------------------------- ask for intro -->
 <main id="view-intro" class="view hidden">
   <div class="toolbar">
+    <nav class="subtabs">
+      <button id="in-tab-jobs" class="subtab on">Fetch jobs</button>
+      <button id="in-tab-people" class="subtab">All 2nd degree connections</button>
+    </nav>
     <button id="in-add-job" class="primary">+ New fetch job</button>
     <span id="in-progress" class="muted small"></span>
     <span class="spacer"></span>
+    <button id="in-stop" class="danger hidden" title="Stop the running job at its next step, keeping what it has">Stop job</button>
     <button id="in-capture" title="Save a screenshot and the HTML of whatever the agent is looking at now">Capture page</button>
     <button id="in-clear-queue" class="hidden">Clear queue</button>
     <a href="/api/linkedin/intro.csv" class="btn">Download CSV</a>
   </div>
-  <div class="intro-cols">
+  <section id="in-people-view" class="hidden people-view">
+    <div class="rel-bar">
+      <input id="in-people-filter" type="search" placeholder="Filter people…" />
+      <span class="filter-label">Relevance</span>
+      <div id="in-people-chips" class="chips"></div>
+      <span id="in-people-count" class="filter-count"></span>
+      <span class="spacer"></span>
+      <a href="/api/linkedin/intro/people.csv" class="btn">Download CSV</a>
+    </div>
+    <div class="detail-body">
+      <table id="in-people-table">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <div id="in-jobs-view" class="intro-cols">
     <section class="intro-col jobs">
       <h3 class="col-title">Fetch 2nd degree connections jobs</h3>
       <div id="in-jobs" class="col-body"></div>

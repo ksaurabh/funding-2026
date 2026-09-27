@@ -313,6 +313,39 @@ linkedinRoutes.delete('/intro/jobs/:id', (req, res) => res.json(intro.removeJob(
 
 linkedinRoutes.post('/intro/queue/clear', (_req, res) => res.json(intro.clearQueue()));
 
+// Everyone found, across every job, one entry each.
+linkedinRoutes.get('/intro/people', (_req, res) => res.json({ people: intro.people(), relevance: intro.relevance() }));
+
+// A mark on a person is a mark on every row that is them.
+linkedinRoutes.patch('/intro/people', (req, res) => {
+  try {
+    const { rowIds, relevance, note } = req.body || {};
+    res.json({ row: intro.markPerson(rowIds, { relevance, note }) });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+linkedinRoutes.get('/intro/people.csv', (_req, res) => {
+  const esc = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const cols = ['name', 'title', 'company', 'degree', 'linkedin', 'connected via', 'category', 'relevance', 'note'];
+  const lines = [cols.join(',')];
+  for (const p of intro.people()) {
+    lines.push(
+      [p.name, p.title, p.company, p.degree, p.url, p.via.map((v) => v.name).join('; '), p.answer, p.relevance, p.note]
+        .map(esc)
+        .join(',')
+    );
+  }
+  res.type('text/csv').attachment('second-degree-connections.csv').send(lines.join('\n'));
+});
+
+// Stop the job that is running now, keeping what it has already collected.
+linkedinRoutes.post('/intro/stop', (_req, res) => res.json(intro.stopCurrent()));
+
 // A relevance option added from the dropdown.
 linkedinRoutes.post('/intro/relevance', (req, res) => {
   try {

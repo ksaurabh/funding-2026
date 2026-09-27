@@ -4118,6 +4118,212 @@ $('#mon-refresh').addEventListener('click', async () => {
   }
 });
 
+// ------------------------------------- everyone found, across every job
+// The same person reached through two connections is one row here, with both
+// ways in — and a mark set on them anywhere is the mark you see.
+
+const people = { rows: [], filter: '', relFilter: new Set(), loaded: false };
+
+async function loadPeople() {
+  try {
+    const data = await api('/api/linkedin/intro/people');
+    people.rows = data.people;
+    if (data.relevance) intro.relevance = data.relevance;
+    people.loaded = true;
+  } catch (err) {
+    toast(err.message, 'bad');
+    return;
+  }
+  renderPeople();
+}
+
+function peopleAll() {
+  const q = people.filter.trim().toLowerCase();
+  if (!q) return people.rows;
+  return people.rows.filter((p) =>
+    [p.name, p.title, p.company, p.answer, p.note, ...p.via.map((v) => v.name)].some((v) =>
+      String(v ?? '').toLowerCase().includes(q)
+    )
+  );
+}
+
+const peopleVisible = () => {
+  const rows = peopleAll();
+  if (!people.relFilter.size) return rows;
+  return rows.filter((p) => people.relFilter.has(p.relevance || intro.relevance[0]));
+};
+
+function renderPeople() {
+  const all = peopleAll();
+  const rows = peopleVisible();
+
+  // The same chips as a job's table, over everyone.
+  const counts = new Map();
+  for (const p of all) {
+    const rel = p.relevance || intro.relevance[0];
+    counts.set(rel, (counts.get(rel) || 0) + 1);
+  }
+  const options = [...new Set([...intro.relevance, ...counts.keys()])];
+  const chips = options.map((value) => {
+    const on = people.relFilter.has(value);
+    const chip = el('button', { className: 'chip' + (on ? ' on' : ''), textContent: `${value} (${counts.get(value) || 0})` });
+    chip.addEventListener('click', () => {
+      if (on) people.relFilter.delete(value);
+      else people.relFilter.add(value);
+      renderPeople();
+    });
+    return chip;
+  });
+  if (people.relFilter.size) {
+    const clear = el('button', { className: 'chip clear', textContent: 'Clear' });
+    clear.addEventListener('click', () => {
+      people.relFilter.clear();
+      renderPeople();
+    });
+    chips.push(clear);
+  }
+  $('#in-people-chips').replaceChildren(...chips);
+  $('#in-people-count').textContent = `${rows.length}${rows.length === all.length ? '' : ` of ${all.length}`} people`;
+
+  $('#in-people-table thead').replaceChildren(
+    el('tr', {}, [
+      el('th', { textContent: '2nd degree connection' }),
+      el('th', { textContent: 'Title' }),
+      el('th', { textContent: 'Company' }),
+      el('th', { textContent: 'LinkedIn profile' }),
+      el('th', { textContent: 'Connected via' }),
+      el('th', { textContent: 'Jev’s category' }),
+      el('th', { textContent: 'Relevance' }),
+      el('th', { textContent: 'Note' }),
+    ])
+  );
+
+  const focused = document.activeElement;
+  const typing = focused && /^(INPUT|SELECT|TEXTAREA)$/.test(focused.tagName);
+  if (typing && $('#in-people-table').contains(focused)) return;
+
+  $('#in-people-table tbody').replaceChildren(
+    ...rows.map((p) =>
+      el('tr', {}, [
+        el('td', {}, [
+          el('div', {}, [
+            document.createTextNode(p.name),
+            p.degree === '1st' ? el('span', { className: 'badge full', textContent: '1st' }) : null,
+          ]),
+        ]),
+        el('td', { textContent: p.title || '—' }),
+        el('td', { textContent: p.company || '—' }),
+        el('td', {}, p.url ? el('a', { href: p.url, target: '_blank', rel: 'noreferrer', textContent: 'Profile' }) : document.createTextNode('—')),
+        // Everyone who can make the introduction, not just the first found.
+        el('td', {}, [
+          el('div', { className: 'via-list' }, p.via.map((v) => el('span', { className: 'via', textContent: v.name }))),
+          p.via.length > 1 ? el('div', { className: 'muted small', textContent: `${p.via.length} ways in` }) : null,
+        ]),
+        el('td', {}, el('span', { className: p.answer ? 'category' : 'muted', textContent: p.answer || 'not qualified' })),
+        el('td', {}, personRelevanceCell(p)),
+        el('td', {}, personNoteCell(p)),
+      ])
+    )
+  );
+
+  if (!rows.length) {
+    $('#in-people-table tbody').replaceChildren(
+      el(
+        'tr',
+        {},
+        el('td', {
+          colSpan: 8,
+          className: 'muted',
+          textContent: people.rows.length ? 'Nothing matches those filters.' : 'No jobs have found anyone yet.',
+        })
+      )
+    );
+  }
+}
+
+/** A mark here is a mark on every row that is this person. */
+async function markPerson(person, fields) {
+  Object.assign(person, fields);
+  try {
+    await api('/api/linkedin/intro/people', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ rowIds: person.rowIds, ...fields }),
+    });
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+function personRelevanceCell(person) {
+  const current = person.relevance || intro.relevance[0];
+  const select = el('select', { className: relClass(current) });
+  const fill = (value) =>
+    select.replaceChildren(
+      ...intro.relevance.map((v) => el('option', { value: v, textContent: v, selected: v === value })),
+      el('option', { value: ADD_RELEVANCE, textContent: 'Add a new option…' })
+    );
+  fill(current);
+
+  select.addEventListener('change', async () => {
+    if (select.value !== ADD_RELEVANCE) {
+      select.className = relClass(select.value);
+      await markPerson(person, { relevance: select.value });
+      return renderPeople();
+    }
+    const typed = prompt('New relevance option:', '');
+    if (!typed || !typed.trim()) return fill(person.relevance || intro.relevance[0]);
+    let added;
+    try {
+      added = await post('/api/linkedin/intro/relevance', { value: typed });
+    } catch (err) {
+      toast(err.message, 'bad');
+      return fill(person.relevance || intro.relevance[0]);
+    }
+    intro.relevance = added.options;
+    await markPerson(person, { relevance: added.value });
+    renderPeople();
+  });
+  return select;
+}
+
+function personNoteCell(person) {
+  const input = el('input', { className: 'cell-input note-input', type: 'text', value: person.note || '', placeholder: '…' });
+  const save = () => {
+    if ((person.note || '') === input.value) return;
+    markPerson(person, { note: input.value });
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') {
+      input.value = person.note || '';
+      input.blur();
+    }
+  });
+  return input;
+}
+
+$('#in-people-filter').addEventListener('input', (e) => {
+  people.filter = e.target.value;
+  renderPeople();
+});
+
+/** Which half of the tab you are looking at. */
+function showIntroTab(which) {
+  intro.tab = which;
+  $('#in-tab-jobs').classList.toggle('on', which === 'jobs');
+  $('#in-tab-people').classList.toggle('on', which === 'people');
+  $('#in-jobs-view').classList.toggle('hidden', which !== 'jobs');
+  $('#in-people-view').classList.toggle('hidden', which !== 'people');
+  // Only the jobs half has things to add to.
+  $('#in-add-job').classList.toggle('hidden', which !== 'jobs');
+  if (which === 'people') loadPeople();
+}
+
+$('#in-tab-jobs').addEventListener('click', () => showIntroTab('jobs'));
+$('#in-tab-people').addEventListener('click', () => showIntroTab('people'));
+
 // -------------------------------------------- capturing the agent's page
 // For when something went wrong in a way no error message covers: the picture
 // and the markup of whatever the agent is looking at, on demand.
@@ -4184,6 +4390,7 @@ const intro = {
   cost: 0,
   log: [],
   job: null,
+  tab: 'jobs',
   filter: '',
   relevance: ['Not Set', 'Ignore', 'High'],
   // Which relevances to show; empty means all of them.
@@ -4210,6 +4417,8 @@ async function pollIntro() {
   }
   if (intro.job && !intro.jobs.some((j) => j.id === intro.job)) intro.job = null;
   renderIntro();
+  // A run that added rows changes the aggregate too.
+  if (intro.tab === 'people' && people.loaded) loadPeople();
 }
 
 const selectedJob = () => intro.jobs.find((j) => j.id === intro.job) || null;
@@ -4238,6 +4447,10 @@ function renderIntro() {
     : '';
   $('#in-clear-queue').classList.toggle('hidden', !intro.pending);
   $('#in-clear-queue').textContent = `Clear queue (${intro.pending})`;
+  // Stopping applies to what is running; the queue button covers the rest.
+  $('#in-stop').classList.toggle('hidden', !intro.running);
+  $('#in-stop').disabled = !!intro.stopping;
+  $('#in-stop').textContent = intro.stopping ? 'Stopping…' : 'Stop job';
 }
 
 /** One card per job, showing what it was made of and how it went. */
@@ -4256,20 +4469,27 @@ function renderIntroJobs() {
           ? el('span', { className: 'badge running' }, [el('i', { className: 'spinner' }), document.createTextNode('running')])
           : j.status === 'queued'
           ? el('span', { className: 'badge queued', textContent: 'queued' })
+          : j.status === 'stopped'
+          ? el('span', { className: 'badge queued', textContent: 'stopped by you' })
           : j.status === 'error'
           ? el('span', { className: 'badge err', textContent: 'stopped' })
           : el('span', { className: 'badge full', textContent: 'done' });
 
-      const rerun = el('button', { textContent: j.lastRunAt ? 'Re-run' : 'Run', className: 'small-btn' });
-      rerun.disabled = j.status === 'running' || j.status === 'queued';
+      // While it runs, that button is how you stop it.
+      const live = j.status === 'running';
+      const rerun = el('button', {
+        textContent: live ? (intro.stopping ? 'Stopping…' : 'Stop') : j.lastRunAt ? 'Re-run' : 'Run',
+        className: 'small-btn' + (live ? ' danger' : ''),
+      });
+      rerun.disabled = (live && intro.stopping) || j.status === 'queued';
       rerun.addEventListener('click', async (e) => {
         e.stopPropagation();
         try {
-          Object.assign(intro, await post(`/api/linkedin/intro/jobs/${j.id}/run`));
+          Object.assign(intro, await post(live ? '/api/linkedin/intro/stop' : `/api/linkedin/intro/jobs/${j.id}/run`));
         } catch (err) {
           return toast(err.message, 'bad');
         }
-        intro.job = j.id;
+        if (!live) intro.job = j.id;
         renderIntro();
       });
 
@@ -4369,6 +4589,8 @@ function renderIntroDetail() {
         (job.pages > 1 ? ` across ${job.pages} pages` : '') +
         (job.carried ? ` · ${job.carried} already checked elsewhere` : '') +
         ` · last run ${new Date(job.lastRunAt).toLocaleString()}`
+      : job.status === 'stopped'
+      ? `stopped by you · ${job.found || 0} kept`
       : job.status === 'error'
       ? 'stopped'
       : job.status
@@ -4744,6 +4966,16 @@ $('#in-job-save').addEventListener('click', async (e) => {
 $('#in-filter').addEventListener('input', (e) => {
   intro.filter = e.target.value;
   renderIntroDetail();
+});
+
+$('#in-stop').addEventListener('click', async () => {
+  try {
+    Object.assign(intro, await post('/api/linkedin/intro/stop'));
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  toast('Stopping — it keeps what it has already collected.');
+  renderIntro();
 });
 
 $('#in-clear-queue').addEventListener('click', async () => {
