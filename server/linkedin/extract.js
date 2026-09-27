@@ -455,3 +455,56 @@ export function findShowResultsInPage() {
     disabled: hit.getAttribute('aria-disabled') === 'true' || hit.disabled === true,
   };
 }
+
+/**
+ * What the "Connections of" section currently has selected.
+ *
+ * A picked connection is not a chip and does not show up in the apply link's
+ * href — that href is static. It is a checked radio with the person's name
+ * beside it:
+ *
+ *   <div role="radio" aria-checked="true"> … <input type="radio" checked> … <p>Ashu Garg</p>
+ *
+ * so this reads the checked controls in that section and reports their names.
+ *
+ * Runs inside the page via page.evaluate.
+ */
+export function readConnectionsSelectionInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const HEADING = /^connections of\b/i;
+
+  const headings = [...document.querySelectorAll('h1,h2,h3,h4,label,legend,span,div,p,button')].filter((n) =>
+    HEADING.test(clean(n.innerText))
+  );
+  const heading = headings.filter((n) => !headings.some((o) => o !== n && n.contains(o))).pop() || null;
+  if (!heading) return { found: false, selected: [] };
+
+  // The block that holds the heading and its controls.
+  let section = heading;
+  for (let i = 0; i < 6 && section.parentElement; i++) {
+    section = section.parentElement;
+    if (section.querySelector('[role="radio"], [role="checkbox"], input')) break;
+  }
+
+  const checked = [
+    ...section.querySelectorAll(
+      '[role="radio"][aria-checked="true"], [role="checkbox"][aria-checked="true"], input:checked'
+    ),
+  ];
+
+  // The name sits next to the control, inside the row that holds both.
+  const names = checked
+    .map((c) => {
+      let row = c;
+      for (let i = 0; i < 4 && row.parentElement; i++) {
+        row = row.parentElement;
+        const text = clean(row.innerText);
+        if (text) return text.split('\n')[0];
+      }
+      return '';
+    })
+    .map(clean)
+    .filter(Boolean);
+
+  return { found: true, selected: [...new Set(names)], sectionText: clean(section.innerText).slice(0, 400) };
+}

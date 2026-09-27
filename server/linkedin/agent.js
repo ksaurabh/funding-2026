@@ -19,6 +19,7 @@ import {
   findTypeaheadOptionsInPage,
   findAllFiltersButtonInPage,
   findShowResultsInPage,
+  readConnectionsSelectionInPage,
 } from './extract.js';
 import { pickBest, nameScore } from './match.js';
 
@@ -975,68 +976,76 @@ async function applyConnectionsOfFilter(personName) {
   await option.click().catch(() => {});
   await wait(PACE.settle);
 
-  // Did the pick register? The Show-results link carries the filters it would
-  // apply, so its href says so plainly — no guessing from the look of a chip.
-  const applyState = async () => (await page.evaluate(findShowResultsInPage).catch(() => null)) || { found: false };
-  const facetIn = (href) => !!href && SELECTORS.connectionFacetParam.test(href);
+  // Did the pick register? Not in the apply link's href — that is static,
+  // `?keywords=…&origin=FACETED_SEARCH`, whatever is selected. The panel shows
+  // the chosen connection as a checked radio, so that is what to read.
+  const selection = async () =>
+    (await page.evaluate(readConnectionsSelectionInPage).catch(() => null)) || { found: false, selected: [] };
 
-  let apply = await applyState();
-  for (let attempt = 0; attempt < 6 && apply.found && !facetIn(apply.href); attempt++) {
+  let picked = await selection();
+  for (let attempt = 0; attempt < 6 && !picked.selected.length; attempt++) {
     await new Promise((r) => setTimeout(r, 400));
-    apply = await applyState();
+    picked = await selection();
   }
 
-  // Not registered: take the route the panel itself suggests — it announces
+  // Nothing checked: take the route the panel itself suggests — it announces
   // "use up and down arrow keys to navigate" — and choose with the keyboard.
-  if (apply.found && !facetIn(apply.href)) {
+  if (!picked.selected.length) {
     await field.click().catch(() => {});
     await page.keyboard.press('ArrowDown').catch(() => {});
     await new Promise((r) => setTimeout(r, 300));
     await page.keyboard.press('Enter').catch(() => {});
     for (let attempt = 0; attempt < 6; attempt++) {
       await new Promise((r) => setTimeout(r, 400));
-      apply = await applyState();
-      if (facetIn(apply.href)) break;
+      picked = await selection();
+      if (picked.selected.length) break;
     }
   }
 
-  if (!apply.found) {
-    return fail('Could not find the "Show results" control on the filter panel.', {
-      controls: apply.controls || null,
-      suggestions: options.slice(0, 8).map((o) => o.name),
-    });
-  }
-  if (apply.href && !facetIn(apply.href)) {
-    return fail(`Picking "${options[bestAt].name}" did not apply a connection filter.`, {
-      showResultsHref: apply.href,
+  if (!picked.selected.length) {
+    return fail(`Picking "${options[bestAt].name}" did not select anything in "Connections of".`, {
+      sectionText: picked.sectionText || null,
       suggestions: options.slice(0, 8).map((o) => o.name),
     });
   }
 
+  const apply = await page.evaluate(findShowResultsInPage).catch(() => null);
+  if (!apply?.found) {
+    return fail('Could not find the "Show results" control on the filter panel.', {
+      controls: apply?.controls || null,
+      selected: picked.selected,
+    });
+  }
+
+  // Clicking it is the whole point: the filter is applied by LinkedIn's own
+  // handler, which builds the faceted URL. Following the href instead would
+  // navigate to the unfiltered search it statically points at.
   await wait(PACE.betweenActions);
-  // An anchor already holds the filtered URL: going there directly is the same
-  // navigation the click would do, minus the chance of missing the click.
-  if (apply.tag === 'a' && facetIn(apply.href)) {
-    await visit(absolute(apply.href));
-  } else {
-    const el = await page.$('[data-agent-apply]');
-    await Promise.all([
-      page.waitForLoadState('domcontentloaded').catch(() => {}),
-      el ? el.click().catch(() => {}) : Promise.resolve(),
-    ]);
-    await wait(PACE.settle);
+  const applyEl = await page.$('[data-agent-apply]');
+  await Promise.all([
+    page.waitForLoadState('domcontentloaded').catch(() => {}),
+    applyEl ? applyEl.click().catch(() => {}) : Promise.resolve(),
+  ]);
+  await wait(PACE.settle);
+
+  // The click may resolve client-side; give the URL a moment to catch up.
+  for (let attempt = 0; attempt < 8 && !SELECTORS.connectionFacetParam.test(page.url()); attempt++) {
+    await new Promise((r) => setTimeout(r, 500));
   }
 
   // Proof, not hope: LinkedIn's facet has to be in the URL it landed on.
   if (!SELECTORS.connectionFacetParam.test(page.url())) {
-    return fail('The filter did not take — the results URL carries no connection facet.', {
+    return fail('Pressed "Show results", but the results URL carries no connection facet.', {
       url: page.url(),
+      selected: picked.selected,
       showResultsHref: apply.href || null,
     });
   }
   return {
     ok: true,
-    picked: options[bestAt].name || options[bestAt].text,
+    // What the panel ended up with checked, which is the authority — the
+    // suggestion clicked is only how it got there.
+    picked: picked.selected[0] || options[bestAt].name || options[bestAt].text,
     pickedText: options[bestAt].text,
     // True when the pick was LinkedIn's ranking rather than a name match.
     assumed,
