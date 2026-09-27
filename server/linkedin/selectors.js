@@ -84,6 +84,7 @@ export const SELECTORS = {
   showResults: [
     'button[data-test-reusables-filters-modal-show-results-button]',
     'button[aria-label*="Apply current filters" i]',
+    'a:has-text("Show results")',
     'button:has-text("Show results")',
   ],
   // Proof the facet actually applied: LinkedIn's own parameter name.

@@ -413,3 +413,45 @@ export function findAllFiltersButtonInPage() {
     results: document.querySelectorAll('a[href*="/in/"]').length,
   };
 }
+
+/**
+ * Find the control that applies the filters, and report what it would apply.
+ *
+ * On a real panel this is an anchor, not a button — `<a href="…/search/results/
+ * people/?keywords=…&origin=FACETED_SEARCH">Show results</a>` — with its label
+ * two spans deep, next to a "Reset" button. Its href is also the honest signal
+ * that a filter has taken: the connection facet appears in it as soon as the
+ * typeahead selection registers, so the caller can check rather than hope.
+ *
+ * Runs inside the page via page.evaluate.
+ */
+export function findShowResultsInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const WANT = /^show(\s+[\d,+]+)?\s+results?$/i;
+
+  for (const el of document.querySelectorAll('[data-agent-apply]')) el.removeAttribute('data-agent-apply');
+
+  const candidates = [...document.querySelectorAll('a, button, [role="button"]')].filter((n) => {
+    const r = n.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+
+  const hit =
+    candidates.find((n) => WANT.test(clean(n.innerText))) ||
+    candidates.find((n) => WANT.test(n.getAttribute('aria-label') || ''));
+  if (!hit) {
+    return {
+      found: false,
+      controls: candidates.map((n) => clean(n.innerText) || n.getAttribute('aria-label') || '').filter(Boolean).slice(0, 30),
+    };
+  }
+
+  hit.setAttribute('data-agent-apply', '1');
+  return {
+    found: true,
+    tag: hit.tagName.toLowerCase(),
+    label: clean(hit.innerText),
+    href: hit.getAttribute('href') || null,
+    disabled: hit.getAttribute('aria-disabled') === 'true' || hit.disabled === true,
+  };
+}

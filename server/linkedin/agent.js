@@ -18,6 +18,7 @@ import {
   findConnectionsFieldInPage,
   findTypeaheadOptionsInPage,
   findAllFiltersButtonInPage,
+  findShowResultsInPage,
 } from './extract.js';
 import { pickBest, nameScore } from './match.js';
 
@@ -974,18 +975,64 @@ async function applyConnectionsOfFilter(personName) {
   await option.click().catch(() => {});
   await wait(PACE.settle);
 
-  const apply = await findOne(page, SELECTORS.showResults);
-  if (!apply) return fail('Could not find the "Show results" button on the filter panel.');
+  // Did the pick register? The Show-results link carries the filters it would
+  // apply, so its href says so plainly — no guessing from the look of a chip.
+  const applyState = async () => (await page.evaluate(findShowResultsInPage).catch(() => null)) || { found: false };
+  const facetIn = (href) => !!href && SELECTORS.connectionFacetParam.test(href);
+
+  let apply = await applyState();
+  for (let attempt = 0; attempt < 6 && apply.found && !facetIn(apply.href); attempt++) {
+    await new Promise((r) => setTimeout(r, 400));
+    apply = await applyState();
+  }
+
+  // Not registered: take the route the panel itself suggests — it announces
+  // "use up and down arrow keys to navigate" — and choose with the keyboard.
+  if (apply.found && !facetIn(apply.href)) {
+    await field.click().catch(() => {});
+    await page.keyboard.press('ArrowDown').catch(() => {});
+    await new Promise((r) => setTimeout(r, 300));
+    await page.keyboard.press('Enter').catch(() => {});
+    for (let attempt = 0; attempt < 6; attempt++) {
+      await new Promise((r) => setTimeout(r, 400));
+      apply = await applyState();
+      if (facetIn(apply.href)) break;
+    }
+  }
+
+  if (!apply.found) {
+    return fail('Could not find the "Show results" control on the filter panel.', {
+      controls: apply.controls || null,
+      suggestions: options.slice(0, 8).map((o) => o.name),
+    });
+  }
+  if (apply.href && !facetIn(apply.href)) {
+    return fail(`Picking "${options[bestAt].name}" did not apply a connection filter.`, {
+      showResultsHref: apply.href,
+      suggestions: options.slice(0, 8).map((o) => o.name),
+    });
+  }
+
   await wait(PACE.betweenActions);
-  await Promise.all([
-    page.waitForLoadState('domcontentloaded').catch(() => {}),
-    apply.click().catch(() => {}),
-  ]);
-  await wait(PACE.settle);
+  // An anchor already holds the filtered URL: going there directly is the same
+  // navigation the click would do, minus the chance of missing the click.
+  if (apply.tag === 'a' && facetIn(apply.href)) {
+    await visit(absolute(apply.href));
+  } else {
+    const el = await page.$('[data-agent-apply]');
+    await Promise.all([
+      page.waitForLoadState('domcontentloaded').catch(() => {}),
+      el ? el.click().catch(() => {}) : Promise.resolve(),
+    ]);
+    await wait(PACE.settle);
+  }
 
   // Proof, not hope: LinkedIn's facet has to be in the URL it landed on.
   if (!SELECTORS.connectionFacetParam.test(page.url())) {
-    return fail('The filter did not take — the results URL carries no connection facet.', { url: page.url() });
+    return fail('The filter did not take — the results URL carries no connection facet.', {
+      url: page.url(),
+      showResultsHref: apply.href || null,
+    });
   }
   return {
     ok: true,

@@ -542,6 +542,14 @@ matching the term. After pressing Show results the agent checks that the facet
 really is in the URL it landed on, and if it is not the job **stops with a
 reason and no rows**. Unconstrained results are never turned into rows.
 
+On the current panel **Show results is a link, not a button**, and its href
+carries the filters it would apply — which makes it the honest signal that a
+pick registered. The agent waits for the connection facet to appear in that
+href; if a click on the suggestion does not register it selects with the arrow
+keys instead, as the panel itself suggests ("use up and down arrow keys to
+navigate"), and only then follows the link. A pick that never applies stops the
+job rather than searching unfiltered.
+
 In that dropdown the first row is taken. A suggestion reads as a name followed
 by a headline that can run to thirty words, so the name is scored on its own;
 when nothing scores convincingly the first row is used anyway — LinkedIn has

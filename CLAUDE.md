@@ -63,6 +63,13 @@ together with `LINKEDIN_BASE`. Screenshots and HTML still land in
 `data/linkedin-shots`, so check whether that directory was empty before and
 remove what a test put there.
 
+When a lookup fails, the user pastes the paths of the saved screenshot and
+HTML — often from their other checkout (`../funding-2026-working-space`). Read
+those files: they are real LinkedIn markup and settle in one grep what no
+amount of guessing will. Three things found that way, each of which had broken
+a step: the filter panel is an `<aside>`, "Show results" is an `<a>` whose href
+carries the filters, and a typeahead row is a name followed by a long headline.
+
 Selectors live only in `server/linkedin/selectors.js`, and people are read
 structurally in `server/linkedin/extract.js`. When lookups come back empty or
 wrong, replay the saved page with `node tools/parse-saved.mjs` and fix against
