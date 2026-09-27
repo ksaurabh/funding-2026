@@ -4128,6 +4128,9 @@ const people = {
   relFilter: new Set(),
   // Whether Jev has answered: 'yes', 'no', or neither, which means both.
   qualFilter: new Set(),
+  // Which likelihood bands to show; 'none' is nobody asked about yet.
+  oddsFilter: new Set(),
+  odds: ['70%+', '50-70%', '30-50%', '10-30%', '<10%'],
   loaded: false,
 };
 
@@ -4138,6 +4141,7 @@ async function loadPeople() {
     const data = await api('/api/linkedin/intro/people');
     people.rows = data.people;
     if (data.relevance) intro.relevance = data.relevance;
+    if (data.odds) people.odds = data.odds;
     people.loaded = true;
   } catch (err) {
     toast(err.message, 'bad');
@@ -4148,9 +4152,8 @@ async function loadPeople() {
   // Someone being read is work the jobs half may not know about; keep looking
   // until it lands.
   clearTimeout(peopleTimer);
-  if (people.rows.some((p) => p.working) && intro.tab === 'people') {
-    peopleTimer = setTimeout(loadPeople, 2500);
-  }
+  const busy = people.rows.some((p) => p.working) || intro.running || intro.pending;
+  if (busy && intro.tab === 'people') peopleTimer = setTimeout(loadPeople, 2500);
 }
 
 function peopleAll() {
@@ -4167,8 +4170,10 @@ function peopleAll() {
 // with nothing ticked in a group, that group is not narrowing anything.
 const matchesRelevance = (p) => !people.relFilter.size || people.relFilter.has(p.relevance || intro.relevance[0]);
 const matchesQualified = (p) => !people.qualFilter.size || people.qualFilter.has(p.answer ? 'yes' : 'no');
+const matchesOdds = (p) => !people.oddsFilter.size || people.oddsFilter.has(p.odds || 'none');
 
-const peopleVisible = () => peopleAll().filter((p) => matchesRelevance(p) && matchesQualified(p));
+const peopleVisible = () =>
+  peopleAll().filter((p) => matchesRelevance(p) && matchesQualified(p) && matchesOdds(p));
 
 /** A row of chips where any number can be on, and none on means all. */
 function chipRow(host, entries, selected, onChange) {
@@ -4197,8 +4202,8 @@ function renderPeople() {
   const all = peopleAll();
   const rows = peopleVisible();
 
-  // Relevance, counted over what the category filter leaves.
-  const forRelevance = all.filter(matchesQualified);
+  // Relevance, counted over what the other groups leave.
+  const forRelevance = all.filter((p) => matchesQualified(p) && matchesOdds(p));
   const counts = new Map();
   for (const p of forRelevance) {
     const rel = p.relevance || intro.relevance[0];
@@ -4212,8 +4217,8 @@ function renderPeople() {
     renderPeople
   );
 
-  // And whether Jev has answered, counted over what relevance leaves.
-  const forQualified = all.filter(matchesRelevance);
+  // And whether Jev has answered, counted the same way.
+  const forQualified = all.filter((p) => matchesRelevance(p) && matchesOdds(p));
   const answered = forQualified.filter((p) => p.answer).length;
   chipRow(
     $('#in-people-qual'),
@@ -4224,6 +4229,41 @@ function renderPeople() {
     people.qualFilter,
     renderPeople
   );
+
+  // How likely they are to be an investor, in the bands Jev picks from.
+  const forOdds = all.filter((p) => matchesRelevance(p) && matchesQualified(p));
+  const oddsCounts = new Map();
+  for (const p of forOdds) oddsCounts.set(p.odds || 'none', (oddsCounts.get(p.odds || 'none') || 0) + 1);
+  chipRow(
+    $('#in-people-odds'),
+    [
+      ...people.odds.map((band) => [band, band, oddsCounts.get(band) || 0]),
+      ['none', 'Not estimated', oddsCounts.get('none') || 0],
+    ],
+    people.oddsFilter,
+    renderPeople
+  );
+
+  // What the two bulk buttons would act on: what is showing, minus whoever
+  // already has the thing they would produce.
+  const toQualify = rows.filter((p) => !p.answer && !p.working);
+  $('#in-people-qualify').classList.toggle('hidden', !toQualify.length);
+  $('#in-people-qualify').textContent = `Qualify ${toQualify.length} showing`;
+  $('#in-people-qualify').onclick = async () => {
+    if (!confirm(`Read ${toQualify.length} profile(s) and ask Jev about each? That is ${toQualify.length} page loads.`)) return;
+    try {
+      await post('/api/linkedin/intro/people/qualify', { rowIds: toQualify.map((p) => p.rowIds[0]) });
+    } catch (err) {
+      return toast(err.message, 'bad');
+    }
+    toast(`Qualifying ${toQualify.length} — they fill in as it goes.`);
+    loadPeople();
+  };
+
+  const toEstimate = rows.filter((p) => !p.odds);
+  $('#in-people-estimate').classList.toggle('hidden', !toEstimate.length);
+  $('#in-people-estimate').textContent = `Estimate likelihood (${toEstimate.length})`;
+  $('#in-people-estimate').onclick = () => estimateOdds(toEstimate);
   $('#in-people-count').textContent = `${rows.length}${rows.length === all.length ? '' : ` of ${all.length}`} people`;
 
   $('#in-people-table thead').replaceChildren(
@@ -4234,6 +4274,7 @@ function renderPeople() {
       el('th', { textContent: 'LinkedIn profile' }),
       el('th', { textContent: 'Connected via' }),
       el('th', { textContent: 'Jev’s category' }),
+      el('th', { textContent: 'Likelihood it’s an investor' }),
       el('th', { textContent: 'Relevance' }),
       el('th', { textContent: 'Note' }),
     ])
@@ -4261,6 +4302,7 @@ function renderPeople() {
           p.via.length > 1 ? el('div', { className: 'muted small', textContent: `${p.via.length} ways in` }) : null,
         ]),
         el('td', {}, categoryCell(p)),
+        el('td', {}, oddsCell(p)),
         el('td', {}, personRelevanceCell(p)),
         el('td', {}, personNoteCell(p)),
       ])
@@ -4273,7 +4315,7 @@ function renderPeople() {
         'tr',
         {},
         el('td', {
-          colSpan: 8,
+          colSpan: 9,
           className: 'muted',
           textContent: people.rows.length ? 'Nothing matches those filters.' : 'No jobs have found anyone yet.',
         })
@@ -4311,6 +4353,31 @@ function categoryCell(person) {
       : el('span', { className: 'muted', textContent: 'not qualified' }),
     go,
   ]);
+}
+
+/** The likelihood band, or the means of asking for one. */
+function oddsCell(person) {
+  if (person.odds) {
+    return el('span', {
+      className: 'odds odds-' + person.odds.replace(/[^a-z0-9]+/gi, ''),
+      textContent: person.odds,
+    });
+  }
+  const go = el('button', { className: 'star-btn', textContent: 'Estimate', title: 'Ask Jev from their title' });
+  go.addEventListener('click', () => estimateOdds([person]));
+  return go;
+}
+
+/** Ask about a set of people, on the same queue as everything else. */
+async function estimateOdds(list) {
+  if (!list.length) return;
+  try {
+    await post('/api/linkedin/intro/people/odds', { groups: list.map((p) => p.rowIds) });
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  toast(`Asking about ${list.length} ${list.length === 1 ? 'person' : 'people'}…`);
+  loadPeople();
 }
 
 /** Read one of their rows and ask about it; the entry inherits the answer. */

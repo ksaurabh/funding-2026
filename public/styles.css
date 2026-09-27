@@ -728,6 +728,12 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-people-table tbody tr { cursor: default; }
 #in-people-table tbody tr:hover { background: none; }
 .via-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.odds { font-size: 12px; font-weight: 500; white-space: nowrap; }
+.odds-70, .odds-5070 { color: #1c6b40; }
+.odds-1030, .odds-10 { color: var(--muted); }
+.odds { font-size: 12px; font-weight: 500; white-space: nowrap; }
+.odds-70, .odds-5070 { color: #1c6b40; }
+.odds-1030, .odds-10 { color: var(--muted); }
 .via { font-size: 11px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 99px; background: var(--panel); }
 #in-people-filter { font-size: 12px; }
 .rel-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }

@@ -314,7 +314,27 @@ linkedinRoutes.delete('/intro/jobs/:id', (req, res) => res.json(intro.removeJob(
 linkedinRoutes.post('/intro/queue/clear', (_req, res) => res.json(intro.clearQueue()));
 
 // Everyone found, across every job, one entry each.
-linkedinRoutes.get('/intro/people', (_req, res) => res.json({ people: intro.people(), relevance: intro.relevance() }));
+linkedinRoutes.get('/intro/people', (_req, res) =>
+  res.json({ people: intro.people(), relevance: intro.relevance(), odds: intro.ODDS })
+);
+
+// Read and ask about several people at once.
+linkedinRoutes.post('/intro/people/qualify', (req, res) => {
+  try {
+    res.json(intro.qualifyMany(req.body?.rowIds));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// How likely each of these people is to be an investor, judged from the title.
+linkedinRoutes.post('/intro/people/odds', (req, res) => {
+  try {
+    res.json(intro.estimateOdds(req.body?.groups));
+  } catch (err) {
+    fail(res, err);
+  }
+});
 
 // A mark on a person is a mark on every row that is them.
 linkedinRoutes.patch('/intro/people', (req, res) => {
@@ -331,11 +351,33 @@ linkedinRoutes.get('/intro/people.csv', (_req, res) => {
     const s = v == null ? '' : String(v);
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const cols = ['name', 'title', 'company', 'degree', 'linkedin', 'connected via', 'category', 'relevance', 'note'];
+  const cols = [
+    'name',
+    'title',
+    'company',
+    'degree',
+    'linkedin',
+    'connected via',
+    'category',
+    'investor likelihood',
+    'relevance',
+    'note',
+  ];
   const lines = [cols.join(',')];
   for (const p of intro.people()) {
     lines.push(
-      [p.name, p.title, p.company, p.degree, p.url, p.via.map((v) => v.name).join('; '), p.answer, p.relevance, p.note]
+      [
+        p.name,
+        p.title,
+        p.company,
+        p.degree,
+        p.url,
+        p.via.map((v) => v.name).join('; '),
+        p.answer,
+        p.odds,
+        p.relevance,
+        p.note,
+      ]
         .map(esc)
         .join(',')
     );

@@ -11,11 +11,17 @@ import crypto from 'node:crypto';
 import { read, write, DEFAULT_SETTINGS, DEFAULT_SYSTEM } from '../store.js';
 import * as agent from './agent.js';
 import * as network from './network.js';
-import { makeClient, askLLM } from '../llm.js';
+import { makeClient, askLLM, chooseValue } from '../llm.js';
 import { costOf } from '../pricing.js';
 import { nameScore, normalise } from './match.js';
 
 const KEY = 'linkedin-intro';
+
+/**
+ * How likely it is that someone is an investor, in bands rather than a number:
+ * a model asked for "63%" is inventing precision it does not have.
+ */
+export const ODDS = ['70%+', '50-70%', '30-50%', '10-30%', '<10%'];
 
 /** What a row's relevance can be to start with. The first value is the default. */
 export const RELEVANCE = ['Not Set', 'Ignore', 'High'];
@@ -426,6 +432,7 @@ async function drain() {
       stopping = false;
       try {
         if (job.kind === 'introducer') await runIntroducer(job);
+        else if (job.kind === 'odds') await runOdds(job);
         else if (job.kind === 'qualify') await runQualify(job);
         else await runJob(job);
       } catch (err) {
@@ -444,6 +451,10 @@ async function drain() {
 
 function markFailed(job, message) {
   const s = load();
+  if (job.kind === 'odds') {
+    note(`Estimating stopped: ${message}`);
+    return;
+  }
   if (job.kind === 'qualify') {
     const row = s.rows.find((r) => r.id === job.rowId);
     if (row) Object.assign(row, { status: 'error', error: message });
@@ -861,8 +872,11 @@ export function people() {
   const byKey = new Map();
 
   for (const row of s.rows) {
-    // Same link, or same name and title: the same person.
-    const key = row.url || personKey(row.name, row.title || row.headline);
+    // Name and title first, as that is what makes two entries the same person
+    // to you — the same person can carry two profile URLs. The link is the
+    // fallback for anyone whose card gave no title.
+    const named = personKey(row.name, row.title || row.headline);
+    const key = named.replace('|', '').trim() ? named : row.url;
     let person = byKey.get(key);
     if (!person) {
       person = {
@@ -873,6 +887,7 @@ export function people() {
         url: row.url,
         degree: row.degree || null,
         answer: '',
+        odds: '',
         relevance: '',
         note: '',
         via: [],
@@ -891,6 +906,7 @@ export function people() {
     person.title = person.title || row.title || row.headline || '';
     person.company = person.company || row.company || '';
     person.answer = person.answer || row.answer || '';
+    person.odds = person.odds || row.odds || '';
     person.degree = person.degree || row.degree || null;
     // A mark you made anywhere is the mark on the person.
     if (!person.relevance || person.relevance === RELEVANCE[0]) person.relevance = row.relevance || person.relevance;
@@ -905,6 +921,120 @@ export function people() {
   }
 
   return [...byKey.values()].sort((a, b) => b.via.length - a.via.length || a.name.localeCompare(b.name));
+}
+
+/**
+ * Ask how likely each of these people is to be an investor, from their title.
+ * Queued like everything else, so it is paced, visible, and stoppable.
+ */
+export function estimateOdds(groups) {
+  const lists = (groups || []).map((g) => [].concat(g)).filter((g) => g.length);
+  if (!lists.length) throw new Error('Nobody to estimate.');
+  enqueue({
+    kind: 'odds',
+    groups: lists,
+    label: `Estimating likelihood for ${lists.length} ${lists.length === 1 ? 'person' : 'people'}`,
+  });
+  return status();
+}
+
+const ODDS_SYSTEM =
+  'You judge whether someone is a professional investor — a VC, angel, LP, or someone whose job is ' +
+  'deploying capital — from what their LinkedIn headline says they do. Operators, founders, ' +
+  'recruiters and advisors are not investors unless the title says they also invest.';
+
+async function runOdds(job) {
+  let done = 0;
+  for (const rowIds of job.groups) {
+    if (stopRequested()) {
+      note(`Stopped estimating — ${done} of ${job.groups.length} done.`);
+      return;
+    }
+
+    const s = load();
+    const rows = job.groups.length ? s.rows.filter((r) => rowIds.includes(r.id)) : [];
+    const row = rows[0];
+    if (!row) continue;
+
+    const settingsNow = settings();
+    if (!settingsNow.apiKey) {
+      note('No Anthropic API key — add one on the Settings tab.');
+      return;
+    }
+
+    const title = row.title || row.headline || '';
+    let value;
+    let usage = null;
+    try {
+      inFlight = new AbortController();
+      const result = await chooseValue(makeClient(settingsNow.apiKey), {
+        system: ODDS_SYSTEM,
+        messages: [
+          {
+            role: 'user',
+            content:
+              `Name: ${row.name}\n` +
+              `Title: ${title || '(none given)'}\n` +
+              (row.company ? `Company: ${row.company}\n` : '') +
+              '\nHow likely is it that this person is an investor?',
+          },
+        ],
+        settings: settingsNow,
+        column: 'Likelihood they are an investor',
+        values: ODDS,
+        signal: inFlight.signal,
+      });
+      inFlight = null;
+      value = result.value;
+      usage = result.usage;
+    } catch (err) {
+      inFlight = null;
+      note(`${row.name}: could not estimate — ${stopRequested() ? 'stopped' : err.message}`);
+      if (stopRequested()) return;
+      continue;
+    }
+
+    // The estimate is about the person, so it goes on every row that is them.
+    const cost = costOf(settingsNow.model, usage) || 0;
+    const fresh = load();
+    let first = true;
+    for (const r of fresh.rows) {
+      if (!rowIds.includes(r.id)) continue;
+      r.odds = value;
+      // Charge it once, not once per path.
+      if (first) r.oddsCost = cost;
+      first = false;
+    }
+    save(fresh);
+    done++;
+    note(`${row.name}: ${value}${title ? ` — "${title}"` : ''}`);
+  }
+  note(`Estimated ${done} of ${job.groups.length}.`);
+}
+
+/**
+ * Read and ask about several people at once. One queue entry each, so the
+ * count of what is waiting is honest and Stop job ends it where it stands.
+ */
+export function qualifyMany(rowIds) {
+  const ids = [].concat(rowIds || []);
+  const s = load();
+  const queued = [];
+  for (const id of ids) {
+    const row = s.rows.find((r) => r.id === id);
+    if (!row || row.answer) continue;
+    upsertRow({ id: row.id, status: 'reading', error: null });
+    enqueue({
+      kind: 'qualify',
+      rowId: row.id,
+      prompt: row.prompt || s.prompt || DEFAULT_PROMPT,
+      label: `Qualifying ${row.name}`,
+    });
+    queued.push(row.name);
+  }
+  if (!queued.length) throw new Error('Everyone showing has been qualified already.');
+  note(`Qualifying ${queued.length} ${queued.length === 1 ? 'person' : 'people'}…`);
+  return status();
 }
 
 /** Set relevance or a note on a person, which means on every row for them. */
@@ -924,7 +1054,7 @@ export function markPerson(rowIds, fields) {
 }
 
 /** What the rows cost to answer, all together. */
-export const totalCost = () => load().rows.reduce((sum, r) => sum + (r.cost || 0), 0);
+export const totalCost = () => load().rows.reduce((sum, r) => sum + (r.cost || 0) + (r.oddsCost || 0), 0);
 
 /**
  * The queue lives in memory, so a restart leaves jobs on disk claiming to be
