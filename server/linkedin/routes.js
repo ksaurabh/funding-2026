@@ -277,7 +277,7 @@ linkedinRoutes.get('/intro', (_req, res) =>
     cost: intro.totalCost(),
     terms: intro.terms(),
     defaultPrompt: intro.DEFAULT_PROMPT,
-    relevance: intro.RELEVANCE,
+    relevance: intro.relevance(),
   })
 );
 
@@ -312,6 +312,15 @@ linkedinRoutes.post('/intro/jobs/:id/run', (req, res) => {
 linkedinRoutes.delete('/intro/jobs/:id', (req, res) => res.json(intro.removeJob(req.params.id)));
 
 linkedinRoutes.post('/intro/queue/clear', (_req, res) => res.json(intro.clearQueue()));
+
+// A relevance option added from the dropdown.
+linkedinRoutes.post('/intro/relevance', (req, res) => {
+  try {
+    res.json(intro.addRelevance(req.body?.value));
+  } catch (err) {
+    fail(res, err);
+  }
+});
 
 // Your own call on a row: relevance and a note.
 linkedinRoutes.patch('/intro/rows/:id', (req, res) => {

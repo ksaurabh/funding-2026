@@ -17,8 +17,10 @@ import { nameScore, normalise } from './match.js';
 
 const KEY = 'linkedin-intro';
 
-/** What a row's relevance can be. First value is the default. */
+/** What a row's relevance can be to start with. The first value is the default. */
 export const RELEVANCE = ['Not Set', 'Ignore', 'High'];
+
+const MAX_RELEVANCE = 30;
 
 export const DEFAULT_PROMPT =
   'Here is the LinkedIn profile of someone a contact of mine could introduce me to. ' +
@@ -28,7 +30,7 @@ export const DEFAULT_PROMPT =
   '"Investor — leads seed security rounds, board observer at two.".\n\n' +
   '{{profile}}';
 
-const blank = () => ({ introducers: [], jobs: [], rows: [], prompt: DEFAULT_PROMPT });
+const blank = () => ({ introducers: [], jobs: [], rows: [], prompt: DEFAULT_PROMPT, relevance: [...RELEVANCE] });
 
 function load() {
   const raw = { ...blank(), ...read(KEY, blank()) };
@@ -246,13 +248,39 @@ export function clearQueue() {
   return state();
 }
 
+/**
+ * The relevance options. The built-in three always lead, so the default is
+ * stable, and anything added on the fly follows in the order it was added.
+ */
+const relevanceOptions = (s = load()) => [...new Set([...RELEVANCE, ...(s.relevance || [])])];
+
+export const relevance = () => relevanceOptions();
+
+/** A value added from the dropdown, kept for every row from then on. */
+export function addRelevance(value) {
+  const text = String(value || '').trim().replace(/\s+/g, ' ');
+  if (!text) throw new Error('Give the option a name.');
+  if (text.length > 40) throw new Error('Keep it under 40 characters.');
+
+  const s = load();
+  const existing = relevanceOptions(s).find((v) => v.toLowerCase() === text.toLowerCase());
+  // Asking for one that is already there is not an error; it is the same ask.
+  if (existing) return { options: relevanceOptions(s), value: existing };
+  if (relevanceOptions(s).length >= MAX_RELEVANCE) throw new Error(`That is already ${MAX_RELEVANCE} options.`);
+
+  s.relevance = [...new Set([...RELEVANCE, ...(s.relevance || []), text])];
+  save(s);
+  return { options: relevanceOptions(s), value: text };
+}
+
 /** Your own judgement on a row: how relevant they are, and a note. */
 export function markRow(rowId, { relevance, note }) {
   const s = load();
   const row = s.rows.find((r) => r.id === rowId);
   if (!row) throw new Error('No such row.');
   if (relevance !== undefined) {
-    if (!RELEVANCE.includes(relevance)) throw new Error(`Relevance must be one of ${RELEVANCE.join(', ')}.`);
+    const options = relevanceOptions(s);
+    if (!options.includes(relevance)) throw new Error(`Relevance must be one of ${options.join(', ')}.`);
     row.relevance = relevance;
   }
   if (note !== undefined) row.note = String(note).slice(0, 2000);

@@ -532,8 +532,10 @@ card (*no 1st-degree match*) and the job stops rather than guessing.
 Clicking a card fills the table: **2nd degree connection** (with the positions
 the answer was based on), **Title** — the second line of their card on the
 results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**,
-**Jev's category**, and then two of your own: **Relevance** (*Not Set*,
-*Ignore*, *High*) and **Note**, a free-text box for a line about them. Both
+**Jev's category**, and then two of your own: **Relevance** and **Note**, a free-text box for a line about them. Relevance
+starts as *Not Set*, *Ignore* or *High*, and its last entry is **Add a new
+option…** — type one and it is there for every row from then on, kept in
+`data/linkedin-intro.json`. Both
 save as you set them, survive everything, and go into the CSV. A box filters
 within the job.
 

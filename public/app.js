@@ -4488,16 +4488,45 @@ async function markRow(row, fields) {
   }
 }
 
+const ADD_RELEVANCE = '__add__';
+const relClass = (v) => 'cell-select rel-' + String(v).toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
 /** Your call on a row: a dropdown, saved as you change it. */
 function relevanceCell(row) {
   const current = row.relevance || intro.relevance[0];
-  const select = el('select', { className: 'cell-select rel-' + current.toLowerCase().replace(/\s+/g, '-') });
-  select.replaceChildren(
-    ...intro.relevance.map((v) => el('option', { value: v, textContent: v, selected: v === current }))
-  );
-  select.addEventListener('change', () => {
-    select.className = 'cell-select rel-' + select.value.toLowerCase().replace(/\s+/g, '-');
-    markRow(row, { relevance: select.value });
+  const select = el('select', { className: relClass(current) });
+  const fill = (value) =>
+    select.replaceChildren(
+      ...intro.relevance.map((v) => el('option', { value: v, textContent: v, selected: v === value })),
+      // Last, so the list reads as the values themselves and then the way to
+      // add another.
+      el('option', { value: ADD_RELEVANCE, textContent: 'Add a new option…' })
+    );
+  fill(current);
+
+  select.addEventListener('change', async () => {
+    if (select.value !== ADD_RELEVANCE) {
+      select.className = relClass(select.value);
+      return markRow(row, { relevance: select.value });
+    }
+
+    const typed = prompt('New relevance option:', '');
+    // Cancelled, or nothing typed: leave the row as it was.
+    if (!typed || !typed.trim()) return fill(row.relevance || intro.relevance[0]);
+
+    let added;
+    try {
+      added = await post('/api/linkedin/intro/relevance', { value: typed });
+    } catch (err) {
+      toast(err.message, 'bad');
+      return fill(row.relevance || intro.relevance[0]);
+    }
+    // The new option is there for every row from now on.
+    intro.relevance = added.options;
+    fill(added.value);
+    select.className = relClass(added.value);
+    await markRow(row, { relevance: added.value });
+    renderIntroDetail();
   });
   return select;
 }
