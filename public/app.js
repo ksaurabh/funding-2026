@@ -4186,6 +4186,8 @@ const intro = {
   job: null,
   filter: '',
   relevance: ['Not Set', 'Ignore', 'High'],
+  // Which relevances to show; empty means all of them.
+  relFilter: new Set(),
 };
 
 let introTimer = null;
@@ -4330,7 +4332,10 @@ function renderIntroJobs() {
 
 // --- the table: what one job found
 
-function jobRows() {
+const relevanceOf = (row) => row.relevance || intro.relevance[0] || 'Not Set';
+
+/** The job's rows before the relevance chips narrow them, for the counts. */
+function jobRowsAll() {
   const job = selectedJob();
   if (!job) return [];
   const q = intro.filter.trim().toLowerCase();
@@ -4345,11 +4350,18 @@ function jobRows() {
     );
 }
 
+function jobRows() {
+  const rows = jobRowsAll();
+  if (!intro.relFilter.size) return rows;
+  return rows.filter((r) => intro.relFilter.has(relevanceOf(r)));
+}
+
 function renderIntroDetail() {
   const job = selectedJob();
   const rows = jobRows();
 
   $('#in-filter').classList.toggle('hidden', !job);
+  renderRelevanceFilter(job);
   $('#in-job-title').textContent = job ? `${job.term} via ${job.introducerName}` : 'No job selected';
   $('#in-job-meta').textContent = job
     ? job.status === 'done'
@@ -4379,6 +4391,47 @@ function renderIntroDetail() {
     : 'Nothing came back for this one.';
 
   renderIntroRows(rows);
+}
+
+/**
+ * One chip per relevance, with how many rows have it. Any number can be on;
+ * none on means everything, which is the same as no filter at all.
+ */
+function renderRelevanceFilter(job) {
+  $('#in-rel-bar').classList.toggle('hidden', !job);
+  if (!job) return;
+
+  const rows = jobRowsAll();
+  const counts = new Map();
+  for (const r of rows) counts.set(relevanceOf(r), (counts.get(relevanceOf(r)) || 0) + 1);
+  // Every option, plus anything a row still carries from a deleted one.
+  const options = [...new Set([...intro.relevance, ...counts.keys()])];
+
+  const chips = options.map((value) => {
+    const on = intro.relFilter.has(value);
+    const chip = el('button', {
+      className: 'chip' + (on ? ' on' : ''),
+      textContent: `${value} (${counts.get(value) || 0})`,
+    });
+    chip.addEventListener('click', () => {
+      if (on) intro.relFilter.delete(value);
+      else intro.relFilter.add(value);
+      renderIntroDetail();
+    });
+    return chip;
+  });
+
+  if (intro.relFilter.size) {
+    const clear = el('button', { className: 'chip clear', textContent: 'Clear' });
+    clear.addEventListener('click', () => {
+      intro.relFilter.clear();
+      renderIntroDetail();
+    });
+    chips.push(clear);
+  }
+
+  $('#in-rel-chips').replaceChildren(...chips);
+  $('#in-rel-count').textContent = intro.relFilter.size ? `${jobRows().length} of ${rows.length} shown` : '';
 }
 
 function renderIntroRows(rows) {
@@ -4507,7 +4560,9 @@ function relevanceCell(row) {
   select.addEventListener('change', async () => {
     if (select.value !== ADD_RELEVANCE) {
       select.className = relClass(select.value);
-      return markRow(row, { relevance: select.value });
+      await markRow(row, { relevance: select.value });
+      // The counts moved, and with a filter on the row may no longer belong.
+      return renderIntroDetail();
     }
 
     const typed = prompt('New relevance option:', '');

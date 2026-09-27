@@ -66,7 +66,7 @@ button.danger { color: var(--err); }
 .pill.done { color: var(--ok); border-color: #bfdcca; }
 
 .view { display: flex; flex-direction: column; height: calc(100vh - 47px); }
-.hidden { display: none; }
+.hidden, .hidden.hidden { display: none !important; }
 
 .toolbar {
   display: flex;
@@ -713,6 +713,9 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-table tbody tr:hover { background: none; }
 .category { font-weight: 500; }
 .field.dimmed { opacity: .45; }
+.rel-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.rel-bar .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.rel-bar .chip { font-size: 11px; padding: 2px 9px; }
 #in-table td:nth-child(6), #in-table td:nth-child(7) { white-space: nowrap; }
 .note-input { width: 150px; }
 .cell-select.rel-high { color: #1c6b40; font-weight: 600; }
@@ -721,7 +724,6 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-job-prompt-text, #in-job-term, #in-job-who { font: inherit; font-size: 13px; width: 100%; }
 
 /* A stopped job shows the panel that defeated it, not just a message. */
-#in-skips { margin-bottom: 14px; display: grid; gap: 12px; }
 .icon-picker { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 8px 0 4px; }
 .icon-cell {
   display: flex;
