@@ -684,6 +684,7 @@ th.star, td.star { width: 24px; padding-right: 0; }
 .kv { display: grid; grid-template-columns: 116px 1fr; gap: 6px; padding: 2px 0; }
 .kv .k { color: var(--muted); }
 .kv .v { word-break: break-word; }
+.kv .v.warn { color: #8a5a17; }
 .kv .v.clamp {
   display: -webkit-box;
   -webkit-line-clamp: 2;

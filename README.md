@@ -542,6 +542,12 @@ matching the term. After pressing Show results the agent checks that the facet
 really is in the URL it landed on, and if it is not the job **stops with a
 reason and no rows**. Unconstrained results are never turned into rows.
 
+In that dropdown the first row is taken. A suggestion reads as a name followed
+by a headline that can run to thirty words, so the name is scored on its own;
+when nothing scores convincingly the first row is used anyway — LinkedIn has
+already ranked them for what was typed — and the card says which row the
+results actually came from, flagged when it was not a clear name match.
+
 Both the button and the panel are waited for, not glanced at: the results page
 fills in progressively, and the panel is a right-hand drawer that animates in,
 renders lazily as it scrolls, and sometimes shows an *Add a connection* button

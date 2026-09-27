@@ -364,7 +364,14 @@ export function findTypeaheadOptionsInPage() {
     return r.width > 0 && r.height > 0 && clean(n.innerText);
   });
   options.forEach((n, i) => n.setAttribute('data-agent-option', String(i)));
-  return options.map((n) => clean(n.innerText));
+
+  // The name and the rest, kept apart. A suggestion reads "Ashu Garg" then a
+  // headline that can run to thirty words; scoring a name against all of that
+  // scores nothing, so the first line is returned on its own.
+  return options.map((n) => {
+    const lines = (n.innerText || '').split('\n').map(clean).filter(Boolean);
+    return { name: lines[0] || '', text: clean(n.innerText).slice(0, 300) };
+  });
 }
 
 /**

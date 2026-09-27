@@ -939,31 +939,38 @@ async function applyConnectionsOfFilter(personName) {
   await wait(PACE.betweenActions);
 
   // Suggestions can take a beat to come back.
-  let texts = [];
+  let options = [];
   for (let attempt = 0; attempt < 6; attempt++) {
-    texts = (await page.evaluate(findTypeaheadOptionsInPage).catch(() => [])) || [];
-    if (texts.length) break;
+    options = (await page.evaluate(findTypeaheadOptionsInPage).catch(() => [])) || [];
+    if (options.length) break;
     await new Promise((r) => setTimeout(r, 500));
   }
-  if (!texts.length) {
+  if (!options.length) {
     return fail(`No suggestions came back for "${personName}" in "Connections of".`, { sectionText: found.sectionText });
   }
 
-  // Take the suggestion that is actually them, not just the first row.
-  let bestAt = -1;
+  // Score the name against the suggestion's *name*, not its headline: these
+  // rows read "Ashu Garg" and then thirty words about what they invest in.
+  let bestAt = 0;
   let best = 0;
-  texts.forEach((text, i) => {
-    const score = nameScore(personName, String(text).split('\n')[0]);
+  options.forEach((option, i) => {
+    const score = nameScore(personName, option.name || option.text || '');
     if (score > best) {
       best = score;
       bestAt = i;
     }
   });
-  if (bestAt < 0 || best < 0.9) {
-    return fail(`No suggestion in "Connections of" matched ${personName}.`, { suggestions: texts.slice(0, 8) });
-  }
+
+  // LinkedIn has already ranked these for what was typed, so when nothing
+  // scores convincingly the first row is the answer — it is just reported, so
+  // a wrong pick is visible rather than silent.
+  const assumed = best < 0.9;
+  if (assumed) bestAt = 0;
+
   const option = await page.$(`[data-agent-option="${bestAt}"]`);
-  if (!option) return fail('The suggestion list went away before it could be picked.', { suggestions: texts.slice(0, 8) });
+  if (!option) {
+    return fail('The suggestion list went away before it could be picked.', { suggestions: options.slice(0, 8) });
+  }
   await option.click().catch(() => {});
   await wait(PACE.settle);
 
@@ -980,7 +987,15 @@ async function applyConnectionsOfFilter(personName) {
   if (!SELECTORS.connectionFacetParam.test(page.url())) {
     return fail('The filter did not take — the results URL carries no connection facet.', { url: page.url() });
   }
-  return { ok: true, picked: texts[bestAt], url: page.url() };
+  return {
+    ok: true,
+    picked: options[bestAt].name || options[bestAt].text,
+    pickedText: options[bestAt].text,
+    // True when the pick was LinkedIn's ranking rather than a name match.
+    assumed,
+    suggestions: options.slice(0, 5).map((o) => o.name || o.text),
+    url: page.url(),
+  };
 }
 
 /**
@@ -1021,6 +1036,9 @@ export async function searchConnectionsOf({ term, introducerName, limit = 10 }) 
     people: people.slice(0, limit).map((p) => ({ ...p, url: profileUrl(p.url) })),
     constrained: true,
     picked: filter.picked,
+    pickedText: filter.pickedText,
+    pickedAssumed: filter.assumed,
+    suggestions: filter.suggestions,
     shot,
     searchUrl: page.url(),
   };

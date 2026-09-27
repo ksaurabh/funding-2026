@@ -4202,6 +4202,13 @@ function renderIntroJobs() {
         pair('1st degree connection', (person?.name || j.introducerName) + connectionNote(j)),
         pair('Search term', j.term),
         pair('Jev prompt', j.prompt, ' clamp'),
+        j.picked
+          ? pair(
+              'Matched in LinkedIn',
+              j.picked + (j.pickedAssumed ? ' (first suggestion — not a clear name match)' : ''),
+              j.pickedAssumed ? ' warn' : ''
+            )
+          : null,
         pair('Last run', j.lastRunAt ? new Date(j.lastRunAt).toLocaleString() : 'never'),
         pair(
           'Connections fetched',

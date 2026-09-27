@@ -404,8 +404,20 @@ async function runJob(job) {
 
   patchJob({ status: 'running', startedAt: new Date().toISOString() });
   note(`Searching "${entry.term}" among ${introducer.name}'s connections…`);
-  const { people, constrained, reason, detail, shot, html, shotPath, htmlPath, picked, searchUrl } =
-    await agent.searchConnectionsOf({
+  const {
+    people,
+    constrained,
+    reason,
+    detail,
+    shot,
+    html,
+    shotPath,
+    htmlPath,
+    picked,
+    pickedText,
+    pickedAssumed,
+    searchUrl,
+  } = await agent.searchConnectionsOf({
       term: entry.term,
       introducerName: introducer.name,
     });
@@ -434,7 +446,16 @@ async function runJob(job) {
     });
     return;
   }
-  if (picked) note(`Filtered to ${introducer.name}'s connections (matched "${picked}").`);
+  if (picked) {
+    note(
+      pickedAssumed
+        ? `Filtered to "${picked}" — LinkedIn's first suggestion, which did not clearly match ${introducer.name}.`
+        : `Filtered to ${introducer.name}'s connections (matched "${picked}").`
+    );
+  }
+  // Which row of the dropdown the results actually came from, so a wrong pick
+  // is visible on the card instead of quietly shaping everything below it.
+  patchJob({ picked: picked || null, pickedText: pickedText || null, pickedAssumed: !!pickedAssumed });
 
   // LinkedIn's facet is a request, not a promise: keep only what came back as
   // second-degree, so a stray first- or third-degree hit does not become a row.
