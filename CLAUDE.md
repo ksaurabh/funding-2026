@@ -56,6 +56,13 @@ opens a window on their machine, and automated traffic risks their account
 being rate-limited or blocked. Point `LINKEDIN_BASE` at a local stand-in
 instead; there is a fixture pattern in the git history of this feature.
 
+Two env overrides exist for exactly this: `LINKEDIN_PROFILE_DIR` keeps a test
+run out of `data/linkedin-profile` (their signed-in Chrome profile), and
+`LINKEDIN_HEADLESS=1` stops a window opening on their screen. Use both, always,
+together with `LINKEDIN_BASE`. Screenshots and HTML still land in
+`data/linkedin-shots`, so check whether that directory was empty before and
+remove what a test put there.
+
 Selectors live only in `server/linkedin/selectors.js`, and people are read
 structurally in `server/linkedin/extract.js`. When lookups come back empty or
 wrong, replay the saved page with `node tools/parse-saved.mjs` and fix against

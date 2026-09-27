@@ -11,10 +11,12 @@ import crypto from 'node:crypto';
 import { chromium } from 'playwright-core';
 import { DATA_DIR } from '../store.js';
 import { SELECTORS, findOne, findAll, textOf } from './selectors.js';
-import { extractPeopleInPage, extractProfileInPage } from './extract.js';
+import { extractPeopleInPage, extractProfileInPage, extractProfileDetailInPage } from './extract.js';
 import { pickBest } from './match.js';
 
-const PROFILE_DIR = path.join(DATA_DIR, 'linkedin-profile');
+// Your signed-in Chrome profile. Overridable so the agent can be exercised
+// against a local stand-in without going near the real session.
+const PROFILE_DIR = process.env.LINKEDIN_PROFILE_DIR || path.join(DATA_DIR, 'linkedin-profile');
 export const SHOTS_DIR = path.join(DATA_DIR, 'linkedin-shots');
 // Overridable only so the pipeline can be exercised against a stand-in page.
 const BASE = process.env.LINKEDIN_BASE || 'https://www.linkedin.com';
@@ -151,7 +153,9 @@ export async function openSession() {
 
   ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
     channel: 'chrome', // your installed Chrome; nothing is downloaded
-    headless: false, // you need to see it, and to log in
+    // You need to see it, and to log in. Headless only for tests against a
+    // local stand-in, where there is nothing to watch and nobody to sign in.
+    headless: process.env.LINKEDIN_HEADLESS === '1',
     viewport: null,
     args: ['--disable-blink-features=AutomationControlled'],
   });
@@ -805,3 +809,81 @@ export async function enumerateMutuals({ link, text, onEvent = () => {} }) {
 }
 
 export const pauseBetweenLookups = () => wait(PACE.betweenLookups);
+
+// ------------------------------------------------- asking for an introduction
+
+/** The /in/<slug> part of a profile URL, which is what LinkedIn's facets use. */
+export function publicIdOf(url) {
+  return String(url || '').match(/\/in\/([^/?#]+)/)?.[1] || '';
+}
+
+const ready = async () => {
+  if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
+  if (!(await status()).loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
+};
+
+/** People matching a name, scored against it. Used to pick an introducer. */
+export async function searchByName(name, { threshold = 0.8 } = {}) {
+  await ready();
+  const candidates = await searchPeople(name, '');
+  if (!candidates.length) return { candidates: [], best: null, accepted: false };
+  const { best, accepted, all } = pickBest({ name, company: '' }, candidates, threshold);
+  return { candidates: all, best, accepted };
+}
+
+/**
+ * People matching a term, narrowed to the connections of one person — which
+ * is how LinkedIn expresses "second degree, via them". `network=["S"]` is its
+ * own facet for second-degree; both are query facets, so this is one page load.
+ */
+export async function searchConnectionsOf({ term, connectionOf, limit = 10 }) {
+  await ready();
+  const q = new URLSearchParams({ keywords: term, network: '["S"]' });
+  if (connectionOf) q.set('connectionOf', connectionOf);
+  await visit(`${BASE}/search/results/people/?${q}`);
+
+  let people = [];
+  try {
+    people = await page.evaluate(extractPeopleInPage);
+  } catch {
+    people = [];
+  }
+  if (!people.length) people = await searchPeopleBySelector();
+
+  const shot = await capture(`Search: ${term}`);
+  return {
+    people: people.slice(0, limit).map((p) => ({ ...p, url: profileUrl(p.url) })),
+    shot,
+    searchUrl: page.url(),
+  };
+}
+
+/**
+ * One profile, read for what it says about the person: the top card, the About
+ * paragraph, and every position with its dates — the board seats and observer
+ * roles are the point.
+ */
+export async function readProfileDetail(url) {
+  await ready();
+  const top = await readProfile(url);
+
+  let detail = null;
+  try {
+    detail = await page.evaluate(extractProfileDetailInPage);
+  } catch {
+    detail = null;
+  }
+  const shot = await capture(`Profile: ${top.name || url}`);
+
+  return {
+    url: top.url,
+    name: top.name || detail?.name || '',
+    headline: top.headline || '',
+    company: top.company || '',
+    degree: top.degree || null,
+    summary: detail?.summary || '',
+    positions: detail?.positions || [],
+    experienceText: detail?.experienceText || '',
+    shot,
+  };
+}

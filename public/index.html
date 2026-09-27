@@ -18,6 +18,7 @@
   <a href="#/playbooks" class="tab" id="playbooks-tab">Playbooks</a>
   <a href="#/linkedin" class="tab" id="linkedin-tab">LinkedIn</a>
   <a href="#/network" class="tab" id="network-tab">My network</a>
+  <a href="#/intro" class="tab" id="intro-tab">Ask for Intro</a>
   <a href="#/monday" class="tab" id="monday-tab">Monday.com</a>
   <a href="#/settings" class="tab" id="settings-tab">Settings</a>
   <a href="#/lists" id="spend" class="pill cost" title="Total spent on research so far">—</a>
@@ -302,6 +303,63 @@
 </main>
 
 <!-- -------------------------------------------------------------- settings -->
+<!-- -------------------------------------------------------- ask for intro -->
+<main id="view-intro" class="view hidden">
+  <div class="toolbar">
+    <input id="in-person" type="search" placeholder="Someone you know…" />
+    <button id="in-add-person" class="primary">Add connection</button>
+    <span id="in-people-count" class="muted small"></span>
+    <span class="spacer"></span>
+    <span id="in-progress" class="muted small"></span>
+    <button id="in-clear-queue" class="hidden">Clear queue</button>
+    <a href="/api/linkedin/intro.csv" class="btn">Download CSV</a>
+  </div>
+  <div class="toolbar">
+    <input id="in-term" type="search" placeholder="Search their 2nd-degree connections for…" />
+    <button id="in-search" class="primary">Search via all connections</button>
+    <button id="in-prompt-btn">Jev's prompt…</button>
+    <span id="in-searches" class="muted small"></span>
+  </div>
+  <div class="scroll pad">
+    <div id="in-people" class="chips"></div>
+    <p id="in-status" class="muted"></p>
+    <div class="filters">
+      <div class="filters-head">
+        <span class="filter-label">Filter</span>
+        <input id="in-f-first" type="search" placeholder="1st-degree name…" />
+        <input id="in-f-second" type="search" placeholder="2nd-degree name…" />
+        <input id="in-f-answer" type="search" placeholder="Jev's answer…" />
+        <button id="in-clear-filters" class="chip clear hidden">Clear filters</button>
+        <span id="in-count" class="filter-count"></span>
+      </div>
+    </div>
+    <table id="in-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
+<dialog id="in-prompt-dialog">
+  <form method="dialog" class="dialog-head">
+    <h3>What Jev is asked about each person</h3>
+    <button value="close">Cancel</button>
+  </form>
+  <p class="muted small">
+    Each 2nd-degree profile is put to the model with this prompt — name, headline, About, and every position with
+    its dates. Use <code>{{name}}</code>, <code>{{headline}}</code>, <code>{{summary}}</code>,
+    <code>{{positions}}</code>, <code>{{profile}}</code> or <code>{{introducer}}</code> to place them yourself;
+    with no tokens, the profile is appended. Keep the answer short — the table filters on it.
+  </p>
+  <label class="field">
+    <span>Prompt</span>
+    <textarea id="in-prompt" rows="6"></textarea>
+  </label>
+  <div class="dialog-foot">
+    <button id="in-prompt-save" class="primary">Save prompt</button>
+  </div>
+</dialog>
+
 <!-- ------------------------------------------------------------- monday -->
 <main id="view-monday" class="view hidden">
   <div class="toolbar">

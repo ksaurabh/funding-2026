@@ -503,6 +503,44 @@ path in `server/linkedin/selectors.js` is kept as a fallback for anything the
 structural pass misses. When a lookup still comes back empty, the cached HTML
 for that page is the evidence to fix it from.
 
+## Ask for Intro
+
+A third LinkedIn view, for the other direction: not "who do I know who can
+reach this investor" but "given the people I know, who should I be asking them
+about".
+
+1. **Add connection** — name someone you know. If that name is already in
+   **My network** they are taken from there, costing no LinkedIn traffic at
+   all; otherwise the agent searches and keeps the first-degree match. A name
+   whose closest match is second degree is kept as *no 1st-degree match* with
+   the candidates it saw, rather than quietly standing in for someone else.
+2. **Search via all connections** — give a term. For every usable connection
+   the agent asks LinkedIn for second-degree people matching that term
+   *through them* (`network=["S"]` and `connectionOf=<them>`, one page load),
+   then opens each profile and reads the name, the About paragraph, and every
+   position with its date range — the board seats and observer roles are
+   usually the point.
+3. Each profile goes to Jev with **Jev's prompt…**, which you can reword at any
+   time; `{{name}}`, `{{headline}}`, `{{summary}}`, `{{positions}}`,
+   `{{profile}}` and `{{introducer}}` place the details yourself, and with no
+   tokens the profile is appended. Keep the answer to a line — the table
+   filters on it. **↻** on a row re-asks with the current prompt.
+
+The table is one row per introduction path: **1st degree**, **2nd degree**,
+**LinkedIn** (a link to their profile), **Jev's answer**, and the positions the
+answer was based on. The three filter boxes narrow by first-degree name,
+second-degree name, and answer text, together. **Download CSV** takes the lot.
+
+Facets are a request, not a promise, so anything that does not come back as
+second degree is dropped rather than turned into a row. The same person found
+through two connections is two rows — the introduction is what differs — but
+the same term run again refreshes the rows it already has instead of
+duplicating them. Everything is paced by the same randomised delay as the rest
+of the agent, one job at a time; **Clear queue** drops what has not started.
+
+State lives in `data/linkedin-intro.json`, and the spend on answers is shown
+next to the queue.
+
 ## Monday.com
 
 The **Monday.com** tab lists the boards your account can see. Put a personal
@@ -591,6 +629,7 @@ public/       single-page UI, hash-routed, no build step
   markdown.js small Markdown renderer; builds DOM nodes, never innerHTML
 data/                          (gitignored)
   settings.json                global (Anthropic key, Monday.com token, model)
+  linkedin-intro.json          Ask for Intro: connections, searches, answers
   monday.json                  the last pull of Monday.com boards
   monday-favorites.json        the board ids you starred
   monday-boards/<id>.json      one board's rows, as last pulled

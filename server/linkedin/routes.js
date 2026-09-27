@@ -2,6 +2,7 @@ import express from 'express';
 import * as agent from './agent.js';
 import * as contacts from './contacts.js';
 import * as network from './network.js';
+import * as intro from './intro.js';
 import { readRowsMerged } from '../store.js';
 
 export const linkedinRoutes = express.Router();
@@ -257,4 +258,61 @@ linkedinRoutes.get('/contacts.csv', (_req, res) => {
     );
   }
   res.type('text/csv').attachment('linkedin-contacts.csv').send(lines.join('\n'));
+});
+
+// ------------------------------------------------------------ ask for an intro
+
+linkedinRoutes.get('/intro', (_req, res) => res.json({ ...intro.state(), cost: intro.totalCost() }));
+
+linkedinRoutes.post('/intro/introducers', (req, res) => {
+  try {
+    res.json({ added: intro.addIntroducer(req.body?.name), ...intro.state() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+linkedinRoutes.delete('/intro/introducers/:id', (req, res) => res.json(intro.removeIntroducer(req.params.id)));
+
+linkedinRoutes.post('/intro/searches', (req, res) => {
+  try {
+    res.json({ added: intro.addSearch({ term: req.body?.term, prompt: req.body?.prompt }), ...intro.state() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+linkedinRoutes.delete('/intro/searches/:id', (req, res) => res.json(intro.removeSearch(req.params.id)));
+
+linkedinRoutes.post('/intro/queue/clear', (_req, res) => res.json(intro.clearQueue()));
+
+// Re-ask the model about one row, usually after rewording the prompt.
+linkedinRoutes.post('/intro/rows/:id/ask', async (req, res) => {
+  try {
+    res.json({ row: await intro.reask(req.params.id, req.body?.prompt), ...intro.state() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+// What exactly was put to the model for one row.
+linkedinRoutes.get('/intro/rows/:id/prompt', (req, res) => {
+  const row = intro.state().rows.find((r) => r.id === req.params.id);
+  if (!row) return res.status(404).json({ error: 'No such row.' });
+  res.json({ prompt: intro.renderPrompt(row.prompt || intro.state().prompt, row), profile: intro.profileBlock(row) });
+});
+
+linkedinRoutes.get('/intro.csv', (_req, res) => {
+  const esc = (v) => {
+    const s = v == null ? '' : String(v);
+    return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const cols = ['term', 'introducer', 'name', 'headline', 'company', 'linkedin', 'answer'];
+  const lines = [cols.join(',')];
+  for (const r of intro.state().rows) {
+    lines.push(
+      [r.term, r.introducerName, r.name, r.headline, r.company, r.url, r.answer || r.error].map(esc).join(',')
+    );
+  }
+  res.type('text/csv').attachment('ask-for-intro.csv').send(lines.join('\n'));
 });

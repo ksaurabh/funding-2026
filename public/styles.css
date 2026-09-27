@@ -635,6 +635,39 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #mb-name { margin-right: 4px; }
 #mb-table td { max-width: 260px; }
 #google-redirect { word-break: break-all; }
+
+/* Ask for Intro: the people you know, then a row per introduction path. */
+#in-people { margin-bottom: 10px; }
+.person-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  padding: 3px 6px 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: var(--panel);
+}
+.person-chip.ok { border-color: #bfdcca; }
+.person-chip.waiting { border-style: dashed; }
+.person-chip.problem { border-color: #eec6c2; }
+.chip-x {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.chip-x:hover { color: var(--err); }
+#in-table td { white-space: normal; vertical-align: top; }
+#in-table td:nth-child(4) { max-width: 420px; }
+#in-table td:nth-child(5) { max-width: 320px; }
+#in-table tbody tr { cursor: default; }
+#in-table tbody tr:hover { background: none; }
+#in-filters input, #view-intro .filters-head input { font-size: 12px; padding: 3px 6px; }
+#in-prompt { font: inherit; font-size: 13px; width: 100%; }
 .badge.deg-1st { color: #1c6b40; border-color: #bfdcca; background: #eef7f1; }
 .badge.deg-2nd { color: #8a5a17; border-color: #e6d4b0; background: #fdf6e8; }
 .badge.deg-3rd { color: var(--muted); }

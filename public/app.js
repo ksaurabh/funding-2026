@@ -79,7 +79,9 @@ function parseHash() {
   const parts = (location.hash.replace(/^#\/?/, '') || 'lists').split('/');
   if (parts[0] === 'list' && parts[1]) return { view: parts[2] || 'investors', listId: parts[1] };
   if (parts[0] === 'monday' && parts[1]) return { view: 'board', listId: null, boardId: parts[1] };
-  const top = ['settings', 'playbooks', 'linkedin', 'network', 'monday'].includes(parts[0]) ? parts[0] : 'lists';
+  const top = ['settings', 'playbooks', 'linkedin', 'network', 'monday', 'intro'].includes(parts[0])
+    ? parts[0]
+    : 'lists';
   return { view: top, listId: null };
 }
 
@@ -125,6 +127,7 @@ async function route() {
   $('#linkedin-tab').classList.toggle('active', view === 'linkedin');
   $('#network-tab').classList.toggle('active', view === 'network');
   $('#monday-tab').classList.toggle('active', view === 'monday' || view === 'board');
+  $('#intro-tab').classList.toggle('active', view === 'intro');
   $('#export').href = `/api/lists/${listId}/export.csv`;
 
   await loadCost();
@@ -135,6 +138,7 @@ async function route() {
     await pollLinkedIn();
   }
   if (view === 'network') await loadNetwork();
+  if (view === 'intro') await loadIntro();
   if (view === 'monday') await loadMonday();
   if (view === 'board') await loadBoard(boardId);
   if (view === 'playbook') {
@@ -4070,6 +4074,256 @@ $('#mon-refresh').addEventListener('click', async () => {
     mon.busy = false;
     renderMonday();
   }
+});
+
+// ------------------------------------------------------------ ask for intro
+// Who could introduce me to the people worth meeting: first-degree connections
+// you name, second-degree people found through them, and Jev's read on each.
+
+const intro = {
+  introducers: [],
+  searches: [],
+  rows: [],
+  prompt: '',
+  running: false,
+  current: null,
+  pending: 0,
+  cost: 0,
+  log: [],
+  filters: { first: '', second: '', answer: '' },
+};
+
+let introTimer = null;
+
+async function loadIntro() {
+  await pollIntro();
+  // Only while there is something to watch: the work is slow and paced.
+  clearInterval(introTimer);
+  introTimer = setInterval(() => {
+    if (parseHash().view !== 'intro') return clearInterval(introTimer);
+    if (intro.running || intro.pending) pollIntro();
+  }, 2500);
+}
+
+async function pollIntro() {
+  try {
+    Object.assign(intro, await api('/api/linkedin/intro'));
+  } catch (err) {
+    $('#in-status').textContent = err.message;
+    return;
+  }
+  if (!$('#in-prompt').value) $('#in-prompt').value = intro.prompt || '';
+  renderIntro();
+}
+
+function introVisible() {
+  const { first, second, answer } = intro.filters;
+  const has = (hay, needle) => !needle || String(hay ?? '').toLowerCase().includes(needle.toLowerCase());
+  return intro.rows.filter(
+    (r) =>
+      has(r.introducerName, first) &&
+      has(r.name, second) &&
+      has(r.answer || r.error, answer)
+  );
+}
+
+function renderIntro() {
+  const rows = introVisible();
+  const ready = intro.introducers.filter((i) => i.url);
+
+  // The people you know, as chips: each says how it was matched and can go.
+  $('#in-people').replaceChildren(
+    ...intro.introducers.map((i) => {
+      const drop = el('button', { className: 'chip-x', textContent: '×', title: `Remove ${i.name}` });
+      drop.addEventListener('click', async () => {
+        Object.assign(intro, await api(`/api/linkedin/intro/introducers/${i.id}`, { method: 'DELETE' }));
+        renderIntro();
+      });
+      const state =
+        i.status === 'ok'
+          ? i.source === 'network'
+            ? 'from your network'
+            : '1st degree'
+          : i.status === 'queued'
+          ? 'looking…'
+          : i.status === 'unsure'
+          ? 'no 1st-degree match'
+          : i.status === 'stopped'
+          ? 'not looked up'
+          : 'failed';
+      const chip = el(
+        'span',
+        {
+          className: 'person-chip' + (i.status === 'ok' ? ' ok' : i.status === 'queued' ? ' waiting' : ' problem'),
+          title: i.error || i.headline || '',
+        },
+        [
+        i.url
+          ? el('a', { href: i.url, target: '_blank', rel: 'noreferrer', textContent: i.name })
+          : document.createTextNode(i.name),
+        el('span', { className: 'muted small', textContent: ` ${state}` }),
+          drop,
+        ]
+      );
+      return chip;
+    })
+  );
+  $('#in-people-count').textContent = intro.introducers.length
+    ? `${ready.length} of ${intro.introducers.length} usable`
+    : '';
+
+  $('#in-searches').textContent = intro.searches.length
+    ? intro.searches.map((x) => `${x.term} (${x.status})`).join(' · ')
+    : '';
+  $('#in-search').disabled = !ready.length || intro.running;
+  $('#in-search').title = ready.length
+    ? 'Search every connection’s 2nd-degree network for this term'
+    : 'Add someone you know first';
+
+  $('#in-progress').textContent = intro.running
+    ? `${intro.current || 'working'}…${intro.pending ? ` · ${intro.pending} waiting` : ''}`
+    : intro.pending
+    ? `${intro.pending} waiting`
+    : intro.cost
+    ? `${money(intro.cost)} spent on answers`
+    : '';
+  $('#in-clear-queue').classList.toggle('hidden', !intro.pending);
+  $('#in-clear-queue').textContent = `Clear queue (${intro.pending})`;
+
+  const last = intro.log?.[intro.log.length - 1];
+  $('#in-status').textContent = intro.rows.length
+    ? last && (intro.running || intro.pending)
+      ? last.msg
+      : `${intro.rows.length} row${intro.rows.length === 1 ? '' : 's'} · ${money(intro.cost || 0)}`
+    : last
+    ? last.msg
+    : 'Add someone you know, then search their connections.';
+
+  const dirty = Object.values(intro.filters).some(Boolean);
+  $('#in-clear-filters').classList.toggle('hidden', !dirty);
+  $('#in-count').textContent = dirty ? `${rows.length} of ${intro.rows.length} match` : '';
+
+  $('#in-table thead').replaceChildren(
+    el('tr', {}, [
+      el('th', { textContent: '1st degree' }),
+      el('th', { textContent: '2nd degree' }),
+      el('th', { textContent: 'LinkedIn' }),
+      el('th', { textContent: 'Jev’s answer' }),
+      el('th', { textContent: 'Positions' }),
+    ])
+  );
+
+  $('#in-table tbody').replaceChildren(
+    ...rows.map((r) => {
+      const working = r.status === 'reading' || r.status === 'asking';
+      const answer = working
+        ? el('span', { className: 'badge running' }, [
+            el('i', { className: 'spinner' }),
+            document.createTextNode(r.status === 'reading' ? 'reading profile' : 'asking Jev'),
+          ])
+        : r.error
+        ? el('span', { className: 'mon-error', textContent: r.error })
+        : el('span', { textContent: r.answer || '—' });
+
+      const again = el('button', { className: 'star-btn', textContent: '↻', title: 'Ask Jev again with the current prompt' });
+      again.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          await post(`/api/linkedin/intro/rows/${r.id}/ask`, { prompt: $('#in-prompt').value.trim() });
+        } catch (err) {
+          return toast(err.message, 'bad');
+        }
+        pollIntro();
+      });
+
+      return el('tr', {}, [
+        el('td', {}, [
+          r.introducerUrl
+            ? el('a', { href: r.introducerUrl, target: '_blank', rel: 'noreferrer', textContent: r.introducerName })
+            : document.createTextNode(r.introducerName || '—'),
+        ]),
+        el('td', {}, [
+          el('div', { textContent: r.name }),
+          r.headline ? el('div', { className: 'muted small', textContent: r.headline }) : null,
+        ]),
+        el('td', {}, el('a', { href: r.url, target: '_blank', rel: 'noreferrer', textContent: 'Profile' })),
+        el('td', {}, [answer, working ? null : again]),
+        el('td', { className: 'muted small' }, [
+          document.createTextNode(
+            (r.positions || [])
+              .slice(0, 3)
+              .map((p) => `${[p.title, p.company].filter(Boolean).join(' — ')}${p.dates ? ` (${p.dates})` : ''}`)
+              .join(' · ') || (r.summary ? 'About only' : '')
+          ),
+        ]),
+      ]);
+    })
+  );
+
+  if (!rows.length) {
+    $('#in-table tbody').replaceChildren(
+      el('tr', {}, el('td', { colSpan: 5, className: 'muted', textContent: intro.rows.length ? 'Nothing matches those filters.' : 'No results yet.' }))
+    );
+  }
+}
+
+$('#in-add-person').addEventListener('click', async () => {
+  const name = $('#in-person').value.trim();
+  if (!name) return;
+  try {
+    Object.assign(intro, await post('/api/linkedin/intro/introducers', { name }));
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  $('#in-person').value = '';
+  renderIntro();
+  pollIntro();
+});
+
+$('#in-person').addEventListener('keydown', (e) => e.key === 'Enter' && $('#in-add-person').click());
+
+$('#in-search').addEventListener('click', async () => {
+  const term = $('#in-term').value.trim();
+  if (!term) return;
+  try {
+    Object.assign(intro, await post('/api/linkedin/intro/searches', { term, prompt: $('#in-prompt').value.trim() }));
+  } catch (err) {
+    return toast(err.message, 'bad');
+  }
+  toast(`Searching "${term}" through ${intro.introducers.filter((i) => i.url).length} connection(s)`);
+  renderIntro();
+});
+
+$('#in-term').addEventListener('keydown', (e) => e.key === 'Enter' && $('#in-search').click());
+
+$('#in-prompt-btn').addEventListener('click', () => {
+  $('#in-prompt').value = $('#in-prompt').value || intro.prompt || '';
+  $('#in-prompt-dialog').showModal();
+});
+
+$('#in-prompt-save').addEventListener('click', (e) => {
+  e.preventDefault();
+  intro.prompt = $('#in-prompt').value.trim();
+  $('#in-prompt-dialog').close();
+  toast('Saved for the next search');
+});
+
+$('#in-clear-queue').addEventListener('click', async () => {
+  Object.assign(intro, await post('/api/linkedin/intro/queue/clear'));
+  renderIntro();
+});
+
+for (const [key, sel] of [['first', '#in-f-first'], ['second', '#in-f-second'], ['answer', '#in-f-answer']]) {
+  $(sel).addEventListener('input', (e) => {
+    intro.filters[key] = e.target.value;
+    renderIntro();
+  });
+}
+
+$('#in-clear-filters').addEventListener('click', () => {
+  intro.filters = { first: '', second: '', answer: '' };
+  for (const sel of ['#in-f-first', '#in-f-second', '#in-f-answer']) $(sel).value = '';
+  renderIntro();
 });
 
 // --------------------------------------------------- one Monday.com board

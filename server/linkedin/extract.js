@@ -155,3 +155,99 @@ export function extractProfileInPage() {
     mutual: mutualEl ? { text: clean(mutualEl.innerText), url: mutualEl.getAttribute('href') || null } : null,
   };
 }
+
+/**
+ * Read the parts of a profile that say what someone actually does: the About
+ * paragraph and the Experience entries, including the date ranges that make a
+ * board seat or an observer role legible ("Board Observer · Jan 2021 – Present").
+ *
+ * Structural, like the rest of this file: LinkedIn's section markup is found
+ * by its heading text, its entries by the presence of a date range, never by
+ * class name. The raw section text is returned alongside the parsed entries,
+ * because the parse is the part most likely to go stale and a caller passing
+ * this to a model would rather have both.
+ *
+ * Runs inside the page via page.evaluate, so it must be self-contained.
+ */
+export function extractProfileDetailInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const lines = (s) => (s || '').split('\n').map(clean).filter(Boolean);
+
+  const MONTH = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)';
+  // "Jan 2021 - Present", "2019 – 2022", "Mar 2020 - Dec 2021 · 1 yr 10 mos"
+  const RANGE = new RegExp(
+    `(?:${MONTH}\\s+)?(?:19|20)\\d{2}\\s*[-–—]\\s*(?:Present|(?:${MONTH}\\s+)?(?:19|20)\\d{2})`,
+    'i'
+  );
+  const DURATION = /·\s*(?:\d+\s*yrs?)?\s*(?:\d+\s*mos?)?/i;
+  const NOISE = /^(?:Show all|See more|see less|…see more|Endorse|Message|Connect|Follow|Skills?:)/i;
+
+  const main = document.querySelector('main') || document.body;
+
+  // A section is the block whose own heading is the one we want. Headings
+  // repeat inside "people also viewed", so only take blocks under main.
+  const sectionFor = (title) => {
+    const heads = [...main.querySelectorAll('h2, h3, [role="heading"]')].filter(
+      (h) => clean(h.innerText).toLowerCase() === title
+    );
+    for (const h of heads) {
+      const box = h.closest('section') || h.parentElement?.parentElement;
+      if (box && clean(box.innerText)) return box;
+    }
+    return null;
+  };
+
+  // About: everything under the heading except the heading itself.
+  const aboutBox = sectionFor('about');
+  let summary = '';
+  if (aboutBox) {
+    const ls = lines(aboutBox.innerText).filter((l) => l.toLowerCase() !== 'about' && !NOISE.test(l));
+    // LinkedIn repeats the visible text for screen readers; drop the repeat.
+    const half = ls.slice(0, Math.ceil(ls.length / 2)).join(' ');
+    const whole = ls.join(' ');
+    summary = whole === half + ' ' + half ? half : whole;
+  }
+
+  const expBox = sectionFor('experience');
+  const positions = [];
+  if (expBox) {
+    // Each entry is the innermost list item that carries a date range.
+    let items = [...expBox.querySelectorAll('li, div[data-view-name], div[componentkey]')].filter((n) =>
+      RANGE.test(clean(n.innerText))
+    );
+    items = items.filter((n) => !items.some((o) => o !== n && n.contains(o)));
+
+    for (const item of items) {
+      const ls = lines(item.innerText).filter((l) => !NOISE.test(l));
+      // LinkedIn duplicates each line for assistive tech; keep first sightings.
+      const seen = new Set();
+      const uniq = ls.filter((l) => (seen.has(l) ? false : (seen.add(l), true)));
+
+      const at = uniq.findIndex((l) => RANGE.test(l));
+      if (at < 0) continue;
+      const dates = uniq[at];
+      const head = uniq.slice(0, at);
+      const tail = uniq.slice(at + 1);
+
+      positions.push({
+        title: head[0] || '',
+        // "Acme Corp · Full-time" — the employment type is not the company.
+        company: (head[1] || '').split('·')[0].trim(),
+        dates: dates.replace(DURATION, '').trim(),
+        duration: (dates.match(DURATION) || [''])[0].replace(/^·\s*/, '').trim(),
+        current: /present/i.test(dates),
+        // A location line has no sentence punctuation; a description does.
+        location: tail[0] && !/[.!?]$/.test(tail[0]) && tail[0].length < 60 ? tail[0] : '',
+        description: tail.filter((l) => /[.!?]$/.test(l) || l.length >= 60).join(' '),
+      });
+    }
+  }
+
+  return {
+    name: lines(main.innerText)[0] || '',
+    summary,
+    positions,
+    // What the parse was made from, so a caller can see past a stale parse.
+    experienceText: expBox ? lines(expBox.innerText).filter((l) => !NOISE.test(l)).join('\n').slice(0, 4000) : '',
+  };
+}
