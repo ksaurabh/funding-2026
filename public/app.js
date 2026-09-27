@@ -4124,6 +4124,8 @@ $('#mon-refresh').addEventListener('click', async () => {
 
 const people = { rows: [], filter: '', relFilter: new Set(), loaded: false };
 
+let peopleTimer = null;
+
 async function loadPeople() {
   try {
     const data = await api('/api/linkedin/intro/people');
@@ -4135,6 +4137,13 @@ async function loadPeople() {
     return;
   }
   renderPeople();
+
+  // Someone being read is work the jobs half may not know about; keep looking
+  // until it lands.
+  clearTimeout(peopleTimer);
+  if (people.rows.some((p) => p.working) && intro.tab === 'people') {
+    peopleTimer = setTimeout(loadPeople, 2500);
+  }
 }
 
 function peopleAll() {
@@ -4219,7 +4228,7 @@ function renderPeople() {
           el('div', { className: 'via-list' }, p.via.map((v) => el('span', { className: 'via', textContent: v.name }))),
           p.via.length > 1 ? el('div', { className: 'muted small', textContent: `${p.via.length} ways in` }) : null,
         ]),
-        el('td', {}, el('span', { className: p.answer ? 'category' : 'muted', textContent: p.answer || 'not qualified' })),
+        el('td', {}, categoryCell(p)),
         el('td', {}, personRelevanceCell(p)),
         el('td', {}, personNoteCell(p)),
       ])
@@ -4239,6 +4248,55 @@ function renderPeople() {
       )
     );
   }
+}
+
+/**
+ * Jev's answer, or the means of getting one: somebody found by a job that did
+ * not qualify has a profile nobody has read yet.
+ */
+function categoryCell(person) {
+  if (person.working) {
+    return el('span', { className: 'badge running' }, [
+      el('i', { className: 'spinner' }),
+      document.createTextNode(person.working === 'reading' ? 'reading profile' : 'asking Jev'),
+    ]);
+  }
+  if (person.answer) {
+    const again = el('button', { className: 'star-btn', textContent: '↻', title: 'Ask Jev again' });
+    again.addEventListener('click', () => qualifyPerson(person, again));
+    return el('span', {}, [el('span', { className: 'category', textContent: person.answer }), again]);
+  }
+
+  const go = el('button', {
+    className: 'star-btn',
+    textContent: 'Qualify',
+    title: 'Read their profile and ask Jev about them',
+  });
+  go.addEventListener('click', () => qualifyPerson(person, go));
+  return el('span', {}, [
+    person.error
+      ? el('span', { className: 'mon-error', textContent: person.error })
+      : el('span', { className: 'muted', textContent: 'not qualified' }),
+    go,
+  ]);
+}
+
+/** Read one of their rows and ask about it; the entry inherits the answer. */
+async function qualifyPerson(person, button) {
+  const rowId = person.rowIds[0];
+  if (!rowId) return toast('That person has no row to read.', 'bad');
+  person.working = 'reading';
+  button.blur();
+  renderPeople();
+  try {
+    await post(`/api/linkedin/intro/rows/${rowId}/ask`, {});
+  } catch (err) {
+    person.working = false;
+    person.error = err.message;
+    renderPeople();
+    return toast(err.message, 'bad');
+  }
+  loadPeople();
 }
 
 /** A mark here is a mark on every row that is this person. */
@@ -4477,11 +4535,23 @@ function renderIntroJobs() {
 
       // While it runs, that button is how you stop it.
       const live = j.status === 'running';
+      // A job waiting its turn can still be forced to the front — which is
+      // also the way out of one left saying "queued" with nothing running.
+      const waiting = j.status === 'queued';
       const rerun = el('button', {
-        textContent: live ? (intro.stopping ? 'Stopping…' : 'Stop') : j.lastRunAt ? 'Re-run' : 'Run',
+        textContent: live
+          ? intro.stopping
+            ? 'Stopping…'
+            : 'Stop'
+          : waiting
+          ? 'Run now'
+          : j.lastRunAt
+          ? 'Re-run'
+          : 'Run',
         className: 'small-btn' + (live ? ' danger' : ''),
+        title: waiting ? 'Put this job at the front and start it' : '',
       });
-      rerun.disabled = (live && intro.stopping) || j.status === 'queued';
+      rerun.disabled = live && intro.stopping;
       rerun.addEventListener('click', async (e) => {
         e.stopPropagation();
         try {

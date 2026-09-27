@@ -241,10 +241,23 @@ export function runJobAgain(jobId, prompt) {
   const s = load();
   const job = s.jobs.find((j) => j.id === jobId);
   if (!job) throw new Error('No such job.');
+  if (running && current === jobLabel(job)) throw new Error('That job is running right now.');
   if (prompt) job.prompt = String(prompt).trim();
   Object.assign(job, { status: 'queued', error: null, skipped: null });
   save(s);
-  enqueue({ kind: 'job', jobId: job.id, introducerId: job.introducerId, label: jobLabel(job) });
+
+  // Asking again for a job already waiting moves it to the front rather than
+  // queueing it twice — which is also the way out of a job left saying
+  // "queued" after a restart, since this starts the loop either way.
+  //
+  // Not in front of its own connection's lookup, though: a job that overtakes
+  // that runs before there is a profile to search through, and fails saying
+  // its connection was never matched.
+  queue = queue.filter((q) => q.jobId !== job.id);
+  const waitingOn = queue.findLastIndex((q) => q.kind === 'introducer' && q.introducerId === job.introducerId);
+  const at = waitingOn + 1;
+  queue.splice(at, 0, { kind: 'job', jobId: job.id, introducerId: job.introducerId, label: jobLabel(job) });
+  drain().catch((err) => note(`Stopped: ${err.message}`));
   return job;
 }
 
@@ -864,6 +877,10 @@ export function people() {
         note: '',
         via: [],
         rowIds: [],
+        // Whether one of their rows is being read or asked about right now,
+        // so the view can say so rather than looking idle.
+        working: false,
+        error: '',
         firstSeen: row.at || null,
       };
       byKey.set(key, person);
@@ -878,6 +895,8 @@ export function people() {
     // A mark you made anywhere is the mark on the person.
     if (!person.relevance || person.relevance === RELEVANCE[0]) person.relevance = row.relevance || person.relevance;
     person.note = person.note || row.note || '';
+    if (row.status === 'reading' || row.status === 'asking') person.working = row.status;
+    if (!person.answer && row.error) person.error = row.error;
 
     const name = row.introducerName || jobs.get(row.jobId)?.introducerName;
     if (name && !person.via.some((v) => v.name === name)) {
@@ -906,3 +925,36 @@ export function markPerson(rowIds, fields) {
 
 /** What the rows cost to answer, all together. */
 export const totalCost = () => load().rows.reduce((sum, r) => sum + (r.cost || 0), 0);
+
+/**
+ * The queue lives in memory, so a restart leaves jobs on disk claiming to be
+ * queued or running with nothing behind them. Say what actually happened,
+ * rather than leaving them waiting for a turn that will never come.
+ */
+function reconcileOnStart() {
+  const s = load();
+  let stranded = 0;
+  for (const job of s.jobs) {
+    if (job.status !== 'queued' && job.status !== 'running') continue;
+    Object.assign(job, { status: 'stopped', error: 'Interrupted when the app restarted — run it again.' });
+    stranded++;
+  }
+  // A row stuck mid-read is in the same position: put it back to where the
+  // Qualify button can pick it up again.
+  let rows = 0;
+  for (const row of s.rows) {
+    if (row.status !== 'reading' && row.status !== 'asking') continue;
+    Object.assign(row, { status: 'done', error: null });
+    rows++;
+  }
+
+  if (!stranded && !rows) return;
+  if (stranded) {
+    note(
+      `${stranded} job${stranded === 1 ? ' was' : 's were'} interrupted when the app last stopped — run again to pick up.`
+    );
+  }
+  save(s);
+}
+
+reconcileOnStart();

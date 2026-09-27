@@ -613,6 +613,10 @@ The same table, over everything: one entry per person rather than one per
 introduction. Somebody two of your connections both know is a single row with
 a **Connected via** column naming both, and *2 ways in* underneath.
 
+Someone found by a job that did not qualify shows **Qualify** in the category
+column: it reads that profile and asks Jev, and the entry — and every row
+behind it — takes the answer. **↻** asks again about someone already answered.
+
 Your marks belong to the person, not to the path. Relevance or a note set on
 one job's row shows here; set here, it is written back to every row for them,
 so it shows on each job too. Whatever any job learned about them — the title,
@@ -626,7 +630,14 @@ Jobs run one at a time, paced by the same randomised delay as the rest of the
 agent; **Clear queue** drops what has not started, and **Stop job** ends the
 one that is running at its next step — between pages, between people, or in
 the middle of a model call — keeping everything collected up to that point.
-The job is then marked *stopped by you*, and **Re-run** picks it up again. State lives in
+The job is then marked *stopped by you*, and **Re-run** picks it up again.
+
+A job waiting its turn shows **Run now**, which moves it to the front — though
+never in front of the lookup of its own connection, since a job that overtakes
+that runs before there is a profile to search through. The queue lives in
+memory, so a job left saying *queued* when the app stopped is settled on the
+next start with *"interrupted when the app restarted"*, and rows caught
+mid-read go back to where the **Qualify** button can pick them up. State lives in
 `data/linkedin-intro.json`, and the spend on answers is shown in the toolbar.
 
 ## Tab icon
