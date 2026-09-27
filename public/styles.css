@@ -636,13 +636,13 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #mb-table td { max-width: 260px; }
 #google-redirect { word-break: break-all; }
 
-/* Ask for Intro: three narrow columns — people, terms, jobs — then the table
-   of what the selected job found. */
+/* Ask for Intro: the jobs down the left, what the selected one found on the
+   right. A job card shows the three things it was made of. */
 .intro-cols {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 10% 16% 20% 1fr;
+  grid-template-columns: 320px 1fr;
   border-top: 1px solid var(--line);
 }
 .intro-col {
@@ -665,27 +665,35 @@ th.star, td.star { width: 24px; padding-right: 0; }
   position: sticky;
   top: 0;
   background: var(--panel);
+  z-index: 1;
 }
-.col-body { flex: 1; overflow: auto; }
-.col-add {
-  margin: 8px;
-  font-size: 12px;
-  border-style: dashed;
-}
-.col-item {
-  position: relative;
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--line);
+.col-body { flex: 1; overflow: auto; padding: 10px; display: grid; gap: 10px; align-content: start; }
+.pad-sm { padding: 10px; margin: 0; }
+
+.job-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 10px;
   cursor: pointer;
   font-size: 12px;
 }
-.col-item:hover { background: #f5f2ec; }
-.col-item.on { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
-.col-item.muted-item .col-item-name { color: var(--muted); }
-.col-item-name { font-weight: 500; word-break: break-word; }
-.col-item .chip-x { position: absolute; top: 6px; right: 6px; opacity: 0; }
-.col-item:hover .chip-x { opacity: 1; }
-.pad-sm { padding: 10px; margin: 0; }
+.job-card:hover { border-color: #d6cfc2; }
+.job-card.on { border-color: var(--accent); box-shadow: inset 2px 0 0 var(--accent); background: var(--accent-soft); }
+.job-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.kv { display: grid; grid-template-columns: 116px 1fr; gap: 6px; padding: 2px 0; }
+.kv .k { color: var(--muted); }
+.kv .v { word-break: break-word; }
+.kv .v.clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+}
+.job-card-foot { display: flex; gap: 6px; margin-top: 8px; }
+.small-btn { font-size: 11px; padding: 2px 8px; }
+.small-btn.danger { color: var(--err); }
 
 .detail-bar {
   display: flex;
@@ -702,17 +710,7 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-table tbody tr { cursor: default; }
 #in-table tbody tr:hover { background: none; }
 .category { font-weight: 500; }
-#in-job-prompt-text, #in-job-term { font: inherit; font-size: 13px; width: 100%; }
-.chip-x {
-  border: none;
-  background: none;
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-  padding: 0 2px;
-}
-.chip-x:hover { color: var(--err); }
+#in-job-prompt-text, #in-job-term, #in-job-who { font: inherit; font-size: 13px; width: 100%; }
 
 /* A stopped job shows the panel that defeated it, not just a message. */
 #in-skips { margin-bottom: 14px; display: grid; gap: 12px; }

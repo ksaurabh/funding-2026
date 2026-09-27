@@ -4077,8 +4077,8 @@ $('#mon-refresh').addEventListener('click', async () => {
 });
 
 // ------------------------------------------------------------ ask for intro
-// Three columns and a table: the people you know, the terms you have searched
-// for, the jobs those two make, and what one job found.
+// A list of fetch jobs on the left, and what the selected one found on the
+// right. A job is a 1st degree connection, a search term and a prompt for Jev.
 
 const intro = {
   introducers: [],
@@ -4092,9 +4092,6 @@ const intro = {
   pending: 0,
   cost: 0,
   log: [],
-  // What is selected in each column, and the filter over the table.
-  person: null,
-  term: null,
   job: null,
   filter: '',
 };
@@ -4117,18 +4114,24 @@ async function pollIntro() {
     $('#in-status').textContent = err.message;
     return;
   }
-  // Keep selections pointing at things that still exist.
-  if (intro.person && !intro.introducers.some((i) => i.id === intro.person)) intro.person = null;
   if (intro.job && !intro.jobs.some((j) => j.id === intro.job)) intro.job = null;
   renderIntro();
 }
 
-const jobsFor = (personId) => intro.jobs.filter((j) => !personId || j.introducerId === personId);
 const selectedJob = () => intro.jobs.find((j) => j.id === intro.job) || null;
 
+/** How a connection stands, when it is not simply matched. */
+function connectionNote(job) {
+  const person = intro.introducers.find((i) => i.id === job.introducerId);
+  if (!person) return '';
+  if (person.status === 'queued') return ' (looking them up…)';
+  if (person.status === 'unsure') return ' (no 1st-degree match)';
+  if (person.status === 'error') return ' (lookup failed)';
+  if (person.source === 'network') return ' (from your network)';
+  return '';
+}
+
 function renderIntro() {
-  renderIntroPeople();
-  renderIntroTerms();
   renderIntroJobs();
   renderIntroDetail();
 
@@ -4143,152 +4146,83 @@ function renderIntro() {
   $('#in-clear-queue').textContent = `Clear queue (${intro.pending})`;
 }
 
-// --- column 1: the people you know
+/** One card per job, showing what it was made of and how it went. */
+function renderIntroJobs() {
+  $('#in-jobs').replaceChildren(
+    ...intro.jobs.map((j) => {
+      const person = intro.introducers.find((i) => i.id === j.introducerId);
+      const pair = (k, v, extra) =>
+        el('div', { className: 'kv' }, [
+          el('span', { className: 'k', textContent: k }),
+          el('span', { className: 'v' + (extra || ''), textContent: v }),
+        ]);
 
-function renderIntroPeople() {
-  $('#in-people').replaceChildren(
-    ...intro.introducers.map((i) => {
       const state =
-        i.status === 'ok'
-          ? i.source === 'network'
-            ? 'from your network'
-            : '1st degree'
-          : i.status === 'queued'
-          ? 'looking…'
-          : i.status === 'unsure'
-          ? 'no 1st-degree match'
-          : i.status === 'stopped'
-          ? 'not looked up'
-          : 'failed';
+        j.status === 'running'
+          ? el('span', { className: 'badge running' }, [el('i', { className: 'spinner' }), document.createTextNode('running')])
+          : j.status === 'queued'
+          ? el('span', { className: 'badge queued', textContent: 'queued' })
+          : j.status === 'error'
+          ? el('span', { className: 'badge err', textContent: 'stopped' })
+          : el('span', { className: 'badge full', textContent: 'done' });
 
-      const drop = el('button', { className: 'chip-x', textContent: '×', title: `Remove ${i.name}` });
+      const rerun = el('button', { textContent: j.lastRunAt ? 'Re-run' : 'Run', className: 'small-btn' });
+      rerun.disabled = j.status === 'running' || j.status === 'queued';
+      rerun.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        try {
+          Object.assign(intro, await post(`/api/linkedin/intro/jobs/${j.id}/run`));
+        } catch (err) {
+          return toast(err.message, 'bad');
+        }
+        intro.job = j.id;
+        renderIntro();
+      });
+
+      const edit = el('button', { textContent: 'Edit prompt', className: 'small-btn' });
+      edit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openJobDialog({ job: j });
+      });
+
+      const drop = el('button', { textContent: 'Delete', className: 'small-btn danger' });
       drop.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!confirm(`Remove ${i.name} and the jobs that go through them?`)) return;
-        Object.assign(intro, await api(`/api/linkedin/intro/introducers/${i.id}`, { method: 'DELETE' }));
-        if (intro.person === i.id) intro.person = null;
+        if (!confirm(`Delete "${j.term} via ${j.introducerName}" and the people it found?`)) return;
+        Object.assign(intro, await api(`/api/linkedin/intro/jobs/${j.id}`, { method: 'DELETE' }));
+        if (intro.job === j.id) intro.job = null;
         renderIntro();
       });
 
-      const item = el(
-        'div',
-        {
-          className:
-            'col-item' + (intro.person === i.id ? ' on' : '') + (i.status === 'ok' ? '' : ' muted-item'),
-          title: i.error || i.headline || '',
-        },
-        [
-          el('div', { className: 'col-item-name', textContent: i.name }),
-          el('div', { className: 'muted small', textContent: state }),
-          drop,
-        ]
-      );
-      item.addEventListener('click', () => {
-        // Picking a person narrows the terms and jobs beside them.
-        intro.person = intro.person === i.id ? null : i.id;
-        intro.term = null;
-        renderIntro();
-      });
-      return item;
-    })
-  );
-
-  if (!intro.introducers.length) {
-    $('#in-people').replaceChildren(el('p', { className: 'muted small pad-sm', textContent: 'Nobody yet.' }));
-  }
-}
-
-// --- column 2: the terms, and what they have been run against
-
-function renderIntroTerms() {
-  const person = intro.introducers.find((i) => i.id === intro.person) || null;
-  const all = intro.terms || [];
-
-  $('#in-add-term').disabled = !person || !person.url;
-  $('#in-add-term').title = person
-    ? person.url
-      ? `Search ${person.name}'s connections for something`
-      : `${person.name} has no LinkedIn profile yet`
-    : 'Pick a connection first';
-
-  $('#in-terms').replaceChildren(
-    ...all.map((term) => {
-      const mine = person ? intro.jobs.find((j) => j.introducerId === person.id && j.term === term) : null;
-      const item = el(
-        'div',
-        { className: 'col-item' + (intro.term === term ? ' on' : '') },
-        [
-          el('div', { className: 'col-item-name', textContent: term }),
-          el('div', {
-            className: 'muted small',
-            textContent: person
-              ? mine
-                ? `${mine.found || 0} found via ${person.name.split(' ')[0]}`
-                : `not run via ${person.name.split(' ')[0]} — click to run`
-              : `${intro.jobs.filter((j) => j.term === term).length} job(s)`,
-          }),
-        ]
-      );
-      item.addEventListener('click', () => {
-        intro.term = term;
-        // A term already run for this person selects its job; a new pairing
-        // needs a prompt, so it opens the dialog.
-        if (mine) {
-          intro.job = mine.id;
-          renderIntro();
-        } else if (person?.url) {
-          openJobDialog({ term });
-        } else {
-          intro.job = null;
-          renderIntro();
-        }
-      });
-      return item;
-    })
-  );
-
-  if (!all.length) {
-    $('#in-terms').replaceChildren(
-      el('p', { className: 'muted small pad-sm', textContent: person ? 'No terms yet.' : 'Pick a connection.' })
-    );
-  }
-}
-
-// --- column 3: the jobs
-
-function renderIntroJobs() {
-  const rows = jobsFor(intro.person);
-  $('#in-jobs').replaceChildren(
-    ...rows.map((j) => {
-      const done = j.status === 'done';
-      const item = el('div', { className: 'col-item' + (intro.job === j.id ? ' on' : ''), title: j.error || '' }, [
-        el('div', { className: 'col-item-name', textContent: j.term }),
-        el('div', { className: 'muted small', textContent: `via ${j.introducerName}` }),
-        el('div', { className: 'muted small' }, [
-          j.status === 'running'
-            ? el('span', { className: 'badge running' }, [el('i', { className: 'spinner' }), document.createTextNode('running')])
-            : j.status === 'queued'
-            ? el('span', { className: 'badge queued', textContent: 'queued' })
-            : j.status === 'error'
-            ? el('span', { className: 'badge err', textContent: 'stopped' })
-            : document.createTextNode(
-                `${j.found || 0} 2nd-degree · ${j.lastRunAt ? new Date(j.lastRunAt).toLocaleString() : 'never run'}`
-              ),
+      const card = el('div', { className: 'job-card' + (intro.job === j.id ? ' on' : '') }, [
+        el('div', { className: 'job-card-head' }, [
+          el('strong', { textContent: j.term || '—' }),
+          state,
         ]),
+        pair('1st degree connection', (person?.name || j.introducerName) + connectionNote(j)),
+        pair('Search term', j.term),
+        pair('Jev prompt', j.prompt, ' clamp'),
+        pair('Last run', j.lastRunAt ? new Date(j.lastRunAt).toLocaleString() : 'never'),
+        pair(
+          'Connections fetched',
+          j.status === 'error' ? '—' : `${j.found || 0}`
+        ),
+        j.error ? el('div', { className: 'mon-error small', textContent: j.error }) : null,
+        el('div', { className: 'job-card-foot' }, [rerun, edit, drop]),
       ]);
-      item.addEventListener('click', () => {
+      card.addEventListener('click', () => {
         intro.job = intro.job === j.id ? null : j.id;
         renderIntro();
       });
-      return item;
+      return card;
     })
   );
 
-  if (!rows.length) {
+  if (!intro.jobs.length) {
     $('#in-jobs').replaceChildren(
       el('p', {
         className: 'muted small pad-sm',
-        textContent: intro.person ? 'No jobs for them yet.' : 'No jobs yet.',
+        textContent: 'No jobs yet. A job is someone you know, a search term, and a prompt for Jev.',
       })
     );
   }
@@ -4313,9 +4247,7 @@ function renderIntroDetail() {
   const job = selectedJob();
   const rows = jobRows();
 
-  for (const sel of ['#in-job-run', '#in-job-prompt', '#in-job-delete', '#in-filter']) {
-    $(sel).classList.toggle('hidden', !job);
-  }
+  $('#in-filter').classList.toggle('hidden', !job);
   $('#in-job-title').textContent = job ? `${job.term} via ${job.introducerName}` : 'No job selected';
   $('#in-job-meta').textContent = job
     ? job.status === 'done'
@@ -4324,8 +4256,6 @@ function renderIntroDetail() {
       ? 'stopped'
       : job.status
     : '';
-  $('#in-job-run').disabled = intro.running && job?.status === 'running';
-  $('#in-job-run').textContent = job?.status === 'running' ? 'Running…' : 'Run again';
 
   renderIntroSkips(job?.skipped ? [{ ...job.skipped, name: job.introducerName, term: job.term }] : []);
 
@@ -4334,7 +4264,7 @@ function renderIntroDetail() {
   $('#in-status').textContent = !job
     ? intro.jobs.length
       ? 'Pick a job to see the people it found.'
-      : 'Add a connection, pick a search term, and a job is created.'
+      : ''
     : job.status === 'running' || job.status === 'queued'
     ? last?.msg || 'Working…'
     : job.status === 'error'
@@ -4448,8 +4378,6 @@ function renderIntroSkips(skips) {
             ? el('a', { href: `/api/linkedin/shots/${k.html}`, target: '_blank', rel: 'noreferrer', textContent: 'Saved HTML' })
             : null,
         ]),
-        // The paths on disk, selectable: the picture is for looking at, these
-        // are for opening in an editor.
         k.shotPath || k.htmlPath
           ? el(
               'div',
@@ -4463,101 +4391,59 @@ function renderIntroSkips(skips) {
   );
 }
 
-// --- adding a connection
+// --- making a job: a connection, a term, a prompt
 
-$('#in-add-person').addEventListener('click', () => {
-  $('#in-person').value = '';
-  $('#in-person-error').textContent = '';
-  $('#in-person-dialog').showModal();
-  $('#in-person').focus();
-});
-
-$('#in-person-save').addEventListener('click', async (e) => {
-  e.preventDefault();
-  const name = $('#in-person').value.trim();
-  if (!name) return ($('#in-person-error').textContent = 'Name the person you know.');
-  let r;
-  try {
-    r = await post('/api/linkedin/intro/introducers', { name });
-  } catch (err) {
-    return ($('#in-person-error').textContent = err.message);
-  }
-  Object.assign(intro, r);
-  intro.person = r.added?.id || intro.person;
-  $('#in-person-dialog').close();
-  renderIntro();
-  pollIntro();
-});
-
-$('#in-person').addEventListener('keydown', (e) => e.key === 'Enter' && $('#in-person-save').click());
-
-// --- creating a job: a connection, a term, and a prompt
-
-function openJobDialog({ term = '', job = null } = {}) {
-  const person = intro.introducers.find((i) => i.id === intro.person);
-  if (!job && !person) return toast('Pick a connection first.', 'bad');
-
-  $('#in-job-dialog-title').textContent = job ? 'Edit this job’s prompt' : 'New fetch connection job';
+function openJobDialog({ job = null } = {}) {
+  $('#in-job-dialog-title').textContent = job ? 'Edit this job' : 'New fetch connections job';
   $('#in-job-dialog-who').textContent = job
-    ? `Searching ${job.introducerName}'s connections for "${job.term}".`
-    : `Searching ${person.name}'s connections.`;
-  $('#in-job-term').value = job ? job.term : term || intro.term || '';
+    ? 'The connection and term are fixed; change the prompt and run it again.'
+    : 'Names someone you know. If they are new, they are looked up first and the job runs after that.';
+
+  $('#in-job-who').value = job ? job.introducerName : '';
+  $('#in-job-who').disabled = !!job;
+  $('#in-people-list').replaceChildren(
+    ...intro.introducers.map((i) => el('option', { value: i.name, label: i.headline || '' }))
+  );
+
+  $('#in-job-term').value = job ? job.term : '';
   $('#in-job-term').disabled = !!job;
   $('#in-term-list').replaceChildren(...(intro.terms || []).map((t) => el('option', { value: t })));
+
   // An example prompt, there to be edited rather than written from scratch.
   $('#in-job-prompt-text').value = job ? job.prompt : intro.prompt || intro.defaultPrompt || '';
   $('#in-job-error').textContent = '';
   $('#in-job-save').textContent = job ? 'Save and run again' : 'Create job';
   $('#in-job-dialog').dataset.jobId = job ? job.id : '';
   $('#in-job-dialog').showModal();
-  (job ? $('#in-job-prompt-text') : $('#in-job-term')).focus();
+  (job ? $('#in-job-prompt-text') : $('#in-job-who')).focus();
 }
 
-$('#in-add-term').addEventListener('click', () => openJobDialog());
-$('#in-job-prompt').addEventListener('click', () => openJobDialog({ job: selectedJob() }));
+$('#in-add-job').addEventListener('click', () => openJobDialog());
 
 $('#in-job-save').addEventListener('click', async (e) => {
   e.preventDefault();
   const jobId = $('#in-job-dialog').dataset.jobId;
+  const connectionName = $('#in-job-who').value.trim();
   const term = $('#in-job-term').value.trim();
   const prompt = $('#in-job-prompt-text').value.trim();
-  if (!term) return ($('#in-job-error').textContent = 'Give a search term.');
-  if (!prompt) return ($('#in-job-error').textContent = 'Give Jev a prompt.');
+  const say = (msg) => ($('#in-job-error').textContent = msg);
+  if (!jobId && !connectionName) return say('Name the 1st degree connection to go through.');
+  if (!term) return say('Give a search term.');
+  if (!prompt) return say('Give Jev a prompt.');
 
   let r;
   try {
     r = jobId
       ? await post(`/api/linkedin/intro/jobs/${jobId}/run`, { prompt })
-      : await post('/api/linkedin/intro/jobs', { introducerId: intro.person, term, prompt });
+      : await post('/api/linkedin/intro/jobs', { connectionName, term, prompt });
   } catch (err) {
-    return ($('#in-job-error').textContent = err.message);
+    return say(err.message);
   }
   Object.assign(intro, r);
   intro.job = (r.added || r.job)?.id || intro.job;
-  intro.term = term;
   $('#in-job-dialog').close();
   renderIntro();
   pollIntro();
-});
-
-$('#in-job-run').addEventListener('click', async () => {
-  const job = selectedJob();
-  if (!job) return;
-  try {
-    Object.assign(intro, await post(`/api/linkedin/intro/jobs/${job.id}/run`));
-  } catch (err) {
-    return toast(err.message, 'bad');
-  }
-  renderIntro();
-  pollIntro();
-});
-
-$('#in-job-delete').addEventListener('click', async () => {
-  const job = selectedJob();
-  if (!job || !confirm(`Delete "${job.term} via ${job.introducerName}" and the people it found?`)) return;
-  Object.assign(intro, await api(`/api/linkedin/intro/jobs/${job.id}`, { method: 'DELETE' }));
-  intro.job = null;
-  renderIntro();
 });
 
 $('#in-filter').addEventListener('input', (e) => {

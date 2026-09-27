@@ -306,26 +306,15 @@
 <!-- -------------------------------------------------------- ask for intro -->
 <main id="view-intro" class="view hidden">
   <div class="toolbar">
+    <button id="in-add-job" class="primary">+ New fetch job</button>
     <span id="in-progress" class="muted small"></span>
     <span class="spacer"></span>
     <button id="in-clear-queue" class="hidden">Clear queue</button>
     <a href="/api/linkedin/intro.csv" class="btn">Download CSV</a>
   </div>
   <div class="intro-cols">
-    <section class="intro-col people">
-      <h3 class="col-title">1st degree connections</h3>
-      <div id="in-people" class="col-body"></div>
-      <button id="in-add-person" class="col-add">+ Add connection</button>
-    </section>
-
-    <section class="intro-col terms">
-      <h3 class="col-title">Search Term</h3>
-      <div id="in-terms" class="col-body"></div>
-      <button id="in-add-term" class="col-add">+ New search term</button>
-    </section>
-
     <section class="intro-col jobs">
-      <h3 class="col-title">Fetch Connection Jobs</h3>
+      <h3 class="col-title">Fetch 2nd degree connections jobs</h3>
       <div id="in-jobs" class="col-body"></div>
     </section>
 
@@ -335,9 +324,6 @@
         <span id="in-job-meta" class="muted small"></span>
         <span class="spacer"></span>
         <input id="in-filter" type="search" placeholder="Filter these people…" class="hidden" />
-        <button id="in-job-run" class="hidden">Run again</button>
-        <button id="in-job-prompt" class="hidden">Jev's prompt…</button>
-        <button id="in-job-delete" class="danger hidden">Delete job</button>
       </div>
       <div class="detail-body">
         <div id="in-skips" class="hidden"></div>
@@ -351,25 +337,6 @@
   </div>
 </main>
 
-<dialog id="in-person-dialog">
-  <form method="dialog" class="dialog-head">
-    <h3>Add a 1st degree connection</h3>
-    <button value="close">Cancel</button>
-  </form>
-  <p class="muted small">
-    Matched against <strong>My network</strong> first, which costs no LinkedIn traffic; otherwise the agent searches
-    for them and keeps the first-degree match.
-  </p>
-  <label class="field">
-    <span>Their name</span>
-    <input id="in-person" type="text" placeholder="Dana Bridge" autocomplete="off" />
-  </label>
-  <p id="in-person-error" class="mon-error small"></p>
-  <div class="dialog-foot">
-    <button id="in-person-save" class="primary">Add connection</button>
-  </div>
-</dialog>
-
 <dialog id="in-job-dialog">
   <form method="dialog" class="dialog-head">
     <h3 id="in-job-dialog-title">New fetch connection job</h3>
@@ -377,7 +344,12 @@
   </form>
   <p id="in-job-dialog-who" class="muted small"></p>
   <label class="field">
-    <span>Search term</span>
+    <span>1st degree connection</span>
+    <input id="in-job-who" type="text" placeholder="Someone you know, e.g. Dana Bridge" autocomplete="off" list="in-people-list" />
+    <datalist id="in-people-list"></datalist>
+  </label>
+  <label class="field">
+    <span>Search term for 2nd degree connections</span>
     <input id="in-job-term" type="text" placeholder="e.g. Partner, CISO, security investor" autocomplete="off" list="in-term-list" />
     <datalist id="in-term-list"></datalist>
   </label>

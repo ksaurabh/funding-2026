@@ -279,8 +279,8 @@ linkedinRoutes.delete('/intro/introducers/:id', (req, res) => res.json(intro.rem
 // A job is one connection × one term × one prompt.
 linkedinRoutes.post('/intro/jobs', (req, res) => {
   try {
-    const { introducerId, term, prompt } = req.body || {};
-    res.json({ added: intro.addJob({ introducerId, term, prompt }), ...intro.state() });
+    const { connectionName, introducerId, term, prompt } = req.body || {};
+    res.json({ added: intro.addJob({ connectionName, introducerId, term, prompt }), ...intro.state() });
   } catch (err) {
     fail(res, err);
   }

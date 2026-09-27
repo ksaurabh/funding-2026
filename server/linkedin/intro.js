@@ -155,26 +155,43 @@ const jobLabel = (job) => `${job.term} via ${job.introducerName}`;
 /** Every term used so far, for picking instead of retyping. */
 export const terms = () => [...new Set(load().jobs.map((j) => j.term))].sort();
 
-export function addJob({ introducerId, term, prompt }) {
+/**
+ * A job names the person it goes through, rather than pointing at one picked
+ * from a list: that person is looked up if they are new, and the job waits its
+ * turn behind that lookup — the queue is FIFO, so by the time the job runs the
+ * connection has been matched or has failed to be.
+ */
+export function addJob({ connectionName, introducerId, term, prompt }) {
   const text = String(term || '').trim();
   if (!text) throw new Error('Give a search term.');
-  const s = load();
-  const introducer = s.introducers.find((i) => i.id === introducerId);
-  if (!introducer) throw new Error('Pick one of your connections first.');
-  if (!introducer.url) throw new Error(`${introducer.name} has not been matched to a LinkedIn profile yet.`);
+  const who = String(connectionName || '').trim();
+  if (!who && !introducerId) throw new Error('Name the 1st degree connection to go through.');
+
+  let s = load();
+  let introducer = introducerId
+    ? s.introducers.find((i) => i.id === introducerId)
+    : s.introducers.find((i) => i.query.toLowerCase() === who.toLowerCase() || i.name.toLowerCase() === who.toLowerCase());
+
+  // A name not seen before is added here, which queues its lookup.
+  if (!introducer) {
+    introducer = addIntroducer(who);
+    s = load();
+  }
+  if (!introducer) throw new Error('Could not add that connection.');
 
   const ask = String(prompt || s.prompt || DEFAULT_PROMPT).trim();
   if (!ask) throw new Error('Give Jev a prompt.');
 
   // The same pair again is a re-run, not a second job.
-  let job = s.jobs.find((j) => j.introducerId === introducerId && j.term.toLowerCase() === text.toLowerCase());
+  let job = s.jobs.find((j) => j.introducerId === introducer.id && j.term.toLowerCase() === text.toLowerCase());
   if (job) {
     Object.assign(job, { prompt: ask, status: 'queued', error: null, skipped: null });
   } else {
     job = {
       id: id(),
-      introducerId,
+      introducerId: introducer.id,
       introducerName: introducer.name,
+      connectionQuery: introducer.query,
       term: text,
       prompt: ask,
       status: 'queued',
@@ -186,7 +203,7 @@ export function addJob({ introducerId, term, prompt }) {
   }
   s.prompt = ask; // the next job starts from the last prompt you used
   save(s);
-  enqueue({ kind: 'job', jobId: job.id, introducerId, label: jobLabel(job) });
+  enqueue({ kind: 'job', jobId: job.id, introducerId: introducer.id, label: jobLabel(job) });
   return job;
 }
 
@@ -354,7 +371,29 @@ async function runJob(job) {
   const s0 = load();
   const entry = s0.jobs.find((x) => x.id === job.jobId);
   const introducer = s0.introducers.find((i) => i.id === job.introducerId);
-  if (!entry || !introducer?.url) return;
+  if (!entry) return;
+
+  // The connection is looked up ahead of this job in the same queue, so by now
+  // it has either been matched or has a reason it was not.
+  if (!introducer?.url) {
+    const why =
+      introducer?.error ||
+      (introducer ? `${introducer.name} was not matched to a first-degree connection.` : 'That connection is gone.');
+    note(`Stopped ${jobLabel(entry)}: ${why}`);
+    const s = load();
+    const x = s.jobs.find((y) => y.id === job.jobId);
+    if (x) Object.assign(x, { status: 'error', error: why, lastRunAt: new Date().toISOString() });
+    save(s);
+    return;
+  }
+  // The name may have been resolved since the job was made.
+  if (entry.introducerName !== introducer.name) {
+    const s = load();
+    const x = s.jobs.find((y) => y.id === job.jobId);
+    if (x) x.introducerName = introducer.name;
+    save(s);
+    entry.introducerName = introducer.name;
+  }
 
   const patchJob = (fields) => {
     const s = load();

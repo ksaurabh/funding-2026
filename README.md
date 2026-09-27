@@ -505,34 +505,29 @@ for that page is the evidence to fix it from.
 
 ## Ask for Intro
 
-Three columns and a table, for the question "given the people I know, who
-should I be asking them about".
+Two panes: the fetch jobs down the left, and what the selected one found on the
+right.
 
-**1st degree connections** (the narrow first column) is the people you know.
-**+ Add connection** takes a name: if it is already in **My network** they are
-taken from there, costing no LinkedIn traffic at all; otherwise the agent
-searches and keeps the first-degree match. A name whose closest match is second
-degree is kept as *no 1st-degree match* with the candidates it saw, rather than
-quietly standing in for someone else. Picking someone narrows the two columns
-beside them.
-
-**Search Term** lists every term used so far, each saying how it went for the
-person selected — "2 found via Dana", or "not run via Dana — click to run".
-Picking a term they have already been run against opens that job; picking one
-they have not, or **+ New search term**, asks for the term and **Jev's prompt**.
-The prompt comes filled in with an example you edit rather than write:
+**+ New fetch job** asks for three things — a **1st degree connection** by name,
+a **search term** for their 2nd-degree connections, and a **Jev prompt**. The
+connection need not exist yet: a name not seen before is looked up first (from
+**My network** if it is already there, which costs no LinkedIn traffic, else by
+searching), and the job runs after that. Both fields suggest what you have used
+before. The prompt comes filled in with an example you edit rather than write:
 `{{profile}}` places the name, About and every position with its dates, and
 `{{name}}`, `{{headline}}`, `{{summary}}`, `{{positions}}` and `{{introducer}}`
-also work. With no token the profile is appended. The first words of the answer
+also work; with no token the profile is appended. The first words of the answer
 are what the category column shows, so the example asks for one.
 
-A connection, a term and a prompt make a **Fetch Connection Job** — the third
-column. Each job says how many second-degree connections it fetched and when it
-last ran, or shows *queued*, *running* or *stopped*. Clicking one fills the
-table on the right: **2nd degree connection** (with their headline and the
-positions the answer was based on), **Company**, **LinkedIn profile** and
-**Jev's category**, with a box to filter within that job, **Run again**,
-**Jev's prompt…** to reword and re-run, and **Delete job**. **↻** on a row
+Each job is a card showing what it was made of as key and value — 1st degree
+connection, search term, Jev prompt — then **Last run** and **Connections
+fetched**, a *done / running / queued / stopped* badge, and **Re-run**, **Edit
+prompt** and **Delete**. A connection that could not be matched says so on the
+card (*no 1st-degree match*) and the job stops rather than guessing.
+
+Clicking a card fills the table: **2nd degree connection** (with their headline
+and the positions the answer was based on), **Company**, **LinkedIn profile**
+and **Jev's category**, with a box to filter within that job. **↻** on a row
 re-asks Jev about that one person.
 
 Running a job searches for the term and then narrows it the way you would by
