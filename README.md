@@ -611,23 +611,33 @@ the thing to look at — and the thing worth pasting.
 
 The same table, over everything: one entry per person rather than one per
 introduction. Somebody two of your connections both know is a single row with
-a **Connected via** column naming both, and *2 ways in* underneath.
+a **Connected via** column naming both, and *2 ways in* underneath. Two entries
+are the same person when their name and title match, so someone carrying two
+profile URLs still merges into one.
 
 Someone found by a job that did not qualify shows **Qualify** in the category
 column: it reads that profile and asks Jev, and the entry — and every row
 behind it — takes the answer. **↻** asks again about someone already answered.
+**Qualify n showing** does the lot, one queue entry each, so the count is
+honest and **Stop job** ends it where it stands.
+
+**Likelihood it's an investor** is a cheaper judgement, from the title alone —
+*70%+*, *50-70%*, *30-50%*, *10-30%* or *<10%*, chosen from that list rather
+than invented as a number. **Estimate** asks about one, the toolbar button
+about everyone showing; no profile is loaded, so it is one short model call
+each.
 
 Your marks belong to the person, not to the path. Relevance or a note set on
 one job's row shows here; set here, it is written back to every row for them,
 so it shows on each job too. Whatever any job learned about them — the title,
 the company, Jev's answer — fills the entry, so a person qualified under one
 connection is not blank under another. The search box works as it does on a job, and matches the connecting names
-too, so typing a connection's name lists who they can introduce you to. Two
-chip groups sit beside it — **Relevance**, and **Jev's category** as
-*Qualified* or *Not qualified* — and each counts over what the other leaves,
-so the numbers are what you would actually get. Ticking neither, or both, in a
-group shows all of it. **Download
-CSV** takes the merged view.
+too, so typing a connection's name lists who they can introduce you to. Three
+chip groups sit beside it — **Relevance**, **Jev's category** as *Qualified*
+or *Not qualified*, and **Likelihood** by band or *Not estimated* — and each
+counts over what the others leave, so the numbers are what you would actually
+get. Ticking neither, or all, in a group shows all of it. **Download CSV**
+takes the merged view.
 
 Jobs run one at a time, paced by the same randomised delay as the rest of the
 agent; **Clear queue** drops what has not started, and **Stop job** ends the
