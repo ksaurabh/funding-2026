@@ -80,6 +80,8 @@ let log = [];
 // the controller cuts short whatever call is in flight.
 let stopping = false;
 let inFlight = null;
+// What the running item is doing, so the view can name what it would stop.
+let currentKind = null;
 
 const note = (msg) => {
   log.push({ t: new Date().toISOString(), msg });
@@ -89,8 +91,11 @@ const note = (msg) => {
 export const status = () => ({
   running,
   current,
+  currentKind,
   stopping,
   pending: queue.length,
+  // What is waiting, by kind, so "stop" can say what it would drop.
+  pendingKinds: queue.reduce((acc, q) => ({ ...acc, [q.kind]: (acc[q.kind] || 0) + 1 }), {}),
   log: log.slice(-120),
 });
 
@@ -99,12 +104,24 @@ export const status = () => ({
  * between pages, between people, or in the middle of a model call, which the
  * controller cuts short — and keeps everything it had collected up to there.
  */
-export function stopCurrent() {
-  if (!running) return { ...state(), stopped: false };
+export function stopCurrent({ all = false } = {}) {
+  // Dropping what is waiting first: a batch of queued work would otherwise
+  // carry straight on from where the stopped item left off.
+  let dropped = 0;
+  if (all && queue.length) {
+    dropped = queue.length;
+    queue = [];
+    const s = load();
+    for (const x of s.jobs) if (x.status === 'queued') x.status = 'stopped';
+    for (const r of s.rows) if (r.status === 'reading' || r.status === 'asking') r.status = 'done';
+    save(s);
+    note(`Dropped ${dropped} waiting item${dropped === 1 ? '' : 's'}.`);
+  }
+  if (!running) return { ...state(), stopped: dropped > 0, dropped };
   stopping = true;
   inFlight?.abort();
   note('Stopping at the next step…');
-  return { ...state(), stopped: true };
+  return { ...state(), stopped: true, dropped };
 }
 
 const stopRequested = () => stopping;
@@ -429,6 +446,7 @@ async function drain() {
       const job = queue.shift();
       if (!job) break;
       current = job.label;
+      currentKind = job.kind;
       stopping = false;
       try {
         if (job.kind === 'introducer') await runIntroducer(job);
@@ -440,10 +458,12 @@ async function drain() {
         markFailed(job, err.message);
       }
       current = null;
+      currentKind = null;
     }
   } finally {
     running = false;
     current = null;
+    currentKind = null;
     stopping = false;
     inFlight = null;
   }

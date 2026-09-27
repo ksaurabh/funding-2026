@@ -619,13 +619,15 @@ Someone found by a job that did not qualify shows **Qualify** in the category
 column: it reads that profile and asks Jev, and the entry — and every row
 behind it — takes the answer. **↻** asks again about someone already answered.
 **Qualify n showing** does the lot, one queue entry each, so the count is
-honest and **Stop job** ends it where it stands.
+honest — and while it runs that same button reads **Stop qualifying (n
+waiting)**, which ends the one in hand and drops the rest.
 
 **Likelihood it's an investor** is a cheaper judgement, from the title alone —
 *70%+*, *50-70%*, *30-50%*, *10-30%* or *<10%*, chosen from that list rather
 than invented as a number. **Estimate** asks about one, the toolbar button
 about everyone showing; no profile is loaded, so it is one short model call
-each.
+each. While that runs the button becomes **Stop estimating**, which cuts the
+call in flight and keeps every band already decided.
 
 Your marks belong to the person, not to the path. Relevance or a note set on
 one job's row shows here; set here, it is written back to every row for them,

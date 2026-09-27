@@ -4244,9 +4244,42 @@ function renderPeople() {
     renderPeople
   );
 
-  // What the two bulk buttons would act on: what is showing, minus whoever
-  // already has the thing they would produce.
+  $('#in-people-count').textContent = `${rows.length}${rows.length === all.length ? '' : ` of ${all.length}`} people`;
+
+  // While work is running, the button it came from is how you stop it — the
+  // batch as a whole, not just the person being handled this second.
+  const stopButton = (host, label) => {
+    host.classList.remove('hidden');
+    host.classList.add('danger');
+    host.disabled = !!intro.stopping;
+    host.textContent = intro.stopping ? 'Stopping…' : label;
+    host.onclick = async () => {
+      try {
+        Object.assign(intro, await post('/api/linkedin/intro/stop', { all: true }));
+      } catch (err) {
+        return toast(err.message, 'bad');
+      }
+      toast('Stopping — what is already done is kept.');
+      renderPeople();
+      pollIntro();
+    };
+  };
+
+  const estimating = intro.running && intro.currentKind === 'odds';
+  const qualifying = intro.running && intro.currentKind === 'qualify';
+
+  if (qualifying) {
+    const waiting = intro.pendingKinds?.qualify || 0;
+    stopButton($('#in-people-qualify'), `Stop qualifying${waiting ? ` (${waiting} waiting)` : ''}`);
+  }
+  if (estimating) stopButton($('#in-people-estimate'), 'Stop estimating');
+  if (estimating || qualifying) return renderPeopleRows(rows);
+
+  // Otherwise the buttons are what they act on: what is showing, minus
+  // whoever already has the thing they would produce.
   const toQualify = rows.filter((p) => !p.answer && !p.working);
+  $('#in-people-qualify').classList.remove('danger');
+  $('#in-people-qualify').disabled = false;
   $('#in-people-qualify').classList.toggle('hidden', !toQualify.length);
   $('#in-people-qualify').textContent = `Qualify ${toQualify.length} showing`;
   $('#in-people-qualify').onclick = async () => {
@@ -4261,11 +4294,16 @@ function renderPeople() {
   };
 
   const toEstimate = rows.filter((p) => !p.odds);
+  $('#in-people-estimate').classList.remove('danger');
+  $('#in-people-estimate').disabled = false;
   $('#in-people-estimate').classList.toggle('hidden', !toEstimate.length);
   $('#in-people-estimate').textContent = `Estimate likelihood (${toEstimate.length})`;
   $('#in-people-estimate').onclick = () => estimateOdds(toEstimate);
-  $('#in-people-count').textContent = `${rows.length}${rows.length === all.length ? '' : ` of ${all.length}`} people`;
 
+  renderPeopleRows(rows);
+}
+
+function renderPeopleRows(rows) {
   $('#in-people-table thead').replaceChildren(
     el('tr', {}, [
       el('th', { textContent: '2nd degree connection' }),

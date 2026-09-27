@@ -386,7 +386,7 @@ linkedinRoutes.get('/intro/people.csv', (_req, res) => {
 });
 
 // Stop the job that is running now, keeping what it has already collected.
-linkedinRoutes.post('/intro/stop', (_req, res) => res.json(intro.stopCurrent()));
+linkedinRoutes.post('/intro/stop', (req, res) => res.json(intro.stopCurrent({ all: !!req.body?.all })));
 
 // A relevance option added from the dropdown.
 linkedinRoutes.post('/intro/relevance', (req, res) => {
