@@ -821,6 +821,23 @@ export async function enumerateMutuals({ link, text, onEvent = () => {} }) {
 
 export const pauseBetweenLookups = () => wait(PACE.betweenLookups);
 
+/**
+ * Whatever the agent is looking at right now, saved to disk — for when a
+ * lookup went wrong in a way no error message covers, or you just want the
+ * markup of a page the agent reached.
+ */
+export async function captureCurrent(label = 'Requested capture') {
+  if (!ctx || !page) throw new Error('The agent window is not open — start a session first.');
+  const shot = await capture(label, { fullPage: true });
+  if (!shot) throw new Error('Could not capture the page.');
+  return {
+    ...shot,
+    title: await page.title().catch(() => ''),
+    shotPath: path.join(SHOTS_DIR, shot.file),
+    htmlPath: shot.html ? path.join(SHOTS_DIR, shot.html) : null,
+  };
+}
+
 // ------------------------------------------------- asking for an introduction
 
 const ready = async () => {

@@ -233,6 +233,7 @@
   <div class="toolbar">
     <button id="li-start" class="primary">Start agent session</button>
     <button id="li-recheck" class="hidden">I'm already signed in</button>
+    <button id="li-capture" title="Save a screenshot and the HTML of whatever the agent is looking at now">Capture page</button>
     <button id="li-clear-queue" class="danger" disabled>Clear queue</button>
     <button id="li-stop" class="danger" disabled>Close</button>
     <span id="li-state" class="pill idle">Not running</span>
@@ -309,6 +310,7 @@
     <button id="in-add-job" class="primary">+ New fetch job</button>
     <span id="in-progress" class="muted small"></span>
     <span class="spacer"></span>
+    <button id="in-capture" title="Save a screenshot and the HTML of whatever the agent is looking at now">Capture page</button>
     <button id="in-clear-queue" class="hidden">Clear queue</button>
     <a href="/api/linkedin/intro.csv" class="btn">Download CSV</a>
   </div>
@@ -336,6 +338,17 @@
     </section>
   </div>
 </main>
+
+<dialog id="capture-dialog">
+  <form method="dialog" class="dialog-head">
+    <h3>The page the agent is on</h3>
+    <button value="close">Close</button>
+  </form>
+  <p id="capture-where" class="muted small"></p>
+  <div id="capture-links" class="skip-links"></div>
+  <div id="capture-paths" class="muted small skip-paths"></div>
+  <div id="capture-shot"></div>
+</dialog>
 
 <dialog id="in-job-dialog">
   <form method="dialog" class="dialog-head">

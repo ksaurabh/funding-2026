@@ -566,6 +566,12 @@ was looking at, the text it read out of the page, and **the paths of the saved
 picture and HTML under `data/linkedin-shots/`** — in the message itself, so the
 files can be opened straight from it.
 
+**Capture page**, on this tab and on the LinkedIn one, saves a full-page
+screenshot and the HTML of whatever the agent is looking at right now, and
+shows it with the paths of both files. It needs the agent window to be open;
+when something goes wrong in a way no error message covers, that capture is
+the thing to look at — and the thing worth pasting.
+
 Jobs run one at a time, paced by the same randomised delay as the rest of the
 agent; **Clear queue** drops what has not started. State lives in
 `data/linkedin-intro.json`, and the spend on answers is shown in the toolbar.

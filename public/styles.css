@@ -715,6 +715,8 @@ th.star, td.star { width: 24px; padding-right: 0; }
 
 /* A stopped job shows the panel that defeated it, not just a message. */
 #in-skips { margin-bottom: 14px; display: grid; gap: 12px; }
+#capture-dialog { max-width: min(900px, 92vw); }
+#capture-shot { margin-top: 8px; max-height: 60vh; overflow: auto; }
 .skip { border: 1px solid #eec6c2; background: #fdf1f0; border-radius: 6px; padding: 10px 12px; }
 .skip-links { display: flex; gap: 12px; margin: 6px 0; font-size: 12px; }
 .skip-text { white-space: pre-wrap; max-height: 90px; overflow: auto; margin-top: 4px; }

@@ -13,6 +13,15 @@ linkedinRoutes.get('/cache', (_req, res) => res.json({ dir: agent.SHOTS_DIR, fil
 
 const fail = (res, err) => res.status(400).json({ error: err.message });
 
+// The page the agent is on at this moment, picture and markup.
+linkedinRoutes.post('/capture', async (req, res) => {
+  try {
+    res.json(await agent.captureCurrent(req.body?.label));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 // ----------------------------------------------------------------- session
 
 linkedinRoutes.get('/session', async (_req, res) => {

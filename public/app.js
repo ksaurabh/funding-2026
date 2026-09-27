@@ -4076,6 +4076,55 @@ $('#mon-refresh').addEventListener('click', async () => {
   }
 });
 
+// -------------------------------------------- capturing the agent's page
+// For when something went wrong in a way no error message covers: the picture
+// and the markup of whatever the agent is looking at, on demand.
+
+async function captureAgentPage(button) {
+  const was = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Capturing…';
+  try {
+    const shot = await post('/api/linkedin/capture', { label: 'Requested from the app' });
+    showCapture(shot);
+  } catch (err) {
+    toast(err.message, 'bad');
+  } finally {
+    button.disabled = false;
+    button.textContent = was;
+  }
+}
+
+function showCapture(shot) {
+  const png = `/api/linkedin/shots/${shot.file}`;
+  $('#capture-where').textContent = [shot.title, shot.url].filter(Boolean).join(' — ');
+
+  $('#capture-links').replaceChildren(
+    el('a', { href: png, target: '_blank', rel: 'noreferrer', textContent: 'Open screenshot' }),
+    shot.html
+      ? el('a', {
+          href: `/api/linkedin/shots/${shot.html}`,
+          target: '_blank',
+          rel: 'noreferrer',
+          textContent: 'Saved HTML',
+        })
+      : null
+  );
+
+  // The paths on disk, selectable, for opening in an editor.
+  $('#capture-paths').replaceChildren(
+    ...[shot.shotPath, shot.htmlPath].filter(Boolean).map((f) => el('div', { textContent: f }))
+  );
+
+  $('#capture-shot').replaceChildren(
+    el('a', { href: png, target: '_blank', rel: 'noreferrer' }, el('img', { src: png, className: 'skip-shot', alt: 'The page the agent is on' }))
+  );
+  $('#capture-dialog').showModal();
+}
+
+$('#li-capture').addEventListener('click', (e) => captureAgentPage(e.currentTarget));
+$('#in-capture').addEventListener('click', (e) => captureAgentPage(e.currentTarget));
+
 // ------------------------------------------------------------ ask for intro
 // A list of fetch jobs on the left, and what the selected one found on the
 // right. A job is a 1st degree connection, a search term and a prompt for Jev.
