@@ -505,60 +505,60 @@ for that page is the evidence to fix it from.
 
 ## Ask for Intro
 
-A third LinkedIn view, for the other direction: not "who do I know who can
-reach this investor" but "given the people I know, who should I be asking them
-about".
+Three columns and a table, for the question "given the people I know, who
+should I be asking them about".
 
-1. **Add connection** — name someone you know. If that name is already in
-   **My network** they are taken from there, costing no LinkedIn traffic at
-   all; otherwise the agent searches and keeps the first-degree match. A name
-   whose closest match is second degree is kept as *no 1st-degree match* with
-   the candidates it saw, rather than quietly standing in for someone else.
-2. **Search via all connections** — give a term. For every usable connection
-   the agent searches for that term and then narrows it the way you would by
-   hand: **All filters → Connections of → Add a connection →** pick them **→
-   Show results**. It then opens each profile and reads the name, the About
-   paragraph, and every position with its date range — the board seats and
-   observer roles are usually the point.
+**1st degree connections** (the narrow first column) is the people you know.
+**+ Add connection** takes a name: if it is already in **My network** they are
+taken from there, costing no LinkedIn traffic at all; otherwise the agent
+searches and keeps the first-degree match. A name whose closest match is second
+degree is kept as *no 1st-degree match* with the candidates it saw, rather than
+quietly standing in for someone else. Picking someone narrows the two columns
+beside them.
 
-   It has to go through that panel. LinkedIn's own facet is
-   `facetConnectionOf=["<member id>"]`, an internal id rather than the public
-   slug in a profile link, so the constraint cannot be built into a URL from
-   what a profile gives you: passing the slug is silently ignored and returns
-   *everyone* matching the term. After pressing Show results the agent checks
-   that the facet really is in the URL it landed on, and if it is not — or the
-   panel has moved, or no suggestion matches the person — that connection is
-   **skipped with a reason** and contributes no rows. Unconstrained results are
-   never turned into rows.
+**Search Term** lists every term used so far, each saying how it went for the
+person selected — "2 found via Dana", or "not run via Dana — click to run".
+Picking a term they have already been run against opens that job; picking one
+they have not, or **+ New search term**, asks for the term and **Jev's prompt**.
+The prompt comes filled in with an example you edit rather than write:
+`{{profile}}` places the name, About and every position with its dates, and
+`{{name}}`, `{{headline}}`, `{{summary}}`, `{{positions}}` and `{{introducer}}`
+also work. With no token the profile is appended. The first words of the answer
+are what the category column shows, so the example asks for one.
 
-   The panel is a right-hand drawer that animates in, renders lazily as it
-   scrolls, and sometimes shows an *Add a connection* button instead of the
-   field itself, so each step waits for what it needs and scrolls the drawer
-   before giving up; the field and the suggestions are found by their words,
-   never by class name. When a connection is skipped the tab **shows the
-   full-page screenshot** of the panel as the agent saw it, with the text it
-   read out of it and links to the picture and the saved HTML — enough to fix
-   the selectors against the real thing rather than guess.
-3. Each profile goes to Jev with **Jev's prompt…**, which you can reword at any
-   time; `{{name}}`, `{{headline}}`, `{{summary}}`, `{{positions}}`,
-   `{{profile}}` and `{{introducer}}` place the details yourself, and with no
-   tokens the profile is appended. Keep the answer to a line — the table
-   filters on it. **↻** on a row re-asks with the current prompt.
+A connection, a term and a prompt make a **Fetch Connection Job** — the third
+column. Each job says how many second-degree connections it fetched and when it
+last ran, or shows *queued*, *running* or *stopped*. Clicking one fills the
+table on the right: **2nd degree connection** (with their headline and the
+positions the answer was based on), **Company**, **LinkedIn profile** and
+**Jev's category**, with a box to filter within that job, **Run again**,
+**Jev's prompt…** to reword and re-run, and **Delete job**. **↻** on a row
+re-asks Jev about that one person.
 
-The table is one row per introduction path: **1st degree**, **2nd degree**,
-**LinkedIn** (a link to their profile), **Jev's answer**, and the positions the
-answer was based on. The three filter boxes narrow by first-degree name,
-second-degree name, and answer text, together. **Download CSV** takes the lot.
+Running a job searches for the term and then narrows it the way you would by
+hand: **All filters → Connections of → Add a connection →** pick them **→ Show
+results**.
 
-Facets are a request, not a promise, so anything that does not come back as
-second degree is dropped rather than turned into a row. The same person found
-through two connections is two rows — the introduction is what differs — but
-the same term run again refreshes the rows it already has instead of
-duplicating them. Everything is paced by the same randomised delay as the rest
-of the agent, one job at a time; **Clear queue** drops what has not started.
+It has to go through that panel. LinkedIn's own facet is
+`facetConnectionOf=["<member id>"]`, an internal id rather than the public slug
+in a profile link, so the constraint cannot be built into a URL from what a
+profile gives you: passing the slug is silently ignored and returns *everyone*
+matching the term. After pressing Show results the agent checks that the facet
+really is in the URL it landed on, and if it is not the job **stops with a
+reason and no rows**. Unconstrained results are never turned into rows.
 
-State lives in `data/linkedin-intro.json`, and the spend on answers is shown
-next to the queue.
+Both the button and the panel are waited for, not glanced at: the results page
+fills in progressively, and the panel is a right-hand drawer that animates in,
+renders lazily as it scrolls, and sometimes shows an *Add a connection* button
+instead of the field. Everything is found by its words, never by class name.
+When a job does stop, it shows the **full-page screenshot** of what the agent
+was looking at, the text it read out of the page, and **the paths of the saved
+picture and HTML under `data/linkedin-shots/`** — in the message itself, so the
+files can be opened straight from it.
+
+Jobs run one at a time, paced by the same randomised delay as the rest of the
+agent; **Clear queue** drops what has not started. State lives in
+`data/linkedin-intro.json`, and the spend on answers is shown in the toolbar.
 
 ## Monday.com
 

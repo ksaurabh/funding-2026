@@ -262,7 +262,9 @@ linkedinRoutes.get('/contacts.csv', (_req, res) => {
 
 // ------------------------------------------------------------ ask for an intro
 
-linkedinRoutes.get('/intro', (_req, res) => res.json({ ...intro.state(), cost: intro.totalCost() }));
+linkedinRoutes.get('/intro', (_req, res) =>
+  res.json({ ...intro.state(), cost: intro.totalCost(), terms: intro.terms(), defaultPrompt: intro.DEFAULT_PROMPT })
+);
 
 linkedinRoutes.post('/intro/introducers', (req, res) => {
   try {
@@ -274,15 +276,25 @@ linkedinRoutes.post('/intro/introducers', (req, res) => {
 
 linkedinRoutes.delete('/intro/introducers/:id', (req, res) => res.json(intro.removeIntroducer(req.params.id)));
 
-linkedinRoutes.post('/intro/searches', (req, res) => {
+// A job is one connection × one term × one prompt.
+linkedinRoutes.post('/intro/jobs', (req, res) => {
   try {
-    res.json({ added: intro.addSearch({ term: req.body?.term, prompt: req.body?.prompt }), ...intro.state() });
+    const { introducerId, term, prompt } = req.body || {};
+    res.json({ added: intro.addJob({ introducerId, term, prompt }), ...intro.state() });
   } catch (err) {
     fail(res, err);
   }
 });
 
-linkedinRoutes.delete('/intro/searches/:id', (req, res) => res.json(intro.removeSearch(req.params.id)));
+linkedinRoutes.post('/intro/jobs/:id/run', (req, res) => {
+  try {
+    res.json({ job: intro.runJobAgain(req.params.id, req.body?.prompt), ...intro.state() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
+linkedinRoutes.delete('/intro/jobs/:id', (req, res) => res.json(intro.removeJob(req.params.id)));
 
 linkedinRoutes.post('/intro/queue/clear', (_req, res) => res.json(intro.clearQueue()));
 
@@ -307,11 +319,11 @@ linkedinRoutes.get('/intro.csv', (_req, res) => {
     const s = v == null ? '' : String(v);
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const cols = ['term', 'introducer', 'name', 'headline', 'company', 'linkedin', 'answer'];
+  const cols = ['term', 'introducer', 'name', 'company', 'headline', 'linkedin', 'category'];
   const lines = [cols.join(',')];
   for (const r of intro.state().rows) {
     lines.push(
-      [r.term, r.introducerName, r.name, r.headline, r.company, r.url, r.answer || r.error].map(esc).join(',')
+      [r.term, r.introducerName, r.name, r.company, r.headline, r.url, r.answer || r.error].map(esc).join(',')
     );
   }
   res.type('text/csv').attachment('ask-for-intro.csv').send(lines.join('\n'));

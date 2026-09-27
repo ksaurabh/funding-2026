@@ -366,3 +366,43 @@ export function findTypeaheadOptionsInPage() {
   options.forEach((n, i) => n.setAttribute('data-agent-option', String(i)));
   return options.map((n) => clean(n.innerText));
 }
+
+/**
+ * Find the button that opens the All-filters drawer and tag it.
+ *
+ * Its accessible name moves around ("All filters", "Show all filters"), it can
+ * be an anchor or a div with a button role, and on a freshly loaded results
+ * page it appears after the results do — so the caller polls this rather than
+ * deciding on the first frame. The list of buttons it did see is returned, so
+ * a failure says what was actually on the page.
+ *
+ * Runs inside the page via page.evaluate.
+ */
+export function findAllFiltersButtonInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const WANT = /all filters/i;
+
+  for (const el of document.querySelectorAll('[data-agent-allfilters]')) el.removeAttribute('data-agent-allfilters');
+
+  const candidates = [...document.querySelectorAll('button, a, [role="button"]')].filter((n) => {
+    const r = n.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  });
+
+  const hit = candidates.find((n) => WANT.test(clean(n.innerText)) || WANT.test(n.getAttribute('aria-label') || ''));
+  if (hit) {
+    hit.setAttribute('data-agent-allfilters', '1');
+    return { found: true, label: clean(hit.innerText) || hit.getAttribute('aria-label') };
+  }
+
+  return {
+    found: false,
+    // What the filter bar did offer, which is the fastest way to see whether
+    // the page is still loading or the control has simply been renamed.
+    buttons: candidates
+      .map((n) => clean(n.innerText) || n.getAttribute('aria-label') || '')
+      .filter(Boolean)
+      .slice(0, 30),
+    results: document.querySelectorAll('a[href*="/in/"]').length,
+  };
+}

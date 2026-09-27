@@ -17,6 +17,7 @@ import {
   extractProfileDetailInPage,
   findConnectionsFieldInPage,
   findTypeaheadOptionsInPage,
+  findAllFiltersButtonInPage,
 } from './extract.js';
 import { pickBest, nameScore } from './match.js';
 
@@ -857,11 +858,39 @@ export async function searchByName(name, { threshold = 0.8 } = {}) {
 async function applyConnectionsOfFilter(personName) {
   const fail = async (reason, detail) => {
     const shot = await capture(`Filters: ${reason}`, { fullPage: true });
-    return { ok: false, reason, detail: detail || null, shot, html: shot?.html || null };
+    const shotPath = shot?.file ? path.join(SHOTS_DIR, shot.file) : null;
+    const htmlPath = shot?.html ? path.join(SHOTS_DIR, shot.html) : null;
+    // The paths belong in the message itself: the first thing anyone wants
+    // after "it could not find X" is the page where it could not find it.
+    const where = [shotPath, htmlPath].filter(Boolean).join(' and ');
+    return {
+      ok: false,
+      reason: where ? `${reason} Saved: ${where}` : reason,
+      detail: detail || null,
+      shot,
+      html: shot?.html || null,
+      shotPath,
+      htmlPath,
+    };
   };
 
-  const trigger = await findOne(page, SELECTORS.allFilters);
-  if (!trigger) return fail('Could not find the "All filters" button on the results page.');
+  // The results page fills in progressively and the filter bar arrives after
+  // the results, so this waits for the button rather than expecting it on the
+  // first frame — which is exactly how a real run lost it.
+  let bar = null;
+  for (let attempt = 0; attempt < 12; attempt++) {
+    bar = await page.evaluate(findAllFiltersButtonInPage).catch(() => null);
+    if (bar?.found) break;
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  const trigger = bar?.found ? await page.$('[data-agent-allfilters]') : await findOne(page, SELECTORS.allFilters);
+  if (!trigger) {
+    return fail('Could not find the "All filters" button on the results page.', {
+      why: 'waited 8s and it never appeared',
+      buttons: bar?.buttons || null,
+      resultLinks: bar?.results ?? null,
+    });
+  }
   await wait(PACE.betweenActions);
   await trigger.click().catch(() => {});
   await wait(PACE.settle);
@@ -973,6 +1002,8 @@ export async function searchConnectionsOf({ term, introducerName, limit = 10 }) 
       detail: filter.detail,
       shot: filter.shot,
       html: filter.html,
+      shotPath: filter.shotPath,
+      htmlPath: filter.htmlPath,
       searchUrl: page.url(),
     };
   }

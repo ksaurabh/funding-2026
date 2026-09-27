@@ -18,13 +18,42 @@ import { nameScore } from './match.js';
 const KEY = 'linkedin-intro';
 
 export const DEFAULT_PROMPT =
-  'Here is a LinkedIn profile of someone a contact of mine can introduce me to. ' +
-  'In one short line, say whether they are worth an introduction for a seed-stage ' +
-  'cybersecurity startup raising now, and why. Start the line with Yes, No or Maybe.';
+  'Here is the LinkedIn profile of someone a contact of mine could introduce me to. ' +
+  'I am raising a seed round for a cybersecurity startup.\n\n' +
+  'Answer with one category from: Investor, Angel, Operator, Advisor, Recruiter, Other — ' +
+  'then a dash and at most twelve words saying why. For example: ' +
+  '"Investor — leads seed security rounds, board observer at two.".\n\n' +
+  '{{profile}}';
 
-const blank = () => ({ introducers: [], searches: [], rows: [], prompt: DEFAULT_PROMPT });
+const blank = () => ({ introducers: [], jobs: [], rows: [], prompt: DEFAULT_PROMPT });
 
-const load = () => ({ ...blank(), ...read(KEY, blank()) });
+function load() {
+  const raw = { ...blank(), ...read(KEY, blank()) };
+  // Earlier shape: a "search" was a term run across every connection at once.
+  // A job is that same work, named for the pair it actually is.
+  if (raw.searches?.length && !raw.jobs.length) {
+    raw.jobs = raw.searches.flatMap((x) =>
+      raw.introducers
+        .filter((i) => raw.rows.some((r) => r.searchId === x.id && r.introducerId === i.id))
+        .map((i) => ({
+          id: `${x.id}-${i.id}`.slice(0, 16),
+          introducerId: i.id,
+          introducerName: i.name,
+          term: x.term,
+          prompt: x.prompt || raw.prompt,
+          status: x.status === 'done' ? 'done' : 'stopped',
+          lastRunAt: x.finishedAt || x.createdAt || null,
+          found: raw.rows.filter((r) => r.searchId === x.id && r.introducerId === i.id).length,
+        }))
+    );
+    for (const r of raw.rows) {
+      const job = raw.jobs.find((j) => r.searchId?.startsWith(j.id.split('-')[0]) && j.introducerId === r.introducerId);
+      if (job) r.jobId = job.id;
+    }
+    delete raw.searches;
+  }
+  return raw;
+}
 const save = (state) => write(KEY, state);
 
 const id = () => crypto.randomUUID().slice(0, 8);
@@ -109,61 +138,76 @@ function bestInNetwork(name) {
 export function removeIntroducer(introducerId) {
   const s = load();
   s.introducers = s.introducers.filter((i) => i.id !== introducerId);
-  // Their rows go too: a row's whole point is who could make the introduction.
+  // Their jobs and rows go too: a row's whole point is who could introduce you.
+  s.jobs = s.jobs.filter((j) => j.introducerId !== introducerId);
   s.rows = s.rows.filter((r) => r.introducerId !== introducerId);
   save(s);
   queue = queue.filter((j) => j.introducerId !== introducerId);
   return state();
 }
 
-// -------------------------------------------------------------------- searches
+// ------------------------------------------------------------------------ jobs
+// A job is one connection × one term × one prompt: "find me the people matching
+// this among Dana's connections, and ask Jev this about each of them".
 
-/** A term to look for among the second-degree connections of your introducers. */
-export function addSearch({ term, prompt }) {
+const jobLabel = (job) => `${job.term} via ${job.introducerName}`;
+
+/** Every term used so far, for picking instead of retyping. */
+export const terms = () => [...new Set(load().jobs.map((j) => j.term))].sort();
+
+export function addJob({ introducerId, term, prompt }) {
   const text = String(term || '').trim();
   if (!text) throw new Error('Give a search term.');
   const s = load();
-  const ready = s.introducers.filter((i) => i.url);
-  if (!ready.length) throw new Error('Add someone you know first — a search runs through their connections.');
+  const introducer = s.introducers.find((i) => i.id === introducerId);
+  if (!introducer) throw new Error('Pick one of your connections first.');
+  if (!introducer.url) throw new Error(`${introducer.name} has not been matched to a LinkedIn profile yet.`);
 
-  // The same term again is a re-run, not a second search: its rows are keyed
-  // on (search, introducer, profile), so they refresh in place.
-  let entry = s.searches.find((x) => x.term.toLowerCase() === text.toLowerCase());
-  const again = !!entry;
-  if (entry) {
-    Object.assign(entry, {
-      prompt: String(prompt || entry.prompt || DEFAULT_PROMPT).trim(),
-      status: 'queued',
-      introducers: ready.length,
-      error: null,
-    });
+  const ask = String(prompt || s.prompt || DEFAULT_PROMPT).trim();
+  if (!ask) throw new Error('Give Jev a prompt.');
+
+  // The same pair again is a re-run, not a second job.
+  let job = s.jobs.find((j) => j.introducerId === introducerId && j.term.toLowerCase() === text.toLowerCase());
+  if (job) {
+    Object.assign(job, { prompt: ask, status: 'queued', error: null, skipped: null });
   } else {
-    entry = {
+    job = {
       id: id(),
+      introducerId,
+      introducerName: introducer.name,
       term: text,
-      prompt: String(prompt || s.prompt || DEFAULT_PROMPT).trim(),
-      createdAt: new Date().toISOString(),
+      prompt: ask,
       status: 'queued',
-      introducers: ready.length,
+      createdAt: new Date().toISOString(),
+      lastRunAt: null,
+      found: 0,
     };
-    s.searches.push(entry);
+    s.jobs.push(job);
   }
-  s.prompt = entry.prompt; // remembered for the next search
+  s.prompt = ask; // the next job starts from the last prompt you used
   save(s);
-  if (again) note(`Running "${text}" again — existing rows are refreshed, not duplicated.`);
-
-  for (const i of ready) {
-    enqueue({ kind: 'search', searchId: entry.id, introducerId: i.id, label: `${text} via ${i.name}` });
-  }
-  return entry;
+  enqueue({ kind: 'job', jobId: job.id, introducerId, label: jobLabel(job) });
+  return job;
 }
 
-export function removeSearch(searchId) {
+/** Run an existing job again, with its own prompt or a new one. */
+export function runJobAgain(jobId, prompt) {
   const s = load();
-  s.searches = s.searches.filter((x) => x.id !== searchId);
-  s.rows = s.rows.filter((r) => r.searchId !== searchId);
+  const job = s.jobs.find((j) => j.id === jobId);
+  if (!job) throw new Error('No such job.');
+  if (prompt) job.prompt = String(prompt).trim();
+  Object.assign(job, { status: 'queued', error: null, skipped: null });
   save(s);
-  queue = queue.filter((j) => j.searchId !== searchId);
+  enqueue({ kind: 'job', jobId: job.id, introducerId: job.introducerId, label: jobLabel(job) });
+  return job;
+}
+
+export function removeJob(jobId) {
+  const s = load();
+  s.jobs = s.jobs.filter((j) => j.id !== jobId);
+  s.rows = s.rows.filter((r) => r.jobId !== jobId);
+  save(s);
+  queue = queue.filter((j) => j.jobId !== jobId);
   return state();
 }
 
@@ -171,7 +215,7 @@ export function clearQueue() {
   const dropped = queue.length;
   queue = [];
   const s = load();
-  for (const x of s.searches) if (x.status === 'queued') x.status = 'stopped';
+  for (const x of s.jobs) if (x.status === 'queued') x.status = 'stopped';
   for (const i of s.introducers) if (i.status === 'queued') i.status = 'stopped';
   save(s);
   if (dropped) note(`Dropped ${dropped} queued job${dropped === 1 ? '' : 's'}.`);
@@ -231,7 +275,7 @@ async function drain() {
       current = job.label;
       try {
         if (job.kind === 'introducer') await runIntroducer(job);
-        else await runSearch(job);
+        else await runJob(job);
       } catch (err) {
         note(`${job.label}: ${err.message}`);
         markFailed(job, err.message);
@@ -250,8 +294,8 @@ function markFailed(job, message) {
     const i = s.introducers.find((x) => x.id === job.introducerId);
     if (i) Object.assign(i, { status: 'error', error: message });
   } else {
-    const x = s.searches.find((y) => y.id === job.searchId);
-    if (x && x.status !== 'done') Object.assign(x, { status: 'error', error: message });
+    const x = s.jobs.find((y) => y.id === job.jobId);
+    if (x) Object.assign(x, { status: 'error', error: message, lastRunAt: new Date().toISOString() });
   }
   save(s);
 }
@@ -306,43 +350,49 @@ const brief = (c) => ({
 });
 
 /** Second-degree people matching the term, through one introducer. */
-async function runSearch(job) {
+async function runJob(job) {
   const s0 = load();
-  const search = s0.searches.find((x) => x.id === job.searchId);
+  const entry = s0.jobs.find((x) => x.id === job.jobId);
   const introducer = s0.introducers.find((i) => i.id === job.introducerId);
-  if (!search || !introducer?.url) return;
+  if (!entry || !introducer?.url) return;
 
-  note(`Searching "${search.term}" among ${introducer.name}'s connections…`);
-  const { people, constrained, reason, detail, shot, html, picked, searchUrl } = await agent.searchConnectionsOf({
-    term: search.term,
-    introducerName: introducer.name,
-  });
+  const patchJob = (fields) => {
+    const s = load();
+    const x = s.jobs.find((y) => y.id === job.jobId);
+    if (x) Object.assign(x, fields);
+    save(s);
+  };
+
+  patchJob({ status: 'running', startedAt: new Date().toISOString() });
+  note(`Searching "${entry.term}" among ${introducer.name}'s connections…`);
+  const { people, constrained, reason, detail, shot, html, shotPath, htmlPath, picked, searchUrl } =
+    await agent.searchConnectionsOf({
+      term: entry.term,
+      introducerName: introducer.name,
+    });
 
   // Without the "Connections of" filter this page is every match on LinkedIn,
   // not the ones this person can reach. Those are not rows, and pretending
   // otherwise is the whole failure mode worth guarding against.
   if (!constrained) {
-    note(`Skipped ${introducer.name}: ${reason}`);
-    const s = load();
-    const x = s.searches.find((y) => y.id === job.searchId);
-    if (x) {
-      // The picture and the markup go with the reason: a filter panel that
-      // moved is only fixable against what it actually looked like.
-      x.skipped = [
-        ...(x.skipped || []).filter((k) => k.introducerId !== introducer.id),
-        {
-          introducerId: introducer.id,
-          name: introducer.name,
-          reason,
-          detail: detail || null,
-          shot: shot?.file || null,
-          html: html || shot?.html || null,
-          at: new Date().toISOString(),
-        },
-      ];
-      x.status = queue.some((j) => j.searchId === job.searchId) ? 'running' : 'done';
-    }
-    save(s);
+    note(`Stopped ${jobLabel(entry)}: ${reason}`);
+    // The picture and the markup go with the reason: a filter panel that has
+    // moved is only fixable against what it actually looked like.
+    patchJob({
+      status: 'error',
+      error: reason,
+      skipped: {
+        reason,
+        detail: detail || null,
+        shot: shot?.file || null,
+        html: html || shot?.html || null,
+        // Absolute paths, so the files can be opened from anywhere.
+        shotPath: shotPath || null,
+        htmlPath: htmlPath || null,
+        at: new Date().toISOString(),
+      },
+      lastRunAt: new Date().toISOString(),
+    });
     return;
   }
   if (picked) note(`Filtered to ${introducer.name}'s connections (matched "${picked}").`);
@@ -351,26 +401,17 @@ async function runSearch(job) {
   // second-degree, so a stray first- or third-degree hit does not become a row.
   const targets = people.filter((p) => p.url && (p.degree === '2nd' || p.degree === null));
   note(`${targets.length} second-degree match${targets.length === 1 ? '' : 'es'} via ${introducer.name}.`);
-
-  {
-    const s = load();
-    const x = s.searches.find((y) => y.id === job.searchId);
-    if (x) Object.assign(x, { status: 'running', searchUrl });
-    save(s);
-  }
+  patchJob({ searchUrl, found: targets.length });
 
   for (const target of targets) {
-    // The same person can come up through two introducers; that is two rows,
-    // because the introduction is what differs. Through the same one it is the
-    // same row, re-read and re-asked.
-    const existing = load().rows.find(
-      (r) => r.searchId === search.id && r.introducerId === introducer.id && r.url === shortUrl(target.url)
-    );
+    // The same person through the same connection is the same row, re-read and
+    // re-asked; through a different connection it is a different introduction.
+    const existing = load().rows.find((r) => r.jobId === entry.id && r.url === shortUrl(target.url));
     const rowId = existing?.id || id();
     let row = {
       id: rowId,
-      searchId: search.id,
-      term: search.term,
+      jobId: entry.id,
+      term: entry.term,
       introducerId: introducer.id,
       introducerName: introducer.name,
       introducerUrl: introducer.url,
@@ -395,7 +436,7 @@ async function runSearch(job) {
       ...row,
       name: profile.name || row.name,
       headline: profile.headline || row.headline,
-      company: profile.company || '',
+      company: profile.company || companyFrom(profile.headline) || '',
       summary: profile.summary || '',
       positions: profile.positions || [],
       experienceText: profile.experienceText || '',
@@ -403,17 +444,22 @@ async function runSearch(job) {
     };
     upsertRow(row);
 
-    const answered = await ask(row, search.prompt);
-    upsertRow({ ...row, ...answered, prompt: search.prompt, status: answered.error ? 'error' : 'done' });
+    const answered = await ask(row, entry.prompt);
+    upsertRow({ ...row, ...answered, prompt: entry.prompt, status: answered.error ? 'error' : 'done' });
     note(`${row.name}: ${answered.error ? answered.error : firstLine(answered.answer)}`);
   }
 
-  const s = load();
-  const x = s.searches.find((y) => y.id === job.searchId);
-  const done = !queue.some((j) => j.searchId === job.searchId);
-  if (x) Object.assign(x, { status: done ? 'done' : 'running', finishedAt: done ? new Date().toISOString() : null });
-  save(s);
+  patchJob({
+    status: 'done',
+    error: null,
+    skipped: null,
+    lastRunAt: new Date().toISOString(),
+    found: load().rows.filter((r) => r.jobId === entry.id).length,
+  });
 }
+
+/** "General Partner at Google Ventures" — the firm is what follows "at". */
+const companyFrom = (headline) => String(headline || '').split(/\bat\b/i).slice(1).join(' at ').trim();
 
 const firstLine = (t) => String(t || '').split('\n')[0].slice(0, 120);
 
