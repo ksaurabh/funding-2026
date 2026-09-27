@@ -529,8 +529,16 @@ about".
    that the facet really is in the URL it landed on, and if it is not — or the
    panel has moved, or no suggestion matches the person — that connection is
    **skipped with a reason** and contributes no rows. Unconstrained results are
-   never turned into rows; the tab says which connections were skipped and why,
-   and the page that defeated it is saved for fixing against.
+   never turned into rows.
+
+   The panel is a right-hand drawer that animates in, renders lazily as it
+   scrolls, and sometimes shows an *Add a connection* button instead of the
+   field itself, so each step waits for what it needs and scrolls the drawer
+   before giving up; the field and the suggestions are found by their words,
+   never by class name. When a connection is skipped the tab **shows the
+   full-page screenshot** of the panel as the agent saw it, with the text it
+   read out of it and links to the picture and the saved HTML — enough to fix
+   the selectors against the real thing rather than guess.
 3. Each profile goes to Jev with **Jev's prompt…**, which you can reword at any
    time; `{{name}}`, `{{headline}}`, `{{summary}}`, `{{positions}}`,
    `{{profile}}` and `{{introducer}}` place the details yourself, and with no

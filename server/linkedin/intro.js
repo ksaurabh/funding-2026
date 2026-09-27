@@ -313,7 +313,7 @@ async function runSearch(job) {
   if (!search || !introducer?.url) return;
 
   note(`Searching "${search.term}" among ${introducer.name}'s connections…`);
-  const { people, constrained, reason, picked, searchUrl } = await agent.searchConnectionsOf({
+  const { people, constrained, reason, detail, shot, html, picked, searchUrl } = await agent.searchConnectionsOf({
     term: search.term,
     introducerName: introducer.name,
   });
@@ -326,7 +326,20 @@ async function runSearch(job) {
     const s = load();
     const x = s.searches.find((y) => y.id === job.searchId);
     if (x) {
-      x.skipped = [...(x.skipped || []).filter((k) => k.introducerId !== introducer.id), { introducerId: introducer.id, name: introducer.name, reason }];
+      // The picture and the markup go with the reason: a filter panel that
+      // moved is only fixable against what it actually looked like.
+      x.skipped = [
+        ...(x.skipped || []).filter((k) => k.introducerId !== introducer.id),
+        {
+          introducerId: introducer.id,
+          name: introducer.name,
+          reason,
+          detail: detail || null,
+          shot: shot?.file || null,
+          html: html || shot?.html || null,
+          at: new Date().toISOString(),
+        },
+      ];
       x.status = queue.some((j) => j.searchId === job.searchId) ? 'running' : 'done';
     }
     save(s);

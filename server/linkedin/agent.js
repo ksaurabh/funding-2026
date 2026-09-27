@@ -11,7 +11,13 @@ import crypto from 'node:crypto';
 import { chromium } from 'playwright-core';
 import { DATA_DIR } from '../store.js';
 import { SELECTORS, findOne, findAll, textOf } from './selectors.js';
-import { extractPeopleInPage, extractProfileInPage, extractProfileDetailInPage } from './extract.js';
+import {
+  extractPeopleInPage,
+  extractProfileInPage,
+  extractProfileDetailInPage,
+  findConnectionsFieldInPage,
+  findTypeaheadOptionsInPage,
+} from './extract.js';
 import { pickBest, nameScore } from './match.js';
 
 // Your signed-in Chrome profile. Overridable so the agent can be exercised
@@ -84,11 +90,13 @@ export const isOpen = () => !!ctx;
  * Keep a picture of the page the agent just read. Cached on disk so a lookup
  * can be checked against what LinkedIn actually showed, long after the fact.
  */
-async function capture(label) {
+async function capture(label, { fullPage = false } = {}) {
   try {
     fs.mkdirSync(SHOTS_DIR, { recursive: true });
     const stem = `${Date.now().toString(36)}-${crypto.randomUUID().slice(0, 6)}`;
-    await page.screenshot({ path: path.join(SHOTS_DIR, `${stem}.png`), fullPage: false });
+    // A failed filter panel is worth the whole page: the drawer is tall and
+    // the part that matters is usually below the fold.
+    await page.screenshot({ path: path.join(SHOTS_DIR, `${stem}.png`), fullPage });
 
     // The markup as rendered, so a lookup that read the page wrongly can be
     // worked out afterwards rather than guessed at.
@@ -840,14 +848,17 @@ export async function searchByName(name, { threshold = 0.8 } = {}) {
  * a profile link — so the facet cannot be built by hand from a profile URL.
  * Passing the slug looks like it works and quietly returns *everyone* matching
  * the term, which is worse than failing.
+ *
+ * The panel is a right-hand drawer: it may render outside <main> or in a
+ * portal, it animates in, and it fills in as it scrolls. So every step waits
+ * for what it needs, scrolls when it does not find it, and on failure captures
+ * the page — picture and markup — and says which step lost it.
  */
 async function applyConnectionsOfFilter(personName) {
-  const fail = async (reason) => ({
-    ok: false,
-    reason,
-    html: await dumpHtml('all-filters'),
-    shot: await capture('All filters'),
-  });
+  const fail = async (reason, detail) => {
+    const shot = await capture(`Filters: ${reason}`, { fullPage: true });
+    return { ok: false, reason, detail: detail || null, shot, html: shot?.html || null };
+  };
 
   const trigger = await findOne(page, SELECTORS.allFilters);
   if (!trigger) return fail('Could not find the "All filters" button on the results page.');
@@ -855,60 +866,76 @@ async function applyConnectionsOfFilter(personName) {
   await trigger.click().catch(() => {});
   await wait(PACE.settle);
 
-  const panel = (await findOne(page, SELECTORS.filterPanel)) || page;
-
-  // The typeahead sits inside the "Connections of" section. Prefer the input
-  // in that section; fall back to the only one on the panel.
-  let input = null;
-  const sections = await panel.$$('div, section, fieldset, li');
-  for (const box of sections) {
-    const text = ((await box.innerText().catch(() => '')) || '').replace(/\s+/g, ' ');
-    if (!SELECTORS.connectionsOfHeading.test(text)) continue;
-    const found = await findOne(box, SELECTORS.addConnection);
-    if (found) {
-      input = found;
-      break;
-    }
+  // The drawer animates in and lazily renders; give it time, and scroll it,
+  // rather than deciding on the first frame that the section is not there.
+  let found = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    found = await page.evaluate(findConnectionsFieldInPage).catch(() => null);
+    if (found?.found) break;
+    await page.evaluate(() => {
+      const panel =
+        document.querySelector('[role="dialog"], .artdeco-modal, aside, div[aria-label*="filter" i]') || document.body;
+      const box = [...panel.querySelectorAll('*')].find((el) => {
+        const st = getComputedStyle(el);
+        return /auto|scroll/.test(st.overflowY) && el.scrollHeight > el.clientHeight + 20;
+      });
+      (box || panel).scrollBy(0, 400);
+    }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 500));
   }
-  input = input || (await findOne(panel, SELECTORS.addConnection));
-  if (!input) return fail('The "All filters" panel has no "Connections of" field.');
 
-  // A button opens the field on some layouts; an input takes typing directly.
-  const tag = await input.evaluate((el) => el.tagName.toLowerCase()).catch(() => '');
-  if (tag === 'button') {
-    await input.click().catch(() => {});
+  if (!found?.found) {
+    return fail('The "All filters" panel has no "Connections of" field.', {
+      why: found?.why || 'the panel never appeared',
+      sectionText: found?.sectionText || null,
+      panelText: found?.panelText || null,
+      headings: found?.headings || null,
+    });
+  }
+
+  // A button reveals the typeahead on some layouts; an input takes typing.
+  let field = await page.$('[data-agent-field]');
+  if (!field) return fail('Lost the "Connections of" field between finding it and using it.');
+  if (found.kind === 'button') {
+    await field.click().catch(() => {});
     await wait(PACE.settle);
-    input = (await findOne(panel, ['input[placeholder*="Add a connection" i]', 'input[type="text"]'])) || input;
+    await page.evaluate(findConnectionsFieldInPage).catch(() => {});
+    field = (await page.$('[data-agent-field="input"]')) || (await page.$('[data-agent-field]'));
+    if (!field) return fail('"Add a connection" did not open a field to type into.', { sectionText: found.sectionText });
   }
 
-  await input.click().catch(() => {});
+  await field.click().catch(() => {});
   // Typed, not filled: the suggestions come from keystrokes.
-  await input.type(personName, { delay: 90 }).catch(() => {});
+  await field.type(personName, { delay: 90 }).catch(() => {});
   await wait(PACE.betweenActions);
 
-  const options = await findAll(panel, SELECTORS.typeaheadOption);
-  if (!options.length) return fail(`No suggestions came back for "${personName}" in "Connections of".`);
+  // Suggestions can take a beat to come back.
+  let texts = [];
+  for (let attempt = 0; attempt < 6; attempt++) {
+    texts = (await page.evaluate(findTypeaheadOptionsInPage).catch(() => [])) || [];
+    if (texts.length) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  if (!texts.length) {
+    return fail(`No suggestions came back for "${personName}" in "Connections of".`, { sectionText: found.sectionText });
+  }
 
   // Take the suggestion that is actually them, not just the first row.
-  let pick = null;
-  let pickText = '';
+  let bestAt = -1;
   let best = 0;
-  for (const option of options) {
-    const text = ((await option.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
-    const score = nameScore(personName, text.split('\n')[0]);
+  texts.forEach((text, i) => {
+    const score = nameScore(personName, String(text).split('\n')[0]);
     if (score > best) {
       best = score;
-      pick = option;
-      pickText = text;
+      bestAt = i;
     }
+  });
+  if (bestAt < 0 || best < 0.9) {
+    return fail(`No suggestion in "Connections of" matched ${personName}.`, { suggestions: texts.slice(0, 8) });
   }
-  if (!pick || best < 0.9) {
-    return fail(
-      `No suggestion in "Connections of" matched ${personName}` +
-        (pickText ? ` — closest was "${pickText}".` : '.')
-    );
-  }
-  await pick.click().catch(() => {});
+  const option = await page.$(`[data-agent-option="${bestAt}"]`);
+  if (!option) return fail('The suggestion list went away before it could be picked.', { suggestions: texts.slice(0, 8) });
+  await option.click().catch(() => {});
   await wait(PACE.settle);
 
   const apply = await findOne(page, SELECTORS.showResults);
@@ -922,9 +949,9 @@ async function applyConnectionsOfFilter(personName) {
 
   // Proof, not hope: LinkedIn's facet has to be in the URL it landed on.
   if (!SELECTORS.connectionFacetParam.test(page.url())) {
-    return fail(`The filter did not take — ${page.url()} carries no connection facet.`);
+    return fail('The filter did not take — the results URL carries no connection facet.', { url: page.url() });
   }
-  return { ok: true, picked: pickText, url: page.url() };
+  return { ok: true, picked: texts[bestAt], url: page.url() };
 }
 
 /**
@@ -939,7 +966,15 @@ export async function searchConnectionsOf({ term, introducerName, limit = 10 }) 
 
   const filter = await applyConnectionsOfFilter(introducerName);
   if (!filter.ok) {
-    return { people: [], constrained: false, reason: filter.reason, shot: filter.shot, html: filter.html, searchUrl: page.url() };
+    return {
+      people: [],
+      constrained: false,
+      reason: filter.reason,
+      detail: filter.detail,
+      shot: filter.shot,
+      html: filter.html,
+      searchUrl: page.url(),
+    };
   }
 
   let people = [];

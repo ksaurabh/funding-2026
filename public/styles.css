@@ -668,6 +668,13 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-table tbody tr:hover { background: none; }
 #in-filters input, #view-intro .filters-head input { font-size: 12px; padding: 3px 6px; }
 #in-prompt { font: inherit; font-size: 13px; width: 100%; }
+
+/* A skipped connection shows the panel that defeated it, not just a message. */
+#in-skips { margin: 8px 0 14px; display: grid; gap: 12px; }
+.skip { border: 1px solid #eec6c2; background: #fdf1f0; border-radius: 6px; padding: 10px 12px; }
+.skip-links { display: flex; gap: 12px; margin: 6px 0; font-size: 12px; }
+.skip-text { white-space: pre-wrap; max-height: 90px; overflow: auto; margin-top: 4px; }
+.skip-shot { display: block; max-width: 100%; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
 .badge.deg-1st { color: #1c6b40; border-color: #bfdcca; background: #eef7f1; }
 .badge.deg-2nd { color: #8a5a17; border-color: #e6d4b0; background: #fdf6e8; }
 .badge.deg-3rd { color: var(--muted); }

@@ -251,3 +251,118 @@ export function extractProfileDetailInPage() {
     experienceText: expBox ? lines(expBox.innerText).filter((l) => !NOISE.test(l)).join('\n').slice(0, 4000) : '',
   };
 }
+
+/**
+ * Find the "Connections of" field in the All-filters panel and tag it, so the
+ * caller can then click and type into it with real events.
+ *
+ * The panel is a right-hand drawer that may render outside <main>, may sit in
+ * a portal at the end of <body>, lazily fills in as it scrolls, and sometimes
+ * shows a button that reveals the typeahead rather than the typeahead itself.
+ * So: find the heading by its words, take the block around it, and look for a
+ * field in there — never a class name, and never assuming a dialog role.
+ *
+ * Returns what it found either way; the diagnostics are what make a failure
+ * fixable from a saved page instead of guessed at.
+ *
+ * Runs inside the page via page.evaluate.
+ */
+export function findConnectionsFieldInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const HEADING = /^connections of\b/i;
+  const ADD = /add a connection|connections of/i;
+
+  for (const el of document.querySelectorAll('[data-agent-field]')) el.removeAttribute('data-agent-field');
+
+  const visible = (el) => {
+    if (!el) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+
+  // The heading, wherever it lives. Innermost match, so the label rather than
+  // the whole panel that contains it.
+  const headings = [...document.querySelectorAll('h1,h2,h3,h4,label,legend,span,div,p,button')].filter((n) =>
+    HEADING.test(clean(n.innerText))
+  );
+  const heading = headings.filter((n) => !headings.some((o) => o !== n && n.contains(o))).pop() || null;
+
+  // The panel is whatever scrollable ancestor holds it — useful to report and
+  // to scroll when the section has not rendered yet.
+  const panelOf = (node) => {
+    for (let el = node; el; el = el.parentElement) {
+      if (el === document.body) break;
+      const style = getComputedStyle(el);
+      if (/auto|scroll/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 20) return el;
+      if (el.getAttribute('role') === 'dialog' || el.classList.contains('artdeco-modal')) return el;
+    }
+    return null;
+  };
+
+  const dialog = document.querySelector('[role="dialog"], .artdeco-modal, aside[aria-label], div[aria-label*="filter" i]');
+  const panel = (heading && panelOf(heading)) || dialog || null;
+
+  if (!heading) {
+    return {
+      found: false,
+      why: 'no heading whose text starts with "Connections of"',
+      panelText: clean(panel?.innerText || '').slice(0, 1200),
+      dialogs: document.querySelectorAll('[role="dialog"]').length,
+      headings: [...document.querySelectorAll('h1,h2,h3,h4,legend')].map((h) => clean(h.innerText)).filter(Boolean).slice(0, 40),
+    };
+  }
+
+  // The section: walk up until the block holds more than the heading itself.
+  let section = heading;
+  for (let i = 0; i < 6 && section.parentElement; i++) {
+    section = section.parentElement;
+    if (section.querySelector('input, button') && clean(section.innerText).length > clean(heading.innerText).length) break;
+  }
+
+  const inputs = [...section.querySelectorAll('input')].filter(
+    (n) => visible(n) && !/^(checkbox|radio|hidden|submit)$/i.test(n.type || '')
+  );
+  if (inputs[0]) {
+    inputs[0].setAttribute('data-agent-field', 'input');
+    return { found: true, kind: 'input', sectionText: clean(section.innerText).slice(0, 400) };
+  }
+
+  // No input yet: a button ("Add a connection") reveals it on some layouts.
+  const button = [...section.querySelectorAll('button, [role="button"], a')].find(
+    (n) => visible(n) && ADD.test(clean(n.innerText) + ' ' + (n.getAttribute('aria-label') || ''))
+  );
+  if (button) {
+    button.setAttribute('data-agent-field', 'button');
+    return { found: true, kind: 'button', sectionText: clean(section.innerText).slice(0, 400) };
+  }
+
+  return {
+    found: false,
+    why: 'found the "Connections of" heading but no field or button under it',
+    sectionText: clean(section.innerText).slice(0, 600),
+    panelText: clean(panel?.innerText || '').slice(0, 1200),
+  };
+}
+
+/** Tag the typeahead suggestions, however they are marked up. */
+export function findTypeaheadOptionsInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  for (const el of document.querySelectorAll('[data-agent-option]')) el.removeAttribute('data-agent-option');
+
+  let options = [...document.querySelectorAll('[role="option"]')];
+  if (!options.length) {
+    // A bare list under the field, then: any list whose items are people.
+    const lists = [...document.querySelectorAll('ul, [role="listbox"]')].filter((ul) => {
+      const items = [...ul.children].filter((li) => clean(li.innerText));
+      return items.length > 0 && items.length <= 12 && items.every((li) => clean(li.innerText).length < 120);
+    });
+    const list = lists[lists.length - 1];
+    if (list) options = [...list.children];
+  }
+  options = options.filter((n) => {
+    const r = n.getBoundingClientRect();
+    return r.width > 0 && r.height > 0 && clean(n.innerText);
+  });
+  options.forEach((n, i) => n.setAttribute('data-agent-option', String(i)));
+  return options.map((n) => clean(n.innerText));
+}

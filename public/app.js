@@ -4179,8 +4179,10 @@ function renderIntro() {
     : '';
   // A skipped connection means its results were not actually narrowed to them,
   // so saying why matters more than a count.
-  const skipped = intro.searches.flatMap((x) => (x.skipped || []).map((k) => `${x.term}: ${k.name} — ${k.reason}`));
+  const skips = intro.searches.flatMap((x) => (x.skipped || []).map((k) => ({ ...k, term: x.term })));
+  const skipped = skips.map((k) => `${k.term}: ${k.name} — ${k.reason}`);
   $('#in-searches').title = skipped.join('\n');
+  renderIntroSkips(skips);
   $('#in-search').disabled = !ready.length || intro.running;
   $('#in-search').title = ready.length
     ? 'Search every connection’s 2nd-degree network for this term'
@@ -4216,6 +4218,57 @@ function renderIntro() {
   $('#in-count').textContent = dirty ? `${rows.length} of ${intro.rows.length} match` : '';
 
   renderIntroRows(rows);
+}
+
+/**
+ * The capture, if it is still on disk — the cache keeps the last 150 files, so
+ * an old one may have been pruned. Say that rather than showing a broken image.
+ */
+function shotImage(src, name) {
+  const img = el('img', { src, className: 'skip-shot', alt: `The filter panel when ${name} was skipped` });
+  img.addEventListener('error', () => {
+    img.replaceWith(el('span', { className: 'muted small', textContent: 'The screenshot has since been pruned from the cache.' }));
+  });
+  return img;
+}
+
+/**
+ * What the agent was looking at when a filter failed. Shown, not just linked:
+ * the whole point is to see the panel that defeated it.
+ */
+function renderIntroSkips(skips) {
+  const host = $('#in-skips');
+  host.classList.toggle('hidden', !skips.length);
+  if (!skips.length) return host.replaceChildren();
+
+  host.replaceChildren(
+    ...skips.map((k) => {
+      const shot = k.shot ? `/api/linkedin/shots/${k.shot}` : null;
+      const detail = k.detail?.sectionText || k.detail?.panelText || k.detail?.why || '';
+      return el('div', { className: 'skip' }, [
+        el('div', {}, [
+          el('strong', { textContent: `${k.name}: ` }),
+          document.createTextNode(k.reason),
+          k.detail?.suggestions?.length
+            ? el('div', { className: 'muted small', textContent: `Suggestions offered: ${k.detail.suggestions.join(' · ')}` })
+            : null,
+          detail ? el('div', { className: 'muted small skip-text', textContent: detail }) : null,
+        ]),
+        el('div', { className: 'skip-links' }, [
+          shot ? el('a', { href: shot, target: '_blank', rel: 'noreferrer', textContent: 'Open screenshot' }) : null,
+          k.html
+            ? el('a', {
+                href: `/api/linkedin/shots/${k.html}`,
+                target: '_blank',
+                rel: 'noreferrer',
+                textContent: 'Saved HTML',
+              })
+            : null,
+        ]),
+        shot ? el('a', { href: shot, target: '_blank', rel: 'noreferrer' }, shotImage(shot, k.name)) : null,
+      ]);
+    })
+  );
 }
 
 function renderIntroRows(rows) {
