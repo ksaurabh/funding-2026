@@ -621,9 +621,12 @@ Your marks belong to the person, not to the path. Relevance or a note set on
 one job's row shows here; set here, it is written back to every row for them,
 so it shows on each job too. Whatever any job learned about them — the title,
 the company, Jev's answer — fills the entry, so a person qualified under one
-connection is not blank under another. The relevance chips and the search box
-work as they do on a job, and the search matches the connecting names too, so
-typing a connection's name lists who they can introduce you to. **Download
+connection is not blank under another. The search box works as it does on a job, and matches the connecting names
+too, so typing a connection's name lists who they can introduce you to. Two
+chip groups sit beside it — **Relevance**, and **Jev's category** as
+*Qualified* or *Not qualified* — and each counts over what the other leaves,
+so the numbers are what you would actually get. Ticking neither, or both, in a
+group shows all of it. **Download
 CSV** takes the merged view.
 
 Jobs run one at a time, paced by the same randomised delay as the rest of the

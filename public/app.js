@@ -4122,7 +4122,14 @@ $('#mon-refresh').addEventListener('click', async () => {
 // The same person reached through two connections is one row here, with both
 // ways in — and a mark set on them anywhere is the mark you see.
 
-const people = { rows: [], filter: '', relFilter: new Set(), loaded: false };
+const people = {
+  rows: [],
+  filter: '',
+  relFilter: new Set(),
+  // Whether Jev has answered: 'yes', 'no', or neither, which means both.
+  qualFilter: new Set(),
+  loaded: false,
+};
 
 let peopleTimer = null;
 
@@ -4156,42 +4163,67 @@ function peopleAll() {
   );
 }
 
-const peopleVisible = () => {
-  const rows = peopleAll();
-  if (!people.relFilter.size) return rows;
-  return rows.filter((p) => people.relFilter.has(p.relevance || intro.relevance[0]));
-};
+// Each filter narrows what the others count, the way facets usually behave:
+// with nothing ticked in a group, that group is not narrowing anything.
+const matchesRelevance = (p) => !people.relFilter.size || people.relFilter.has(p.relevance || intro.relevance[0]);
+const matchesQualified = (p) => !people.qualFilter.size || people.qualFilter.has(p.answer ? 'yes' : 'no');
+
+const peopleVisible = () => peopleAll().filter((p) => matchesRelevance(p) && matchesQualified(p));
+
+/** A row of chips where any number can be on, and none on means all. */
+function chipRow(host, entries, selected, onChange) {
+  const chips = entries.map(([value, label, count]) => {
+    const on = selected.has(value);
+    const chip = el('button', { className: 'chip' + (on ? ' on' : ''), textContent: `${label} (${count})` });
+    chip.addEventListener('click', () => {
+      if (on) selected.delete(value);
+      else selected.add(value);
+      onChange();
+    });
+    return chip;
+  });
+  if (selected.size) {
+    const clear = el('button', { className: 'chip clear', textContent: 'Clear' });
+    clear.addEventListener('click', () => {
+      selected.clear();
+      onChange();
+    });
+    chips.push(clear);
+  }
+  host.replaceChildren(...chips);
+}
 
 function renderPeople() {
   const all = peopleAll();
   const rows = peopleVisible();
 
-  // The same chips as a job's table, over everyone.
+  // Relevance, counted over what the category filter leaves.
+  const forRelevance = all.filter(matchesQualified);
   const counts = new Map();
-  for (const p of all) {
+  for (const p of forRelevance) {
     const rel = p.relevance || intro.relevance[0];
     counts.set(rel, (counts.get(rel) || 0) + 1);
   }
   const options = [...new Set([...intro.relevance, ...counts.keys()])];
-  const chips = options.map((value) => {
-    const on = people.relFilter.has(value);
-    const chip = el('button', { className: 'chip' + (on ? ' on' : ''), textContent: `${value} (${counts.get(value) || 0})` });
-    chip.addEventListener('click', () => {
-      if (on) people.relFilter.delete(value);
-      else people.relFilter.add(value);
-      renderPeople();
-    });
-    return chip;
-  });
-  if (people.relFilter.size) {
-    const clear = el('button', { className: 'chip clear', textContent: 'Clear' });
-    clear.addEventListener('click', () => {
-      people.relFilter.clear();
-      renderPeople();
-    });
-    chips.push(clear);
-  }
-  $('#in-people-chips').replaceChildren(...chips);
+  chipRow(
+    $('#in-people-chips'),
+    options.map((value) => [value, value, counts.get(value) || 0]),
+    people.relFilter,
+    renderPeople
+  );
+
+  // And whether Jev has answered, counted over what relevance leaves.
+  const forQualified = all.filter(matchesRelevance);
+  const answered = forQualified.filter((p) => p.answer).length;
+  chipRow(
+    $('#in-people-qual'),
+    [
+      ['yes', 'Qualified', answered],
+      ['no', 'Not qualified', forQualified.length - answered],
+    ],
+    people.qualFilter,
+    renderPeople
+  );
   $('#in-people-count').textContent = `${rows.length}${rows.length === all.length ? '' : ` of ${all.length}`} people`;
 
   $('#in-people-table thead').replaceChildren(
