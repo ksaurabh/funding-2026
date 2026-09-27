@@ -417,10 +417,14 @@ async function runJob(job) {
     pickedText,
     pickedAssumed,
     searchUrl,
+    pages,
   } = await agent.searchConnectionsOf({
-      term: entry.term,
-      introducerName: introducer.name,
-    });
+    term: entry.term,
+    introducerName: introducer.name,
+    // Say how it is going: ten pages is a few minutes of paced loading.
+    onPage: ({ page, added, total }) =>
+      note(`Page ${page} via ${introducer.name}: ${added} new, ${total} so far.`),
+  });
 
   // Without the "Connections of" filter this page is every match on LinkedIn,
   // not the ones this person can reach. Those are not rows, and pretending
@@ -466,8 +470,10 @@ async function runJob(job) {
   const firsts = targets.filter((p) => p.degree === '1st').length;
   note(
     `${targets.length} match${targets.length === 1 ? '' : 'es'} via ${introducer.name}` +
+      ` across ${pages || 1} page${pages === 1 ? '' : 's'}` +
       (firsts ? ` — ${firsts} you already know directly.` : '.')
   );
+  patchJob({ pages: pages || 1 });
   patchJob({ searchUrl, found: targets.length });
 
   for (const target of targets) {

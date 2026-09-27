@@ -530,6 +530,13 @@ the answer was based on), **Title** — the second line of their card on the
 results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**
 and **Jev's category**, with a box to filter within that job.
 
+Every page of the filtered list is read, not just the first — a well-connected
+person has ten of them, at ten results a page — stopping when a page adds
+nobody new, when the facet falls out of the URL, or at twenty pages. The audit
+log says what each page added, and the job records how many pages it walked.
+That also means a job can be a hundred profiles and a hundred model calls: the
+spend so far is in the toolbar.
+
 Everyone on a constrained page becomes a row, whatever degree they read as.
 The facet check has already proved the page is that connection's own
 connections, and some of them come back marked *1st*: people you know directly

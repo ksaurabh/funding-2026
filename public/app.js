@@ -4351,7 +4351,9 @@ function renderIntroDetail() {
   $('#in-job-title').textContent = job ? `${job.term} via ${job.introducerName}` : 'No job selected';
   $('#in-job-meta').textContent = job
     ? job.status === 'done'
-      ? `${job.found || 0} 2nd-degree connection${job.found === 1 ? '' : 's'} · last run ${new Date(job.lastRunAt).toLocaleString()}`
+      ? `${job.found || 0} connection${job.found === 1 ? '' : 's'}` +
+        (job.pages > 1 ? ` across ${job.pages} pages` : '') +
+        ` · last run ${new Date(job.lastRunAt).toLocaleString()}`
       : job.status === 'error'
       ? 'stopped'
       : job.status

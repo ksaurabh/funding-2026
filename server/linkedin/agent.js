@@ -44,6 +44,9 @@ const PAGE_DELAY_MAX = 20000;
 // A ceiling so a contact with thousands of shared connections cannot run all
 // afternoon.
 const MUTUAL_PAGE_LIMIT = 40;
+// How far to page through one filtered search. Ten results a page, so this is
+// 200 people — well past what anyone reads, and a stop if LinkedIn keeps going.
+const SEARCH_PAGE_LIMIT = 20;
 
 /**
  * Result hrefs come back relative as often as absolute — and sometimes not at
@@ -1077,7 +1080,7 @@ async function applyConnectionsOfFilter(personName) {
  * actually applied; a caller must not treat an unconstrained page as a result,
  * because it is every match on LinkedIn rather than the ones they can reach.
  */
-export async function searchConnectionsOf({ term, introducerName, limit = 10 }) {
+export async function searchConnectionsOf({ term, introducerName, limit = 0, onPage } = {}) {
   await ready();
   await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(term)}`);
 
@@ -1096,24 +1099,58 @@ export async function searchConnectionsOf({ term, introducerName, limit = 10 }) 
     };
   }
 
-  let people = [];
-  try {
-    people = await page.evaluate(extractPeopleInPage);
-  } catch {
-    people = [];
-  }
-  if (!people.length) people = await searchPeopleBySelector();
+  // Every page of the filtered list, not just the first: a well-connected
+  // person has ten of them. Paging is a query parameter on the same URL, so
+  // the facet carries over; each load is paced like any other.
+  const startUrl = page.url();
+  const seen = new Map();
+  let pages = 0;
 
+  for (let pageNo = 1; pageNo <= SEARCH_PAGE_LIMIT; pageNo++) {
+    if (pageNo > 1) {
+      const url = new URL(startUrl);
+      url.searchParams.set('page', String(pageNo));
+      await visit(url.toString());
+      // Paging past the end lands back on the unfiltered search on some
+      // layouts; stop rather than collect strangers.
+      if (!SELECTORS.connectionFacetParam.test(page.url())) break;
+    }
+
+    let batch = [];
+    try {
+      batch = await page.evaluate(extractPeopleInPage);
+    } catch {
+      batch = [];
+    }
+    if (!batch.length) batch = await searchPeopleBySelector();
+
+    let added = 0;
+    for (const person of batch) {
+      const url = profileUrl(person.url);
+      if (!url || seen.has(url)) continue;
+      seen.set(url, { ...person, url });
+      added++;
+    }
+    pages = pageNo;
+    await onPage?.({ page: pageNo, added, total: seen.size });
+
+    // Nobody new means the list has run out, or LinkedIn is repeating itself.
+    if (!added) break;
+    if (limit && seen.size >= limit) break;
+  }
+
+  const people = [...seen.values()];
   const shot = await capture(`Search: ${term} via ${introducerName}`);
   return {
-    people: people.slice(0, limit).map((p) => ({ ...p, url: profileUrl(p.url) })),
+    people: limit ? people.slice(0, limit) : people,
+    pages,
     constrained: true,
     picked: filter.picked,
     pickedText: filter.pickedText,
     pickedAssumed: filter.assumed,
     suggestions: filter.suggestions,
     shot,
-    searchUrl: page.url(),
+    searchUrl: startUrl,
   };
 }
 
