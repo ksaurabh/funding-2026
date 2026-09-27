@@ -42,6 +42,25 @@ app.use(
 
 app.use('/api/linkedin', linkedinRoutes);
 app.use('/api/monday', mondayRoutes);
+
+// The browser tab's icon: whichever of public/icons the settings name, so the
+// choice survives a reload without the page having to know about it.
+app.get('/favicon.svg', (_req, res) => {
+  const { icon } = { ...DEFAULT_SETTINGS, ...read('settings', DEFAULT_SETTINGS) };
+  const file = path.join(ROOT, 'public', 'icons', `${/^[a-z0-9-]+$/.test(icon) ? icon : 'playbook'}.svg`);
+  res.type('image/svg+xml').sendFile(fs.existsSync(file) ? file : path.join(ROOT, 'public', 'icons', 'playbook.svg'));
+});
+app.get('/favicon.ico', (_req, res) => res.redirect('/favicon.svg'));
+
+// The icons to choose between, for the picker on the Settings tab.
+app.get('/api/icons', (_req, res) => {
+  const dir = path.join(ROOT, 'public', 'icons');
+  const names = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.svg'))
+    .map((f) => f.replace(/\.svg$/, ''));
+  res.json({ icons: names, current: { ...DEFAULT_SETTINGS, ...read('settings', DEFAULT_SETTINGS) }.icon });
+});
 app.use('/api/google', googleRoutes);
 
 // ------------------------------------------------------------------ helpers
@@ -300,6 +319,7 @@ app.put('/api/settings', (req, res) => {
   if (typeof body.mondayToken === 'string' && body.mondayToken.trim()) next.mondayToken = body.mondayToken.trim();
   if (body.clearMondayToken) next.mondayToken = '';
   // The client id is not a secret and is shown back; the secret is not.
+  if (typeof body.icon === 'string' && /^[a-z0-9-]+$/.test(body.icon)) next.icon = body.icon;
   if (typeof body.googleClientId === 'string') next.googleClientId = body.googleClientId.trim();
   if (typeof body.googleClientSecret === 'string' && body.googleClientSecret.trim()) {
     next.googleClientSecret = body.googleClientSecret.trim();

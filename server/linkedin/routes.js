@@ -328,11 +328,13 @@ linkedinRoutes.get('/intro.csv', (_req, res) => {
     const s = v == null ? '' : String(v);
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const cols = ['term', 'introducer', 'name', 'company', 'headline', 'linkedin', 'category'];
+  const cols = ['term', 'introducer', 'name', 'title', 'company', 'degree', 'linkedin', 'category'];
   const lines = [cols.join(',')];
   for (const r of intro.state().rows) {
     lines.push(
-      [r.term, r.introducerName, r.name, r.company, r.headline, r.url, r.answer || r.error].map(esc).join(',')
+      [r.term, r.introducerName, r.name, r.title || r.headline, r.company, r.degree, r.url, r.answer || r.error]
+        .map(esc)
+        .join(',')
     );
   }
   res.type('text/csv').attachment('ask-for-intro.csv').send(lines.join('\n'));

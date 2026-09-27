@@ -2095,6 +2095,48 @@ async function loadSettings() {
   $('#googleClientId').value = s.googleClientId || '';
   $('#googlesecrethint').textContent = s.googleClientSecretSet ? '— stored; leave blank to keep it' : '— not set';
   await loadGoogle();
+  await loadIcons();
+}
+
+/**
+ * The tab icon, shown at the size it will really be. Picking one applies it
+ * straight away — the point of a tab icon is what it looks like up there.
+ */
+async function loadIcons() {
+  let data;
+  try {
+    data = await api('/api/icons');
+  } catch {
+    return;
+  }
+
+  $('#icon-picker').replaceChildren(
+    ...data.icons.map((name) => {
+      const cell = el('button', { className: 'icon-cell' + (name === data.current ? ' on' : ''), title: name }, [
+        el('img', { src: `/icons/${name}.svg`, className: 'icon-big', alt: name }),
+        el('img', { src: `/icons/${name}.svg`, className: 'icon-tab', alt: '' }),
+        el('span', { className: 'muted small', textContent: name }),
+      ]);
+      cell.addEventListener('click', async (e) => {
+        e.preventDefault();
+        try {
+          await api('/api/settings', {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ icon: name }),
+          });
+        } catch (err) {
+          return toast(err.message, 'bad');
+        }
+        // Repoint the live favicon; the query is only there to defeat the cache.
+        $('#favicon').href = `/favicon.svg?${name}`;
+        for (const other of document.querySelectorAll('.icon-cell')) other.classList.remove('on');
+        cell.classList.add('on');
+        toast(`Tab icon set to ${name}`, 'good');
+      });
+      return cell;
+    })
+  );
 }
 
 /** The Google half of Settings: is there a client, and are we connected. */
@@ -4295,7 +4337,9 @@ function jobRows() {
     .filter((r) =>
       !q
         ? true
-        : [r.name, r.company, r.headline, r.answer, r.error].some((v) => String(v ?? '').toLowerCase().includes(q))
+        : [r.name, r.title, r.company, r.headline, r.answer, r.error].some((v) =>
+            String(v ?? '').toLowerCase().includes(q)
+          )
     );
 }
 
@@ -4336,6 +4380,7 @@ function renderIntroRows(rows) {
   $('#in-table thead').replaceChildren(
     el('tr', {}, [
       el('th', { textContent: '2nd degree connection' }),
+      el('th', { textContent: 'Title' }),
       el('th', { textContent: 'Company' }),
       el('th', { textContent: 'LinkedIn profile' }),
       el('th', { textContent: 'Jev’s category' }),
@@ -4358,8 +4403,11 @@ function renderIntroRows(rows) {
 
       return el('tr', {}, [
         el('td', {}, [
-          el('div', { textContent: r.name }),
-          r.headline ? el('div', { className: 'muted small', textContent: r.headline }) : null,
+          el('div', {}, [
+            document.createTextNode(r.name),
+            // Some of them you already know directly; that changes who to ask.
+            r.degree === '1st' ? el('span', { className: 'badge full', textContent: '1st' }) : null,
+          ]),
           (r.positions || []).length
             ? el('div', {
                 className: 'muted small',
@@ -4370,6 +4418,7 @@ function renderIntroRows(rows) {
               })
             : null,
         ]),
+        el('td', { textContent: r.title || r.headline || '—' }),
         el('td', { textContent: r.company || '—' }),
         el('td', {}, el('a', { href: r.url, target: '_blank', rel: 'noreferrer', textContent: 'Profile' })),
         el('td', {}, [
@@ -4389,7 +4438,7 @@ function renderIntroRows(rows) {
 
   if (!rows.length) {
     $('#in-table tbody').replaceChildren(
-      el('tr', {}, el('td', { colSpan: 4, className: 'muted', textContent: selectedJob() ? '' : 'No job selected.' }))
+      el('tr', {}, el('td', { colSpan: 5, className: 'muted', textContent: selectedJob() ? '' : 'No job selected.' }))
     );
   }
 }

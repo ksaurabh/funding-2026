@@ -457,10 +457,17 @@ async function runJob(job) {
   // is visible on the card instead of quietly shaping everything below it.
   patchJob({ picked: picked || null, pickedText: pickedText || null, pickedAssumed: !!pickedAssumed });
 
-  // LinkedIn's facet is a request, not a promise: keep only what came back as
-  // second-degree, so a stray first- or third-degree hit does not become a row.
-  const targets = people.filter((p) => p.url && (p.degree === '2nd' || p.degree === null));
-  note(`${targets.length} second-degree match${targets.length === 1 ? '' : 'es'} via ${introducer.name}.`);
+  // Everyone on this page, whatever degree they read as. The page is already
+  // proven to be this connection's own connections — that is what the facet
+  // check bought — and they are all people this connection could introduce.
+  // Some come back marked 1st: you know them directly too, which is worth
+  // knowing rather than a reason to drop them.
+  const targets = people.filter((p) => p.url);
+  const firsts = targets.filter((p) => p.degree === '1st').length;
+  note(
+    `${targets.length} match${targets.length === 1 ? '' : 'es'} via ${introducer.name}` +
+      (firsts ? ` — ${firsts} you already know directly.` : '.')
+  );
   patchJob({ searchUrl, found: targets.length });
 
   for (const target of targets) {
@@ -477,8 +484,11 @@ async function runJob(job) {
       introducerUrl: introducer.url,
       name: target.name,
       url: shortUrl(target.url),
+      // The card's second line: what LinkedIn shows under the name on the
+      // results page. Kept as the person's title, whatever the profile says.
+      title: target.headline || '',
       headline: target.headline || '',
-      degree: '2nd',
+      degree: target.degree || null,
       status: 'reading',
       at: new Date().toISOString(),
     };
@@ -495,6 +505,7 @@ async function runJob(job) {
     row = {
       ...row,
       name: profile.name || row.name,
+      // title stays as the search card had it; the profile headline is its own.
       headline: profile.headline || row.headline,
       company: profile.company || companyFrom(profile.headline) || '',
       summary: profile.summary || '',

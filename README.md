@@ -525,9 +525,15 @@ fetched**, a *done / running / queued / stopped* badge, and **Re-run**, **Edit
 prompt** and **Delete**. A connection that could not be matched says so on the
 card (*no 1st-degree match*) and the job stops rather than guessing.
 
-Clicking a card fills the table: **2nd degree connection** (with their headline
-and the positions the answer was based on), **Company**, **LinkedIn profile**
-and **Jev's category**, with a box to filter within that job. **↻** on a row
+Clicking a card fills the table: **2nd degree connection** (with the positions
+the answer was based on), **Title** — the second line of their card on the
+results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**
+and **Jev's category**, with a box to filter within that job.
+
+Everyone on a constrained page becomes a row, whatever degree they read as.
+The facet check has already proved the page is that connection's own
+connections, and some of them come back marked *1st*: people you know directly
+as well, which is worth a badge on the row rather than a reason to drop them. **↻** on a row
 re-asks Jev about that one person.
 
 Running a job searches for the term and then narrows it the way you would by
@@ -575,6 +581,14 @@ the thing to look at — and the thing worth pasting.
 Jobs run one at a time, paced by the same randomised delay as the rest of the
 agent; **Clear queue** drops what has not started. State lives in
 `data/linkedin-intro.json`, and the spend on answers is shown in the toolbar.
+
+## Tab icon
+
+Ten icons live in `public/icons/`, and **Settings → Tab icon** shows each at
+40px and at the 16px it will really be. Clicking one applies it at once and
+remembers it: the page links `/favicon.svg`, which the server answers with
+whichever icon the settings name. Adding another is a matter of dropping an
+SVG in that directory — the picker lists what is there.
 
 ## Monday.com
 

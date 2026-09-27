@@ -203,6 +203,7 @@ export const DEFAULT_SETTINGS = {
   mondayToken: '',
   googleClientId: '',
   googleClientSecret: '',
+  icon: 'playbook',
   model: 'claude-opus-5',
   effort: 'high',
   maxTokens: 8000,
