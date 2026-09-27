@@ -312,9 +312,27 @@ async function runSearch(job) {
   const introducer = s0.introducers.find((i) => i.id === job.introducerId);
   if (!search || !introducer?.url) return;
 
-  const connectionOf = agent.publicIdOf(introducer.url);
   note(`Searching "${search.term}" among ${introducer.name}'s connections…`);
-  const { people, searchUrl } = await agent.searchConnectionsOf({ term: search.term, connectionOf });
+  const { people, constrained, reason, picked, searchUrl } = await agent.searchConnectionsOf({
+    term: search.term,
+    introducerName: introducer.name,
+  });
+
+  // Without the "Connections of" filter this page is every match on LinkedIn,
+  // not the ones this person can reach. Those are not rows, and pretending
+  // otherwise is the whole failure mode worth guarding against.
+  if (!constrained) {
+    note(`Skipped ${introducer.name}: ${reason}`);
+    const s = load();
+    const x = s.searches.find((y) => y.id === job.searchId);
+    if (x) {
+      x.skipped = [...(x.skipped || []).filter((k) => k.introducerId !== introducer.id), { introducerId: introducer.id, name: introducer.name, reason }];
+      x.status = queue.some((j) => j.searchId === job.searchId) ? 'running' : 'done';
+    }
+    save(s);
+    return;
+  }
+  if (picked) note(`Filtered to ${introducer.name}'s connections (matched "${picked}").`);
 
   // LinkedIn's facet is a request, not a promise: keep only what came back as
   // second-degree, so a stray first- or third-degree hit does not become a row.

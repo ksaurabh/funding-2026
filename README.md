@@ -515,11 +515,22 @@ about".
    whose closest match is second degree is kept as *no 1st-degree match* with
    the candidates it saw, rather than quietly standing in for someone else.
 2. **Search via all connections** — give a term. For every usable connection
-   the agent asks LinkedIn for second-degree people matching that term
-   *through them* (`network=["S"]` and `connectionOf=<them>`, one page load),
-   then opens each profile and reads the name, the About paragraph, and every
-   position with its date range — the board seats and observer roles are
-   usually the point.
+   the agent searches for that term and then narrows it the way you would by
+   hand: **All filters → Connections of → Add a connection →** pick them **→
+   Show results**. It then opens each profile and reads the name, the About
+   paragraph, and every position with its date range — the board seats and
+   observer roles are usually the point.
+
+   It has to go through that panel. LinkedIn's own facet is
+   `facetConnectionOf=["<member id>"]`, an internal id rather than the public
+   slug in a profile link, so the constraint cannot be built into a URL from
+   what a profile gives you: passing the slug is silently ignored and returns
+   *everyone* matching the term. After pressing Show results the agent checks
+   that the facet really is in the URL it landed on, and if it is not — or the
+   panel has moved, or no suggestion matches the person — that connection is
+   **skipped with a reason** and contributes no rows. Unconstrained results are
+   never turned into rows; the tab says which connections were skipped and why,
+   and the page that defeated it is saved for fixing against.
 3. Each profile goes to Jev with **Jev's prompt…**, which you can reword at any
    time; `{{name}}`, `{{headline}}`, `{{summary}}`, `{{positions}}`,
    `{{profile}}` and `{{introducer}}` place the details yourself, and with no

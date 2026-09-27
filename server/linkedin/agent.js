@@ -12,7 +12,7 @@ import { chromium } from 'playwright-core';
 import { DATA_DIR } from '../store.js';
 import { SELECTORS, findOne, findAll, textOf } from './selectors.js';
 import { extractPeopleInPage, extractProfileInPage, extractProfileDetailInPage } from './extract.js';
-import { pickBest } from './match.js';
+import { pickBest, nameScore } from './match.js';
 
 // Your signed-in Chrome profile. Overridable so the agent can be exercised
 // against a local stand-in without going near the real session.
@@ -812,11 +812,6 @@ export const pauseBetweenLookups = () => wait(PACE.betweenLookups);
 
 // ------------------------------------------------- asking for an introduction
 
-/** The /in/<slug> part of a profile URL, which is what LinkedIn's facets use. */
-export function publicIdOf(url) {
-  return String(url || '').match(/\/in\/([^/?#]+)/)?.[1] || '';
-}
-
 const ready = async () => {
   if (!ctx || !page) throw new Error('The LinkedIn session is not open.');
   if (!(await status()).loggedIn) throw new Error('Not signed in to LinkedIn in the agent window.');
@@ -836,11 +831,116 @@ export async function searchByName(name, { threshold = 0.8 } = {}) {
  * is how LinkedIn expresses "second degree, via them". `network=["S"]` is its
  * own facet for second-degree; both are query facets, so this is one page load.
  */
-export async function searchConnectionsOf({ term, connectionOf, limit = 10 }) {
+/**
+ * Narrow the open search to one person's connections, through the UI:
+ * All filters → Connections of → Add a connection → pick them → Show results.
+ *
+ * It has to be the UI. LinkedIn's own parameter is
+ * `facetConnectionOf=["<member id>"]` — an internal id, not the public slug in
+ * a profile link — so the facet cannot be built by hand from a profile URL.
+ * Passing the slug looks like it works and quietly returns *everyone* matching
+ * the term, which is worse than failing.
+ */
+async function applyConnectionsOfFilter(personName) {
+  const fail = async (reason) => ({
+    ok: false,
+    reason,
+    html: await dumpHtml('all-filters'),
+    shot: await capture('All filters'),
+  });
+
+  const trigger = await findOne(page, SELECTORS.allFilters);
+  if (!trigger) return fail('Could not find the "All filters" button on the results page.');
+  await wait(PACE.betweenActions);
+  await trigger.click().catch(() => {});
+  await wait(PACE.settle);
+
+  const panel = (await findOne(page, SELECTORS.filterPanel)) || page;
+
+  // The typeahead sits inside the "Connections of" section. Prefer the input
+  // in that section; fall back to the only one on the panel.
+  let input = null;
+  const sections = await panel.$$('div, section, fieldset, li');
+  for (const box of sections) {
+    const text = ((await box.innerText().catch(() => '')) || '').replace(/\s+/g, ' ');
+    if (!SELECTORS.connectionsOfHeading.test(text)) continue;
+    const found = await findOne(box, SELECTORS.addConnection);
+    if (found) {
+      input = found;
+      break;
+    }
+  }
+  input = input || (await findOne(panel, SELECTORS.addConnection));
+  if (!input) return fail('The "All filters" panel has no "Connections of" field.');
+
+  // A button opens the field on some layouts; an input takes typing directly.
+  const tag = await input.evaluate((el) => el.tagName.toLowerCase()).catch(() => '');
+  if (tag === 'button') {
+    await input.click().catch(() => {});
+    await wait(PACE.settle);
+    input = (await findOne(panel, ['input[placeholder*="Add a connection" i]', 'input[type="text"]'])) || input;
+  }
+
+  await input.click().catch(() => {});
+  // Typed, not filled: the suggestions come from keystrokes.
+  await input.type(personName, { delay: 90 }).catch(() => {});
+  await wait(PACE.betweenActions);
+
+  const options = await findAll(panel, SELECTORS.typeaheadOption);
+  if (!options.length) return fail(`No suggestions came back for "${personName}" in "Connections of".`);
+
+  // Take the suggestion that is actually them, not just the first row.
+  let pick = null;
+  let pickText = '';
+  let best = 0;
+  for (const option of options) {
+    const text = ((await option.innerText().catch(() => '')) || '').replace(/\s+/g, ' ').trim();
+    const score = nameScore(personName, text.split('\n')[0]);
+    if (score > best) {
+      best = score;
+      pick = option;
+      pickText = text;
+    }
+  }
+  if (!pick || best < 0.9) {
+    return fail(
+      `No suggestion in "Connections of" matched ${personName}` +
+        (pickText ? ` — closest was "${pickText}".` : '.')
+    );
+  }
+  await pick.click().catch(() => {});
+  await wait(PACE.settle);
+
+  const apply = await findOne(page, SELECTORS.showResults);
+  if (!apply) return fail('Could not find the "Show results" button on the filter panel.');
+  await wait(PACE.betweenActions);
+  await Promise.all([
+    page.waitForLoadState('domcontentloaded').catch(() => {}),
+    apply.click().catch(() => {}),
+  ]);
+  await wait(PACE.settle);
+
+  // Proof, not hope: LinkedIn's facet has to be in the URL it landed on.
+  if (!SELECTORS.connectionFacetParam.test(page.url())) {
+    return fail(`The filter did not take — ${page.url()} carries no connection facet.`);
+  }
+  return { ok: true, picked: pickText, url: page.url() };
+}
+
+/**
+ * People matching a term among one person's connections — which is what makes
+ * them second degree *via* that person. `constrained` says whether the filter
+ * actually applied; a caller must not treat an unconstrained page as a result,
+ * because it is every match on LinkedIn rather than the ones they can reach.
+ */
+export async function searchConnectionsOf({ term, introducerName, limit = 10 }) {
   await ready();
-  const q = new URLSearchParams({ keywords: term, network: '["S"]' });
-  if (connectionOf) q.set('connectionOf', connectionOf);
-  await visit(`${BASE}/search/results/people/?${q}`);
+  await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(term)}`);
+
+  const filter = await applyConnectionsOfFilter(introducerName);
+  if (!filter.ok) {
+    return { people: [], constrained: false, reason: filter.reason, shot: filter.shot, html: filter.html, searchUrl: page.url() };
+  }
 
   let people = [];
   try {
@@ -850,9 +950,11 @@ export async function searchConnectionsOf({ term, connectionOf, limit = 10 }) {
   }
   if (!people.length) people = await searchPeopleBySelector();
 
-  const shot = await capture(`Search: ${term}`);
+  const shot = await capture(`Search: ${term} via ${introducerName}`);
   return {
     people: people.slice(0, limit).map((p) => ({ ...p, url: profileUrl(p.url) })),
+    constrained: true,
+    picked: filter.picked,
     shot,
     searchUrl: page.url(),
   };

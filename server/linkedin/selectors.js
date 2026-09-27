@@ -63,6 +63,32 @@ export const SELECTORS = {
   ],
   // Where an overlay-style mutual-connections list lands, if it does not navigate.
   overlay: ['div[role="dialog"]', '.artdeco-modal', '.artdeco-modal__content'],
+  // The "All filters" panel, which is the only way to constrain a search to
+  // one person's connections: the URL facet takes an internal member id, not
+  // the public slug, so it cannot be built by hand from a profile link.
+  allFilters: [
+    'button[aria-label*="All filters" i]',
+    'button:has-text("All filters")',
+    '[data-test-reusables-filter-trigger="all-filters"]',
+  ],
+  filterPanel: ['div[role="dialog"]', '.artdeco-modal', '.search-reusables__advanced-filters'],
+  // "Connections of" section, then its "Add a connection" typeahead.
+  connectionsOfHeading: /connections of/i,
+  addConnection: [
+    'input[placeholder*="Add a connection" i]',
+    'button[aria-label*="Add a connection" i]',
+    'input[aria-label*="Add a connection" i]',
+    'input[id*="connectionOf" i]',
+  ],
+  typeaheadOption: ['[role="option"]', 'li[role="option"]', '.basic-typeahead__triggered-content li'],
+  showResults: [
+    'button[data-test-reusables-filters-modal-show-results-button]',
+    'button[aria-label*="Apply current filters" i]',
+    'button:has-text("Show results")',
+  ],
+  // Proof the facet actually applied: LinkedIn's own parameter name.
+  connectionFacetParam: /[?&](facetConnectionOf|connectionOf)=/,
+
   sharedCard: [
     'div[data-chameleon-result-urn]',
     'ul.reusable-search__entity-result-list > li',

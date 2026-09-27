@@ -4173,8 +4173,14 @@ function renderIntro() {
     : '';
 
   $('#in-searches').textContent = intro.searches.length
-    ? intro.searches.map((x) => `${x.term} (${x.status})`).join(' · ')
+    ? intro.searches
+        .map((x) => `${x.term} (${x.status}${x.skipped?.length ? `, ${x.skipped.length} skipped` : ''})`)
+        .join(' · ')
     : '';
+  // A skipped connection means its results were not actually narrowed to them,
+  // so saying why matters more than a count.
+  const skipped = intro.searches.flatMap((x) => (x.skipped || []).map((k) => `${x.term}: ${k.name} — ${k.reason}`));
+  $('#in-searches').title = skipped.join('\n');
   $('#in-search').disabled = !ready.length || intro.running;
   $('#in-search').title = ready.length
     ? 'Search every connection’s 2nd-degree network for this term'
@@ -4190,8 +4196,14 @@ function renderIntro() {
   $('#in-clear-queue').classList.toggle('hidden', !intro.pending);
   $('#in-clear-queue').textContent = `Clear queue (${intro.pending})`;
 
+  // A connection whose results could not be narrowed to them is the one thing
+  // worth saying loudly: it means those results were never really theirs.
+  const stuck = skipped.length && !intro.running && !intro.pending;
   const last = intro.log?.[intro.log.length - 1];
-  $('#in-status').textContent = intro.rows.length
+  $('#in-status').className = stuck ? 'mon-error' : 'muted';
+  $('#in-status').textContent = stuck
+    ? skipped[0] + (skipped.length > 1 ? ` (+${skipped.length - 1} more)` : '')
+    : intro.rows.length
     ? last && (intro.running || intro.pending)
       ? last.msg
       : `${intro.rows.length} row${intro.rows.length === 1 ? '' : 's'} · ${money(intro.cost || 0)}`
@@ -4203,6 +4215,10 @@ function renderIntro() {
   $('#in-clear-filters').classList.toggle('hidden', !dirty);
   $('#in-count').textContent = dirty ? `${rows.length} of ${intro.rows.length} match` : '';
 
+  renderIntroRows(rows);
+}
+
+function renderIntroRows(rows) {
   $('#in-table thead').replaceChildren(
     el('tr', {}, [
       el('th', { textContent: '1st degree' }),
