@@ -4130,6 +4130,8 @@ const people = {
   qualFilter: new Set(),
   // Which likelihood bands to show; 'none' is nobody asked about yet.
   oddsFilter: new Set(),
+  // Which connections to show people through; empty means all of them.
+  viaFilter: new Set(),
   odds: ['70%+', '50-70%', '30-50%', '10-30%', '<10%'],
   loaded: false,
 };
@@ -4171,9 +4173,11 @@ function peopleAll() {
 const matchesRelevance = (p) => !people.relFilter.size || people.relFilter.has(p.relevance || intro.relevance[0]);
 const matchesQualified = (p) => !people.qualFilter.size || people.qualFilter.has(p.answer ? 'yes' : 'no');
 const matchesOdds = (p) => !people.oddsFilter.size || people.oddsFilter.has(p.odds || 'none');
+// Reachable through any of the chosen connections, not all of them.
+const matchesVia = (p) => !people.viaFilter.size || p.via.some((v) => people.viaFilter.has(v.name));
 
 const peopleVisible = () =>
-  peopleAll().filter((p) => matchesRelevance(p) && matchesQualified(p) && matchesOdds(p));
+  peopleAll().filter((p) => matchesRelevance(p) && matchesQualified(p) && matchesOdds(p) && matchesVia(p));
 
 /** A row of chips where any number can be on, and none on means all. */
 function chipRow(host, entries, selected, onChange) {
@@ -4203,7 +4207,7 @@ function renderPeople() {
   const rows = peopleVisible();
 
   // Relevance, counted over what the other groups leave.
-  const forRelevance = all.filter((p) => matchesQualified(p) && matchesOdds(p));
+  const forRelevance = all.filter((p) => matchesQualified(p) && matchesOdds(p) && matchesVia(p));
   const counts = new Map();
   for (const p of forRelevance) {
     const rel = p.relevance || intro.relevance[0];
@@ -4218,7 +4222,7 @@ function renderPeople() {
   );
 
   // And whether Jev has answered, counted the same way.
-  const forQualified = all.filter((p) => matchesRelevance(p) && matchesOdds(p));
+  const forQualified = all.filter((p) => matchesRelevance(p) && matchesOdds(p) && matchesVia(p));
   const answered = forQualified.filter((p) => p.answer).length;
   chipRow(
     $('#in-people-qual'),
@@ -4231,7 +4235,7 @@ function renderPeople() {
   );
 
   // How likely they are to be an investor, in the bands Jev picks from.
-  const forOdds = all.filter((p) => matchesRelevance(p) && matchesQualified(p));
+  const forOdds = all.filter((p) => matchesRelevance(p) && matchesQualified(p) && matchesVia(p));
   const oddsCounts = new Map();
   for (const p of forOdds) oddsCounts.set(p.odds || 'none', (oddsCounts.get(p.odds || 'none') || 0) + 1);
   chipRow(
@@ -4241,6 +4245,23 @@ function renderPeople() {
       ['none', 'Not estimated', oddsCounts.get('none') || 0],
     ],
     people.oddsFilter,
+    renderPeople
+  );
+
+  // And who can make the introduction. Someone reachable two ways counts
+  // under both, which is the point of the column.
+  const forVia = all.filter((p) => matchesRelevance(p) && matchesQualified(p) && matchesOdds(p));
+  const viaCounts = new Map();
+  for (const p of forVia) {
+    for (const v of p.via) viaCounts.set(v.name, (viaCounts.get(v.name) || 0) + 1);
+  }
+  const viaNames = [...new Set([...intro.introducers.map((i) => i.name), ...viaCounts.keys()])].filter((n) =>
+    viaCounts.has(n) || people.viaFilter.has(n)
+  );
+  chipRow(
+    $('#in-people-via'),
+    viaNames.map((name) => [name, name, viaCounts.get(name) || 0]),
+    people.viaFilter,
     renderPeople
   );
 

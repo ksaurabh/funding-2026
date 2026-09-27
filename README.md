@@ -634,11 +634,14 @@ one job's row shows here; set here, it is written back to every row for them,
 so it shows on each job too. Whatever any job learned about them — the title,
 the company, Jev's answer — fills the entry, so a person qualified under one
 connection is not blank under another. The search box works as it does on a job, and matches the connecting names
-too, so typing a connection's name lists who they can introduce you to. Three
+too, so typing a connection's name lists who they can introduce you to. Four
 chip groups sit beside it — **Relevance**, **Jev's category** as *Qualified*
-or *Not qualified*, and **Likelihood** by band or *Not estimated* — and each
+or *Not qualified*, **Likelihood** by band or *Not estimated*, and **Connected
+via**, one chip per connection with how many people they can reach. Each group
 counts over what the others leave, so the numbers are what you would actually
-get. Ticking neither, or all, in a group shows all of it. **Download CSV**
+get. Ticking neither, or all, in a group shows all of it; ticking two
+connections shows who either of them can introduce you to, and somebody
+reachable both ways counts under both. **Download CSV**
 takes the merged view.
 
 Jobs run one at a time, paced by the same randomised delay as the rest of the
