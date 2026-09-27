@@ -13,9 +13,12 @@ import * as agent from './agent.js';
 import * as network from './network.js';
 import { makeClient, askLLM } from '../llm.js';
 import { costOf } from '../pricing.js';
-import { nameScore } from './match.js';
+import { nameScore, normalise } from './match.js';
 
 const KEY = 'linkedin-intro';
+
+/** What a row's relevance can be. First value is the default. */
+export const RELEVANCE = ['Not Set', 'Ignore', 'High'];
 
 export const DEFAULT_PROMPT =
   'Here is the LinkedIn profile of someone a contact of mine could introduce me to. ' +
@@ -161,7 +164,7 @@ export const terms = () => [...new Set(load().jobs.map((j) => j.term))].sort();
  * turn behind that lookup — the queue is FIFO, so by the time the job runs the
  * connection has been matched or has failed to be.
  */
-export function addJob({ connectionName, introducerId, term, prompt }) {
+export function addJob({ connectionName, introducerId, term, prompt, qualify = true }) {
   const text = String(term || '').trim();
   if (!text) throw new Error('Give a search term.');
   const who = String(connectionName || '').trim();
@@ -179,13 +182,16 @@ export function addJob({ connectionName, introducerId, term, prompt }) {
   }
   if (!introducer) throw new Error('Could not add that connection.');
 
+  // Qualifying is optional: without it the job just collects the connections,
+  // which costs no profile loads and nothing to the model.
+  const wants = qualify !== false;
   const ask = String(prompt || s.prompt || DEFAULT_PROMPT).trim();
-  if (!ask) throw new Error('Give Jev a prompt.');
+  if (wants && !ask) throw new Error('Give Jev a prompt, or turn off qualifying.');
 
   // The same pair again is a re-run, not a second job.
   let job = s.jobs.find((j) => j.introducerId === introducer.id && j.term.toLowerCase() === text.toLowerCase());
   if (job) {
-    Object.assign(job, { prompt: ask, status: 'queued', error: null, skipped: null });
+    Object.assign(job, { prompt: ask, qualify: wants, status: 'queued', error: null, skipped: null });
   } else {
     job = {
       id: id(),
@@ -194,6 +200,7 @@ export function addJob({ connectionName, introducerId, term, prompt }) {
       connectionQuery: introducer.query,
       term: text,
       prompt: ask,
+      qualify: wants,
       status: 'queued',
       createdAt: new Date().toISOString(),
       lastRunAt: null,
@@ -239,19 +246,81 @@ export function clearQueue() {
   return state();
 }
 
+/** Your own judgement on a row: how relevant they are, and a note. */
+export function markRow(rowId, { relevance, note }) {
+  const s = load();
+  const row = s.rows.find((r) => r.id === rowId);
+  if (!row) throw new Error('No such row.');
+  if (relevance !== undefined) {
+    if (!RELEVANCE.includes(relevance)) throw new Error(`Relevance must be one of ${RELEVANCE.join(', ')}.`);
+    row.relevance = relevance;
+  }
+  if (note !== undefined) row.note = String(note).slice(0, 2000);
+  row.markedAt = new Date().toISOString();
+  save(s);
+  return row;
+}
+
 /** Ask the model again about one row — after changing the prompt, usually. */
 export async function reask(rowId, prompt) {
   const s = load();
   const row = s.rows.find((r) => r.id === rowId);
   if (!row) throw new Error('No such row.');
-  const text = String(prompt || s.prompt || DEFAULT_PROMPT).trim();
+  const text = String(prompt || row.prompt || s.prompt || DEFAULT_PROMPT).trim();
+
+  // A row from a job that did not qualify has nothing but its card, so there
+  // is nothing worth asking about yet: read the profile first. That is a page
+  // load, so it goes through the queue like any other.
+  if (!row.summary && !(row.positions || []).length) {
+    enqueue({ kind: 'qualify', rowId, prompt: text, label: `Qualifying ${row.name}` });
+    return { ...row, status: 'reading' };
+  }
+
   const answer = await ask(row, text);
   const fresh = load();
   const target = fresh.rows.find((r) => r.id === rowId);
-  if (target) Object.assign(target, answer, { prompt: text });
+  if (target) Object.assign(target, answer, { prompt: text, qualified: !answer.error });
   fresh.prompt = text;
   save(fresh);
   return target;
+}
+
+/** One row: read the profile, then put it to the model. */
+async function runQualify(job) {
+  const row = load().rows.find((r) => r.id === job.rowId);
+  if (!row) return;
+  upsertRow({ id: row.id, status: 'reading' });
+  note(`Reading ${row.name}…`);
+
+  let profile;
+  try {
+    profile = await agent.readProfileDetail(row.url);
+  } catch (err) {
+    upsertRow({ id: row.id, status: 'error', error: `Could not read the profile: ${err.message}` });
+    return;
+  }
+
+  const filled = {
+    ...row,
+    name: profile.name || row.name,
+    headline: profile.headline || row.headline,
+    company: profile.company || companyFrom(profile.headline) || row.company || '',
+    summary: profile.summary || '',
+    positions: profile.positions || [],
+    experienceText: profile.experienceText || '',
+    status: 'asking',
+  };
+  upsertRow(filled);
+
+  const answered = await ask(filled, job.prompt);
+  upsertRow({
+    ...filled,
+    ...answered,
+    prompt: job.prompt,
+    qualified: !answered.error,
+    status: answered.error ? 'error' : 'done',
+  });
+  note(`${filled.name}: ${answered.error ? answered.error : firstLine(answered.answer)}`);
 }
 
 // ----------------------------------------------------------------------- queue
@@ -292,6 +361,7 @@ async function drain() {
       current = job.label;
       try {
         if (job.kind === 'introducer') await runIntroducer(job);
+        else if (job.kind === 'qualify') await runQualify(job);
         else await runJob(job);
       } catch (err) {
         note(`${job.label}: ${err.message}`);
@@ -307,6 +377,12 @@ async function drain() {
 
 function markFailed(job, message) {
   const s = load();
+  if (job.kind === 'qualify') {
+    const row = s.rows.find((r) => r.id === job.rowId);
+    if (row) Object.assign(row, { status: 'error', error: message });
+    save(s);
+    return;
+  }
   if (job.kind === 'introducer') {
     const i = s.introducers.find((x) => x.id === job.introducerId);
     if (i) Object.assign(i, { status: 'error', error: message });
@@ -476,6 +552,9 @@ async function runJob(job) {
   patchJob({ pages: pages || 1 });
   patchJob({ searchUrl, found: targets.length });
 
+  const seen = alreadyChecked(entry.id);
+  let carried = 0;
+
   for (const target of targets) {
     // The same person through the same connection is the same row, re-read and
     // re-asked; through a different connection it is a different introduction.
@@ -498,6 +577,39 @@ async function runJob(job) {
       status: 'reading',
       at: new Date().toISOString(),
     };
+    // Not qualifying: the card is the whole row. No profile load, no model.
+    if (entry.qualify === false) {
+      upsertRow({ ...row, status: 'done', answer: '', qualified: false });
+      continue;
+    }
+
+    // Checked out already, under another connection: take what is known
+    // rather than loading the profile and asking about them a second time.
+    const before = seen.find(target.name, target.headline, shortUrl(target.url));
+    if (before) {
+      carried++;
+      upsertRow({
+        ...row,
+        title: before.title || row.title,
+        headline: before.headline || row.headline,
+        company: before.company || '',
+        summary: before.summary || '',
+        positions: before.positions || [],
+        experienceText: before.experienceText || '',
+        answer: before.answer,
+        model: before.model,
+        prompt: before.prompt,
+        // No new spend: this row is a copy of work already paid for.
+        cost: 0,
+        usage: null,
+        carriedFrom: { jobId: before.jobId, introducerName: before.introducerName, at: before.answeredAt || before.at },
+        error: null,
+        status: 'done',
+      });
+      note(`${row.name}: already checked via ${before.introducerName} — carried over.`);
+      continue;
+    }
+
     upsertRow(row);
 
     let profile;
@@ -522,14 +634,22 @@ async function runJob(job) {
     upsertRow(row);
 
     const answered = await ask(row, entry.prompt);
-    upsertRow({ ...row, ...answered, prompt: entry.prompt, status: answered.error ? 'error' : 'done' });
+    upsertRow({
+      ...row,
+      ...answered,
+      prompt: entry.prompt,
+      qualified: !answered.error,
+      status: answered.error ? 'error' : 'done',
+    });
     note(`${row.name}: ${answered.error ? answered.error : firstLine(answered.answer)}`);
   }
 
+  if (carried) note(`${carried} of ${targets.length} were already checked elsewhere and were not re-read.`);
   patchJob({
     status: 'done',
     error: null,
     skipped: null,
+    carried,
     lastRunAt: new Date().toISOString(),
     found: load().rows.filter((r) => r.jobId === entry.id).length,
   });
@@ -539,6 +659,32 @@ async function runJob(job) {
 const companyFrom = (headline) => String(headline || '').split(/\bat\b/i).slice(1).join(' at ').trim();
 
 const firstLine = (t) => String(t || '').split('\n')[0].slice(0, 120);
+
+/**
+ * Who a row is about, for spotting someone already looked at: their name and
+ * the title on their card, which is how you would recognise them yourself.
+ * The profile URL counts too — same link, same person, whatever it reads as.
+ */
+const personKey = (name, title) =>
+  `${normalise(name)}|${normalise(title)}`.replace(/\s+/g, ' ').trim();
+
+/** Rows already checked out, from every job but this one. */
+function alreadyChecked(exceptJobId) {
+  const byKey = new Map();
+  const byUrl = new Map();
+  for (const r of load().rows) {
+    // A re-run refreshes its own rows; only other jobs count as "already".
+    if (r.jobId === exceptJobId) continue;
+    if (r.status !== 'done' || !r.answer) continue;
+    const key = personKey(r.name, r.title || r.headline);
+    if (key.replace('|', '').trim() && !byKey.has(key)) byKey.set(key, r);
+    if (r.url && !byUrl.has(r.url)) byUrl.set(r.url, r);
+  }
+  return {
+    find: (name, title, url) => (url && byUrl.get(url)) || byKey.get(personKey(name, title)) || null,
+    size: byKey.size,
+  };
+}
 
 function upsertRow(row) {
   const s = load();

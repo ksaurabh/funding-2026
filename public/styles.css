@@ -712,6 +712,12 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-table tbody tr { cursor: default; }
 #in-table tbody tr:hover { background: none; }
 .category { font-weight: 500; }
+.field.dimmed { opacity: .45; }
+#in-table td:nth-child(6), #in-table td:nth-child(7) { white-space: nowrap; }
+.note-input { width: 150px; }
+.cell-select.rel-high { color: #1c6b40; font-weight: 600; }
+.cell-select.rel-ignore { color: var(--muted); text-decoration: line-through; }
+.star-btn { white-space: nowrap; }
 #in-job-prompt-text, #in-job-term, #in-job-who { font: inherit; font-size: 13px; width: 100%; }
 
 /* A stopped job shows the panel that defeated it, not just a message. */

@@ -4185,6 +4185,7 @@ const intro = {
   log: [],
   job: null,
   filter: '',
+  relevance: ['Not Set', 'Ignore', 'High'],
 };
 
 let introTimer = null;
@@ -4292,7 +4293,8 @@ function renderIntroJobs() {
         ]),
         pair('1st degree connection', (person?.name || j.introducerName) + connectionNote(j)),
         pair('Search term', j.term),
-        pair('Jev prompt', j.prompt, ' clamp'),
+        pair('Qualify with Jev', j.qualify === false ? 'no — connections only' : 'yes'),
+        j.qualify === false ? null : pair('Jev prompt', j.prompt, ' clamp'),
         j.picked
           ? pair(
               'Matched in LinkedIn',
@@ -4353,6 +4355,7 @@ function renderIntroDetail() {
     ? job.status === 'done'
       ? `${job.found || 0} connection${job.found === 1 ? '' : 's'}` +
         (job.pages > 1 ? ` across ${job.pages} pages` : '') +
+        (job.carried ? ` · ${job.carried} already checked elsewhere` : '') +
         ` · last run ${new Date(job.lastRunAt).toLocaleString()}`
       : job.status === 'error'
       ? 'stopped'
@@ -4379,6 +4382,9 @@ function renderIntroDetail() {
 }
 
 function renderIntroRows(rows) {
+  // A poll must not wipe out a note halfway through being typed.
+  if ($('#in-table').contains(document.activeElement)) return;
+
   $('#in-table thead').replaceChildren(
     el('tr', {}, [
       el('th', { textContent: '2nd degree connection' }),
@@ -4386,13 +4392,22 @@ function renderIntroRows(rows) {
       el('th', { textContent: 'Company' }),
       el('th', { textContent: 'LinkedIn profile' }),
       el('th', { textContent: 'Jev’s category' }),
+      el('th', { textContent: 'Relevance' }),
+      el('th', { textContent: 'Note' }),
     ])
   );
 
   $('#in-table tbody').replaceChildren(
     ...rows.map((r) => {
       const working = r.status === 'reading' || r.status === 'asking';
-      const again = el('button', { className: 'star-btn', textContent: '↻', title: 'Ask Jev again with this job’s prompt' });
+      const unqualified = !r.answer && !r.error && r.status === 'done';
+      const again = el('button', {
+        className: 'star-btn',
+        textContent: unqualified ? 'Qualify' : '↻',
+        title: unqualified
+          ? 'Read this profile and ask Jev about them'
+          : 'Ask Jev again with this job’s prompt',
+      });
       again.addEventListener('click', async (e) => {
         e.stopPropagation();
         try {
@@ -4409,6 +4424,15 @@ function renderIntroRows(rows) {
             document.createTextNode(r.name),
             // Some of them you already know directly; that changes who to ask.
             r.degree === '1st' ? el('span', { className: 'badge full', textContent: '1st' }) : null,
+            // And some were checked under another connection, so this row is
+            // that answer rather than a second look at the same person.
+            r.carriedFrom
+              ? el('span', {
+                  className: 'badge queued',
+                  textContent: 'already checked',
+                  title: `Checked via ${r.carriedFrom.introducerName} — not re-read or re-asked`,
+                })
+              : null,
           ]),
           (r.positions || []).length
             ? el('div', {
@@ -4431,18 +4455,74 @@ function renderIntroRows(rows) {
               ])
             : r.error
             ? el('span', { className: 'mon-error', textContent: r.error })
-            : el('span', { className: 'category', textContent: r.answer || '—' }),
+            : el('span', {
+                className: r.answer ? 'category' : 'muted',
+                textContent: r.answer || 'not qualified',
+              }),
           working ? null : again,
         ]),
+        el('td', {}, relevanceCell(r)),
+        el('td', {}, noteCell(r)),
       ]);
     })
   );
 
   if (!rows.length) {
     $('#in-table tbody').replaceChildren(
-      el('tr', {}, el('td', { colSpan: 5, className: 'muted', textContent: selectedJob() ? '' : 'No job selected.' }))
+      el('tr', {}, el('td', { colSpan: 7, className: 'muted', textContent: selectedJob() ? '' : 'No job selected.' }))
     );
   }
+}
+
+/** Save what you decided about one row, without reloading the table. */
+async function markRow(row, fields) {
+  Object.assign(row, fields);
+  try {
+    await api(`/api/linkedin/intro/rows/${row.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+  } catch (err) {
+    toast(err.message, 'bad');
+  }
+}
+
+/** Your call on a row: a dropdown, saved as you change it. */
+function relevanceCell(row) {
+  const current = row.relevance || intro.relevance[0];
+  const select = el('select', { className: 'cell-select rel-' + current.toLowerCase().replace(/\s+/g, '-') });
+  select.replaceChildren(
+    ...intro.relevance.map((v) => el('option', { value: v, textContent: v, selected: v === current }))
+  );
+  select.addEventListener('change', () => {
+    select.className = 'cell-select rel-' + select.value.toLowerCase().replace(/\s+/g, '-');
+    markRow(row, { relevance: select.value });
+  });
+  return select;
+}
+
+/** A short note, saved when you leave the box. */
+function noteCell(row) {
+  const input = el('input', {
+    className: 'cell-input note-input',
+    type: 'text',
+    value: row.note || '',
+    placeholder: '…',
+  });
+  const save = () => {
+    if ((row.note || '') === input.value) return;
+    markRow(row, { note: input.value });
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+    if (e.key === 'Escape') {
+      input.value = row.note || '';
+      input.blur();
+    }
+  });
+  return input;
 }
 
 /**
@@ -4518,6 +4598,14 @@ function openJobDialog({ job = null } = {}) {
 
   // An example prompt, there to be edited rather than written from scratch.
   $('#in-job-prompt-text').value = job ? job.prompt : intro.prompt || intro.defaultPrompt || '';
+  const qualify = $('#in-job-qualify');
+  qualify.checked = job ? job.qualify !== false : true;
+  const syncQualify = () => {
+    $('#in-job-prompt-text').disabled = !qualify.checked;
+    $('#in-job-prompt-text').closest('.field').classList.toggle('dimmed', !qualify.checked);
+  };
+  qualify.onchange = syncQualify;
+  syncQualify();
   $('#in-job-error').textContent = '';
   $('#in-job-save').textContent = job ? 'Save and run again' : 'Create job';
   $('#in-job-dialog').dataset.jobId = job ? job.id : '';
@@ -4536,13 +4624,18 @@ $('#in-job-save').addEventListener('click', async (e) => {
   const say = (msg) => ($('#in-job-error').textContent = msg);
   if (!jobId && !connectionName) return say('Name the 1st degree connection to go through.');
   if (!term) return say('Give a search term.');
-  if (!prompt) return say('Give Jev a prompt.');
+  if ($('#in-job-qualify').checked && !prompt) return say('Give Jev a prompt, or turn off qualifying.');
 
   let r;
   try {
     r = jobId
       ? await post(`/api/linkedin/intro/jobs/${jobId}/run`, { prompt })
-      : await post('/api/linkedin/intro/jobs', { connectionName, term, prompt });
+      : await post('/api/linkedin/intro/jobs', {
+          connectionName,
+          term,
+          prompt,
+          qualify: $('#in-job-qualify').checked,
+        });
   } catch (err) {
     return say(err.message);
   }

@@ -272,7 +272,13 @@ linkedinRoutes.get('/contacts.csv', (_req, res) => {
 // ------------------------------------------------------------ ask for an intro
 
 linkedinRoutes.get('/intro', (_req, res) =>
-  res.json({ ...intro.state(), cost: intro.totalCost(), terms: intro.terms(), defaultPrompt: intro.DEFAULT_PROMPT })
+  res.json({
+    ...intro.state(),
+    cost: intro.totalCost(),
+    terms: intro.terms(),
+    defaultPrompt: intro.DEFAULT_PROMPT,
+    relevance: intro.RELEVANCE,
+  })
 );
 
 linkedinRoutes.post('/intro/introducers', (req, res) => {
@@ -288,8 +294,8 @@ linkedinRoutes.delete('/intro/introducers/:id', (req, res) => res.json(intro.rem
 // A job is one connection × one term × one prompt.
 linkedinRoutes.post('/intro/jobs', (req, res) => {
   try {
-    const { connectionName, introducerId, term, prompt } = req.body || {};
-    res.json({ added: intro.addJob({ connectionName, introducerId, term, prompt }), ...intro.state() });
+    const { connectionName, introducerId, term, prompt, qualify } = req.body || {};
+    res.json({ added: intro.addJob({ connectionName, introducerId, term, prompt, qualify }), ...intro.state() });
   } catch (err) {
     fail(res, err);
   }
@@ -306,6 +312,16 @@ linkedinRoutes.post('/intro/jobs/:id/run', (req, res) => {
 linkedinRoutes.delete('/intro/jobs/:id', (req, res) => res.json(intro.removeJob(req.params.id)));
 
 linkedinRoutes.post('/intro/queue/clear', (_req, res) => res.json(intro.clearQueue()));
+
+// Your own call on a row: relevance and a note.
+linkedinRoutes.patch('/intro/rows/:id', (req, res) => {
+  try {
+    const { relevance, note } = req.body || {};
+    res.json({ row: intro.markRow(req.params.id, { relevance, note }) });
+  } catch (err) {
+    fail(res, err);
+  }
+});
 
 // Re-ask the model about one row, usually after rewording the prompt.
 linkedinRoutes.post('/intro/rows/:id/ask', async (req, res) => {
@@ -328,11 +344,35 @@ linkedinRoutes.get('/intro.csv', (_req, res) => {
     const s = v == null ? '' : String(v);
     return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   };
-  const cols = ['term', 'introducer', 'name', 'title', 'company', 'degree', 'linkedin', 'category'];
+  const cols = [
+    'term',
+    'introducer',
+    'name',
+    'title',
+    'company',
+    'degree',
+    'linkedin',
+    'category',
+    'relevance',
+    'note',
+    'already checked via',
+  ];
   const lines = [cols.join(',')];
   for (const r of intro.state().rows) {
     lines.push(
-      [r.term, r.introducerName, r.name, r.title || r.headline, r.company, r.degree, r.url, r.answer || r.error]
+      [
+        r.term,
+        r.introducerName,
+        r.name,
+        r.title || r.headline,
+        r.company,
+        r.degree,
+        r.url,
+        r.answer || r.error,
+        r.relevance || intro.RELEVANCE[0],
+        r.note || '',
+        r.carriedFrom?.introducerName || '',
+      ]
         .map(esc)
         .join(',')
     );

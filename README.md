@@ -508,8 +508,12 @@ for that page is the evidence to fix it from.
 Two panes: the fetch jobs down the left, and what the selected one found on the
 right.
 
-**+ New fetch job** asks for three things — a **1st degree connection** by name,
-a **search term** for their 2nd-degree connections, and a **Jev prompt**. The
+**+ New fetch job** asks for a **1st degree connection** by name, a **search
+term** for their 2nd-degree connections, and — if you want it — a **Jev
+prompt**. *Read each profile and ask Jev to qualify them* is a checkbox: off,
+the job just collects the connections (name, title, profile link), which costs
+no profile loads and nothing to the model, and any row can still be qualified
+later with the **Qualify** button on it. The
 connection need not exist yet: a name not seen before is looked up first (from
 **My network** if it is already there, which costs no LinkedIn traffic, else by
 searching), and the job runs after that. Both fields suggest what you have used
@@ -527,8 +531,17 @@ card (*no 1st-degree match*) and the job stops rather than guessing.
 
 Clicking a card fills the table: **2nd degree connection** (with the positions
 the answer was based on), **Title** — the second line of their card on the
-results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**
-and **Jev's category**, with a box to filter within that job.
+results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**,
+**Jev's category**, and then two of your own: **Relevance** (*Not Set*,
+*Ignore*, *High*) and **Note**, a free-text box for a line about them. Both
+save as you set them, survive everything, and go into the CSV. A box filters
+within the job.
+
+Someone already checked out under another connection is **not read or asked
+about again**: the row is filled in from what is already known, marked *already
+checked*, and costs nothing. Matching is on the profile link, or on name and
+title together — the same way you would recognise them. A job re-run still
+refreshes its own rows.
 
 Every page of the filtered list is read, not just the first — a well-connected
 person has ten of them, at ten results a page — stopping when a page adds
