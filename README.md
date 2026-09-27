@@ -535,7 +535,13 @@ results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**,
 **Jev's category**, and then two of your own: **Relevance** and **Note**, a free-text box for a line about them. Relevance
 starts as *Not Set*, *Ignore* or *High*, and its last entry is **Add a new
 option…** — type one and it is there for every row from then on, kept in
-`data/linkedin-intro.json`. Both
+`data/linkedin-intro.json`.
+
+Above the table sits a **Relevance** bar: one chip per option with how many
+rows carry it, any number of which can be on at once — *High* and *Chase this
+week* together, say — and a count of what is showing. None on means all of
+them. The text box narrows within that, and a row you re-mark while a filter
+is on leaves the view as soon as it no longer matches. Both
 save as you set them, survive everything, and go into the CSV. A box filters
 within the job.
 

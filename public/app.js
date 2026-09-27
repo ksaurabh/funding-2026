@@ -4197,7 +4197,7 @@ async function loadIntro() {
   clearInterval(introTimer);
   introTimer = setInterval(() => {
     if (parseHash().view !== 'intro') return clearInterval(introTimer);
-    if (intro.running || intro.pending) pollIntro();
+    pollIntro();
   }, 2500);
 }
 
@@ -4435,8 +4435,12 @@ function renderRelevanceFilter(job) {
 }
 
 function renderIntroRows(rows) {
-  // A poll must not wipe out a note halfway through being typed.
-  if ($('#in-table').contains(document.activeElement)) return;
+  // A poll must not wipe out a note halfway through being typed — but a
+  // button that was just clicked is also "focused", and holding the redraw
+  // for that is how a row ends up frozen on its old text.
+  const focused = document.activeElement;
+  const typing = focused && /^(INPUT|SELECT|TEXTAREA)$/.test(focused.tagName);
+  if (typing && $('#in-table').contains(focused)) return;
 
   $('#in-table thead').replaceChildren(
     el('tr', {}, [
@@ -4463,9 +4467,16 @@ function renderIntroRows(rows) {
       });
       again.addEventListener('click', async (e) => {
         e.stopPropagation();
+        // Say so at once: reading a profile is a paced page load, so the wait
+        // is several seconds and the row should not look untouched meanwhile.
+        Object.assign(r, { status: unqualified ? 'reading' : 'asking', error: null });
+        again.blur();
+        renderIntroDetail();
         try {
           await post(`/api/linkedin/intro/rows/${r.id}/ask`, { prompt: selectedJob()?.prompt });
         } catch (err) {
+          Object.assign(r, { status: 'error', error: err.message });
+          renderIntroDetail();
           return toast(err.message, 'bad');
         }
         pollIntro();

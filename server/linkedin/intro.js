@@ -300,6 +300,9 @@ export async function reask(rowId, prompt) {
   // is nothing worth asking about yet: read the profile first. That is a page
   // load, so it goes through the queue like any other.
   if (!row.summary && !(row.positions || []).length) {
+    // Record the wait, so a poll that lands before the queue picks this up
+    // does not put the row back to how it looked.
+    upsertRow({ id: rowId, status: 'reading', error: null });
     enqueue({ kind: 'qualify', rowId, prompt: text, label: `Qualifying ${row.name}` });
     return { ...row, status: 'reading' };
   }
