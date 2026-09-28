@@ -1073,6 +1073,63 @@ export function markPerson(rowIds, fields) {
   return last;
 }
 
+// ------------------------------------------------- asking for the introduction
+
+const EMAIL_SYSTEM =
+  'You write short, plain emails between people who already know each other. No marketing voice, ' +
+  'no superlatives, no "I hope this finds you well". The ask is small and easy to refuse, because ' +
+  'the recipient is doing a favour. British-neutral English, contractions fine, no exclamation marks.';
+
+/**
+ * A note to one of your connections asking whether they know these people well
+ * enough to introduce you. The people are listed for them to pick from — the
+ * point is to make saying "these two, not the others" easy.
+ */
+export async function draftEmail({ introducerName, keys, context }) {
+  const who = String(introducerName || '').trim();
+  if (!who) throw new Error('Say which connection the email is to.');
+  const wanted = new Set([].concat(keys || []));
+  if (!wanted.size) throw new Error('Pick at least one person to ask about.');
+
+  const chosen = people().filter((p) => wanted.has(p.key));
+  if (!chosen.length) throw new Error('Those people are no longer in the list.');
+
+  const s = settings();
+  if (!s.apiKey) throw new Error('No Anthropic API key. Add one on the Settings tab.');
+
+  const list = chosen
+    .map((p) => `- ${p.name}${p.title ? ` — ${p.title}` : ''}${p.company ? ` (${p.company})` : ''}`)
+    .join('\n');
+
+  const prompt =
+    `Write an email to ${who}, who is a first-degree LinkedIn connection of mine.\n\n` +
+    `LinkedIn says ${who} is connected to the people below. I would like an introduction to whichever ` +
+    'of them they actually know well enough to introduce me to — and I want it to be easy for them to ' +
+    'say "only this one" or "none of them, sorry".\n\n' +
+    `People:\n${list}\n\n` +
+    (context ? `Context about me and what I am raising for: ${context}\n\n` : '') +
+    'Give me the subject on the first line as "Subject: ...", then a blank line, then the body. ' +
+    'Keep the body under 150 words. List the people as a short list they can reply against. ' +
+    'Do not invent anything about my company or about them.';
+
+  const result = await askLLM(client(s), {
+    system: EMAIL_SYSTEM,
+    messages: [{ role: 'user', content: prompt }],
+    settings: { ...s, effort: 'low' },
+  });
+
+  const text = (result.text || '').trim();
+  const match = text.match(/^\s*subject:\s*(.+?)\s*\n([\s\S]*)$/i);
+  const subject = match ? match[1].trim() : `Intro to ${chosen.length === 1 ? chosen[0].name : 'a few people'}?`;
+  const body = (match ? match[2] : text).trim();
+
+  const cost = costOf(s.model, result.usage) || 0;
+  note(`Drafted an email to ${who} about ${chosen.length} ${chosen.length === 1 ? 'person' : 'people'}.`);
+  return { to: who, subject, body, people: chosen.map((p) => p.name), cost };
+}
+
+const client = (s) => makeClient(s.apiKey);
+
 /** What the rows cost to answer, all together. */
 export const totalCost = () => load().rows.reduce((sum, r) => sum + (r.cost || 0) + (r.oddsCost || 0), 0);
 

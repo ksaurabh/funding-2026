@@ -333,9 +333,10 @@
       <div id="in-people-via" class="chips"></div>
       <span id="in-people-count" class="filter-count"></span>
       <span class="spacer"></span>
+      <button id="in-people-email" class="primary hidden"></button>
       <button id="in-people-qualify" class="hidden"></button>
       <button id="in-people-estimate" class="hidden"></button>
-      <a href="/api/linkedin/intro/people.csv" class="btn">Download CSV</a>
+      <button id="in-people-csv"></button>
     </div>
     <div class="detail-body">
       <table id="in-people-table">
@@ -374,6 +375,39 @@
     </section>
   </div>
 </main>
+
+<dialog id="email-dialog">
+  <form method="dialog" class="dialog-head">
+    <h3>Ask for an introduction</h3>
+    <button value="close">Close</button>
+  </form>
+  <p id="email-who" class="muted small"></p>
+  <label class="field">
+    <span>Ask which connection</span>
+    <select id="email-connection"></select>
+  </label>
+  <label class="field">
+    <span>Anything Jev should know about you <em>(optional)</em></span>
+    <input id="email-context" type="text" placeholder="e.g. raising a seed round for an MDR startup" />
+  </label>
+  <div class="dialog-foot">
+    <button id="email-draft" class="primary">Draft the email</button>
+  </div>
+  <div id="email-result" class="hidden">
+    <label class="field">
+      <span>Subject</span>
+      <input id="email-subject" type="text" />
+    </label>
+    <label class="field">
+      <span>Body</span>
+      <textarea id="email-body" rows="12"></textarea>
+    </label>
+    <div class="dialog-foot">
+      <button id="email-copy">Copy</button>
+      <a id="email-open" class="btn" href="#">Open in mail</a>
+    </div>
+  </div>
+</dialog>
 
 <dialog id="capture-dialog">
   <form method="dialog" class="dialog-head">

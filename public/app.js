@@ -4132,6 +4132,8 @@ const people = {
   oddsFilter: new Set(),
   // Which connections to show people through; empty means all of them.
   viaFilter: new Set(),
+  // Who is ticked, for the email.
+  picked: new Set(),
   odds: ['70%+', '50-70%', '30-50%', '10-30%', '<10%'],
   loaded: false,
 };
@@ -4314,6 +4316,17 @@ function renderPeople() {
     loadPeople();
   };
 
+  // Downloading takes what is on screen, which is the point of the filters.
+  const filtered = rows.length !== people.rows.length;
+  $('#in-people-csv').textContent = filtered ? `Download ${rows.length} showing` : `Download CSV (${rows.length})`;
+  $('#in-people-csv').onclick = () => downloadPeopleCsv(rows, filtered);
+
+  // The email goes to one connection about whoever is ticked.
+  const picked = rows.filter((p) => people.picked.has(p.key));
+  $('#in-people-email').classList.toggle('hidden', !picked.length);
+  $('#in-people-email').textContent = `Ask for an intro to ${picked.length}`;
+  $('#in-people-email').onclick = () => openEmailDialog(picked);
+
   const toEstimate = rows.filter((p) => !p.odds);
   $('#in-people-estimate').classList.remove('danger');
   $('#in-people-estimate').disabled = false;
@@ -4325,8 +4338,18 @@ function renderPeople() {
 }
 
 function renderPeopleRows(rows) {
+  const allTicked = rows.length > 0 && rows.every((p) => people.picked.has(p.key));
+  const someTicked = !allTicked && rows.some((p) => people.picked.has(p.key));
+  const tickAll = el('input', { type: 'checkbox', checked: allTicked, title: 'Select everyone showing' });
+  tickAll.indeterminate = someTicked;
+  tickAll.addEventListener('change', () => {
+    for (const p of rows) (tickAll.checked ? people.picked.add(p.key) : people.picked.delete(p.key));
+    renderPeople();
+  });
+
   $('#in-people-table thead').replaceChildren(
     el('tr', {}, [
+      el('th', { className: 'tick' }, tickAll),
       el('th', { textContent: '2nd degree connection' }),
       el('th', { textContent: 'Title' }),
       el('th', { textContent: 'Company' }),
@@ -4344,8 +4367,16 @@ function renderPeopleRows(rows) {
   if (typing && $('#in-people-table').contains(focused)) return;
 
   $('#in-people-table tbody').replaceChildren(
-    ...rows.map((p) =>
-      el('tr', {}, [
+    ...rows.map((p) => {
+      const tick = el('input', { type: 'checkbox', checked: people.picked.has(p.key) });
+      tick.addEventListener('change', () => {
+        if (tick.checked) people.picked.add(p.key);
+        else people.picked.delete(p.key);
+        renderPeople();
+      });
+
+      return el('tr', {}, [
+        el('td', { className: 'tick' }, tick),
         el('td', {}, [
           el('div', {}, [
             document.createTextNode(p.name),
@@ -4364,8 +4395,8 @@ function renderPeopleRows(rows) {
         el('td', {}, oddsCell(p)),
         el('td', {}, personRelevanceCell(p)),
         el('td', {}, personNoteCell(p)),
-      ])
-    )
+      ]);
+    })
   );
 
   if (!rows.length) {
@@ -4374,7 +4405,7 @@ function renderPeopleRows(rows) {
         'tr',
         {},
         el('td', {
-          colSpan: 9,
+          colSpan: 10,
           className: 'muted',
           textContent: people.rows.length ? 'Nothing matches those filters.' : 'No jobs have found anyone yet.',
         })
@@ -4413,6 +4444,132 @@ function categoryCell(person) {
     go,
   ]);
 }
+
+/** What is on screen, as a CSV file, with the same columns as the endpoint. */
+function downloadPeopleCsv(rows, filtered) {
+  const esc = (v) => {
+    const t = v == null ? '' : String(v);
+    return /[",\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+  };
+  const cols = [
+    'name',
+    'title',
+    'company',
+    'degree',
+    'linkedin',
+    'connected via',
+    'category',
+    'investor likelihood',
+    'relevance',
+    'note',
+  ];
+  const lines = [cols.join(',')];
+  for (const p of rows) {
+    lines.push(
+      [
+        p.name,
+        p.title,
+        p.company,
+        p.degree,
+        p.url,
+        p.via.map((v) => v.name).join('; '),
+        p.answer,
+        p.odds,
+        p.relevance,
+        p.note,
+      ]
+        .map(esc)
+        .join(',')
+    );
+  }
+
+  const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+  const a = el('a', { href: url, download: filtered ? 'second-degree-showing.csv' : 'second-degree-connections.csv' });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  toast(`${rows.length} row${rows.length === 1 ? '' : 's'} downloaded`);
+}
+
+// ------------------------------------------- asking a connection for an intro
+
+/** Who could introduce these people, most reachable first. */
+function connectionsFor(picked) {
+  const counts = new Map();
+  for (const p of picked) {
+    for (const v of p.via) counts.set(v.name, (counts.get(v.name) || 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function openEmailDialog(picked) {
+  const options = connectionsFor(picked);
+  if (!options.length) return toast('Nobody connects you to those people.', 'bad');
+
+  $('#email-connection').replaceChildren(
+    ...options.map(([name, n]) =>
+      el('option', { value: name, textContent: `${name} — knows ${n} of ${picked.length}` })
+    )
+  );
+  const describe = () => {
+    const name = $('#email-connection').value;
+    const reachable = picked.filter((p) => p.via.some((v) => v.name === name));
+    $('#email-who').textContent =
+      `Asking ${name} about ${reachable.length} of the ${picked.length} ticked: ` +
+      reachable.map((p) => p.name).join(', ');
+    return reachable;
+  };
+  describe();
+  $('#email-connection').onchange = describe;
+
+  $('#email-result').classList.add('hidden');
+  $('#email-draft').disabled = false;
+  $('#email-draft').textContent = 'Draft the email';
+  $('#email-draft').onclick = async (e) => {
+    e.preventDefault();
+    const name = $('#email-connection').value;
+    // Only the people that connection can actually reach — asking them about
+    // someone they have no link to is how a favour turns into a chore.
+    const reachable = picked.filter((p) => p.via.some((v) => v.name === name));
+    $('#email-draft').disabled = true;
+    $('#email-draft').textContent = 'Drafting…';
+    let draft;
+    try {
+      draft = await post('/api/linkedin/intro/email', {
+        introducerName: name,
+        keys: reachable.map((p) => p.key),
+        context: $('#email-context').value.trim(),
+      });
+    } catch (err) {
+      $('#email-draft').disabled = false;
+      $('#email-draft').textContent = 'Draft the email';
+      return toast(err.message, 'bad');
+    }
+    $('#email-draft').disabled = false;
+    $('#email-draft').textContent = 'Draft again';
+    $('#email-subject').value = draft.subject;
+    $('#email-body').value = draft.body;
+    $('#email-result').classList.remove('hidden');
+    $('#email-open').href =
+      `mailto:?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`;
+  };
+
+  $('#email-dialog').showModal();
+}
+
+$('#email-copy').addEventListener('click', async (e) => {
+  e.preventDefault();
+  const text = `Subject: ${$('#email-subject').value}\n\n${$('#email-body').value}`;
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Copied', 'good');
+  } catch {
+    // Clipboard access can be refused; selecting it is the fallback.
+    $('#email-body').select();
+    toast('Press ⌘C to copy');
+  }
+});
 
 /** The likelihood band, or the means of asking for one. */
 function oddsCell(person) {

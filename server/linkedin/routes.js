@@ -318,6 +318,16 @@ linkedinRoutes.get('/intro/people', (_req, res) =>
   res.json({ people: intro.people(), relevance: intro.relevance(), odds: intro.ODDS })
 );
 
+// An email to one connection, asking about the people picked.
+linkedinRoutes.post('/intro/email', async (req, res) => {
+  try {
+    const { introducerName, keys, context } = req.body || {};
+    res.json(await intro.draftEmail({ introducerName, keys, context }));
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 // Read and ask about several people at once.
 linkedinRoutes.post('/intro/people/qualify', (req, res) => {
   try {

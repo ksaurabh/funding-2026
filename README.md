@@ -629,6 +629,14 @@ about everyone showing; no profile is loaded, so it is one short model call
 each. While that runs the button becomes **Stop estimating**, which cuts the
 call in flight and keeps every band already decided.
 
+Tick people and **Ask for an intro to n** drafts the email. It asks which
+connection to send it to, offering each one with how many of the ticked people
+they can actually reach (*"Sam Okoye — knows 4 of 4"*), and writes only about
+those — asking somebody about a person they have no link to turns a favour
+into a chore. You can say a line about yourself for context, edit the subject
+and body, then copy it or open it in your mail client. The tone is a small ask
+that is easy to refuse, since that is what it is.
+
 Your marks belong to the person, not to the path. Relevance or a note set on
 one job's row shows here; set here, it is written back to every row for them,
 so it shows on each job too. Whatever any job learned about them — the title,
@@ -641,8 +649,9 @@ via**, one chip per connection with how many people they can reach. Each group
 counts over what the others leave, so the numbers are what you would actually
 get. Ticking neither, or all, in a group shows all of it; ticking two
 connections shows who either of them can introduce you to, and somebody
-reachable both ways counts under both. **Download CSV**
-takes the merged view.
+reachable both ways counts under both. **Download** takes what is on
+screen — the button says *Download 12 showing* once a filter is narrowing it,
+and the whole list otherwise, with the same columns either way.
 
 Jobs run one at a time, paced by the same randomised delay as the rest of the
 agent; **Clear queue** drops what has not started, and **Stop job** ends the
