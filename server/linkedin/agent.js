@@ -852,9 +852,21 @@ const ready = async () => {
 export async function searchByName(name, { threshold = 0.8 } = {}) {
   await ready();
   const candidates = await searchPeople(name, '');
-  if (!candidates.length) return { candidates: [], best: null, accepted: false };
+
+  // Always keep the page. A lookup that finds nobody is the case most worth
+  // having evidence for, and until now it was the one path that saved none.
+  const shot = await capture(`Search: ${name}`, { fullPage: true });
+  const evidence = {
+    searchUrl: page.url(),
+    shot: shot?.file || null,
+    html: shot?.html || null,
+    shotPath: shot?.file ? path.join(SHOTS_DIR, shot.file) : null,
+    htmlPath: shot?.html ? path.join(SHOTS_DIR, shot.html) : null,
+  };
+
+  if (!candidates.length) return { candidates: [], best: null, accepted: false, ...evidence };
   const { best, accepted, all } = pickBest({ name, company: '' }, candidates, threshold);
-  return { candidates: all, best, accepted };
+  return { candidates: all, best, accepted, ...evidence };
 }
 
 /**

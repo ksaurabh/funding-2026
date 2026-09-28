@@ -498,21 +498,36 @@ async function runIntroducer(job) {
   if (!entry) return;
 
   note(`Looking for ${entry.query} among your connections…`);
-  const { candidates, best } = await agent.searchByName(entry.query);
+  const { candidates, best, searchUrl, shot, html, shotPath, htmlPath } = await agent.searchByName(entry.query);
   const first = candidates.filter((c) => c.degree === '1st');
   const pick = first[0] || null;
+
+  // Say what the search actually turned up, so "no match" is a conclusion you
+  // can check rather than an assertion.
+  note(
+    candidates.length
+      ? `${entry.query}: ${candidates.length} result${candidates.length === 1 ? '' : 's'} — ` +
+        candidates
+          .slice(0, 5)
+          .map((c) => `${c.name}${c.degree ? ` (${c.degree})` : ''}`)
+          .join(', ')
+      : `${entry.query}: the results page listed nobody.`
+  );
 
   const s = load();
   const row = s.introducers.find((i) => i.id === job.introducerId);
   if (!row) return;
+
+  const evidence = { searchUrl, shot: shot || null, html: html || null, shotPath: shotPath || null, htmlPath: htmlPath || null };
 
   if (!pick) {
     Object.assign(row, {
       status: best ? 'unsure' : 'error',
       error: best
         ? `Closest match was ${best.name}${best.degree ? ` (${best.degree})` : ''}, not a first-degree connection.`
-        : 'Nobody came back for that name.',
-      candidates: candidates.slice(0, 3).map(brief),
+        : 'Nobody came back on the results page for that name.',
+      candidates: candidates.slice(0, 5).map(brief),
+      evidence,
     });
     note(`${entry.query}: ${row.error}`);
   } else {
@@ -525,7 +540,8 @@ async function runIntroducer(job) {
       source: 'search',
       status: 'ok',
       error: null,
-      candidates: candidates.slice(0, 3).map(brief),
+      candidates: candidates.slice(0, 5).map(brief),
+      evidence,
     });
     note(`${entry.query} → ${pick.name} (1st degree).`);
   }

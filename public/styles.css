@@ -728,6 +728,9 @@ th.star, td.star { width: 24px; padding-right: 0; }
 #in-people-table tbody tr { cursor: default; }
 #in-people-table tbody tr:hover { background: none; }
 .via-list { display: flex; flex-wrap: wrap; gap: 4px; }
+.evidence { margin-top: 6px; }
+.evidence summary { cursor: pointer; }
+.evidence > div { margin-top: 4px; }
 #in-people-table th.tick, #in-people-table td.tick { width: 26px; padding-right: 0; }
 #email-dialog { max-width: min(680px, 92vw); }
 #email-body, #email-subject { font: inherit; font-size: 13px; width: 100%; }

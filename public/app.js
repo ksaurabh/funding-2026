@@ -4764,6 +4764,8 @@ const intro = {
   log: [],
   job: null,
   tab: 'jobs',
+  // Which connections have their evidence open, so a repaint does not shut it.
+  openEvidence: new Set(),
   filter: '',
   relevance: ['Not Set', 'Ignore', 'High'],
   // Which relevances to show; empty means all of them.
@@ -4824,6 +4826,62 @@ function renderIntro() {
   $('#in-stop').classList.toggle('hidden', !intro.running);
   $('#in-stop').disabled = !!intro.stopping;
   $('#in-stop').textContent = intro.stopping ? 'Stopping…' : 'Stop job';
+}
+
+/**
+ * Why a connection was not matched: what the results page listed, and links to
+ * that page. "No first-degree match" is a claim; this is the evidence for it.
+ */
+function connectionEvidence(person) {
+  const e = person.evidence || {};
+  const rows = person.candidates || [];
+  if (!rows.length && !e.shot) return null;
+
+  const box = el('details', { className: 'evidence', open: intro.openEvidence.has(person.id) }, [
+    el('summary', { className: 'muted small', textContent: `What the search for "${person.query}" found` }),
+    rows.length
+      ? el(
+          'div',
+          { className: 'muted small' },
+          rows.map((c) =>
+            el('div', {}, [
+              c.url
+                ? el('a', { href: c.url, target: '_blank', rel: 'noreferrer', textContent: c.name })
+                : document.createTextNode(c.name),
+              document.createTextNode(
+                `${c.degree ? ` · ${c.degree}` : ''}${c.headline ? ` · ${c.headline}` : ''}`
+              ),
+            ])
+          )
+        )
+      : el('div', { className: 'muted small', textContent: 'The results page listed nobody.' }),
+    el('div', { className: 'skip-links' }, [
+      e.searchUrl
+        ? el('a', { href: e.searchUrl, target: '_blank', rel: 'noreferrer', textContent: 'The search on LinkedIn' })
+        : null,
+      e.shot
+        ? el('a', { href: `/api/linkedin/shots/${e.shot}`, target: '_blank', rel: 'noreferrer', textContent: 'Screenshot' })
+        : null,
+      e.html
+        ? el('a', { href: `/api/linkedin/shots/${e.html}`, target: '_blank', rel: 'noreferrer', textContent: 'Saved HTML' })
+        : null,
+    ]),
+    e.shotPath || e.htmlPath
+      ? el(
+          'div',
+          { className: 'muted small skip-paths' },
+          [e.shotPath, e.htmlPath].filter(Boolean).map((f) => el('div', { textContent: f }))
+        )
+      : null,
+  ]);
+
+  // Opening this is not picking the job, and the next poll must not shut it.
+  box.addEventListener('click', (e) => e.stopPropagation());
+  box.addEventListener('toggle', () => {
+    if (box.open) intro.openEvidence.add(person.id);
+    else intro.openEvidence.delete(person.id);
+  });
+  return box;
 }
 
 /** One card per job, showing what it was made of and how it went. */
@@ -4915,6 +4973,9 @@ function renderIntroJobs() {
           j.status === 'error' ? '—' : `${j.found || 0}`
         ),
         j.error ? el('div', { className: 'mon-error small', textContent: j.error }) : null,
+        // A connection that could not be matched shows what the search read,
+        // and the page it read it from.
+        person && person.status !== 'ok' ? connectionEvidence(person) : null,
         el('div', { className: 'job-card-foot' }, [rerun, edit, drop]),
       ]);
       card.addEventListener('click', () => {
