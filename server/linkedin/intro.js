@@ -183,6 +183,30 @@ function bestInNetwork(name) {
   return best;
 }
 
+/**
+ * Look a connection up again.
+ *
+ * A name that failed once stays on the list with no profile, and every job
+ * naming it used to reuse that dead record — so the job stopped saying they
+ * were never matched, without anything having searched. Anything that needs a
+ * profile asks for the lookup instead.
+ */
+export function relookup(introducerId, { front = false } = {}) {
+  const s = load();
+  const entry = s.introducers.find((i) => i.id === introducerId);
+  if (!entry || entry.url) return false;
+  if (queue.some((q) => q.kind === 'introducer' && q.introducerId === introducerId)) return true;
+
+  Object.assign(entry, { status: 'queued', error: null });
+  save(s);
+  const item = { kind: 'introducer', introducerId, label: entry.query };
+  if (front) queue.unshift(item);
+  else queue.push(item);
+  note(`${entry.query} has no profile yet — looking them up again.`);
+  drain().catch((err) => note(`Stopped: ${err.message}`));
+  return true;
+}
+
 export function removeIntroducer(introducerId) {
   const s = load();
   s.introducers = s.introducers.filter((i) => i.id !== introducerId);
@@ -226,6 +250,9 @@ export function addJob({ connectionName, introducerId, term, prompt, qualify = t
     s = load();
   }
   if (!introducer) throw new Error('Could not add that connection.');
+  // Named someone who is on the list but was never matched: search again,
+  // rather than making a job that can only fail the same way.
+  if (!introducer.url) relookup(introducer.id);
 
   // Qualifying is optional: without it the job just collects the connections,
   // which costs no profile loads and nothing to the model.
@@ -266,6 +293,8 @@ export function runJobAgain(jobId, prompt) {
   if (!job) throw new Error('No such job.');
   if (running && current === jobLabel(job)) throw new Error('That job is running right now.');
   if (prompt) job.prompt = String(prompt).trim();
+  // Same for a re-run: a connection with no profile is looked up first.
+  relookup(job.introducerId, { front: true });
   Object.assign(job, { status: 'queued', error: null, skipped: null });
   save(s);
 
@@ -498,7 +527,8 @@ async function runIntroducer(job) {
   if (!entry) return;
 
   note(`Looking for ${entry.query} among your connections…`);
-  const { candidates, best, searchUrl, shot, html, shotPath, htmlPath } = await agent.searchByName(entry.query);
+  const { candidates, best, searchUrl, shot, html, shotPath, htmlPath, pageReady, pageText } =
+    await agent.searchByName(entry.query);
   const first = candidates.filter((c) => c.degree === '1st');
   const pick = first[0] || null;
 
@@ -511,6 +541,8 @@ async function runIntroducer(job) {
           .slice(0, 5)
           .map((c) => `${c.name}${c.degree ? ` (${c.degree})` : ''}`)
           .join(', ')
+      : pageReady === false
+      ? `${entry.query}: the search page never finished loading.`
       : `${entry.query}: the results page listed nobody.`
   );
 
@@ -518,13 +550,22 @@ async function runIntroducer(job) {
   const row = s.introducers.find((i) => i.id === job.introducerId);
   if (!row) return;
 
-  const evidence = { searchUrl, shot: shot || null, html: html || null, shotPath: shotPath || null, htmlPath: htmlPath || null };
+  const evidence = {
+    searchUrl,
+    shot: shot || null,
+    html: html || null,
+    shotPath: shotPath || null,
+    htmlPath: htmlPath || null,
+    pageText: pageText || '',
+  };
 
   if (!pick) {
     Object.assign(row, {
       status: best ? 'unsure' : 'error',
       error: best
         ? `Closest match was ${best.name}${best.degree ? ` (${best.degree})` : ''}, not a first-degree connection.`
+        : pageReady === false
+        ? 'The search page never finished loading — nothing was read from it.'
         : 'Nobody came back on the results page for that name.',
       candidates: candidates.slice(0, 5).map(brief),
       evidence,

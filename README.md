@@ -530,6 +530,17 @@ fetched**, a *done / running / queued / stopped* badge, and **Re-run**, **Edit
 prompt** and **Delete**. A connection that could not be matched says so on the
 card (*no 1st-degree match*) and the job stops rather than guessing.
 
+A search page is waited for before it is read. The URL returns a shell that
+fills in afterwards, so a read taken on arrival finds nobody and says exactly
+that — indistinguishable from a search that found nobody. The agent waits for
+the page's own *"I'm looking for"* box, then for results or a stated absence,
+and counts only what is actually rendered: markup that is present but not yet
+on screen is not a result.
+
+A name that was looked up and not matched is looked up **again** whenever a
+job needs it, rather than the job reusing that dead record and stopping with
+"never matched" without anything having searched.
+
 Either way the search is kept. The audit log names every result it read with
 their degree, and the card carries a **What the search for "…" found**
 disclosure holding the candidates, a link to that search on LinkedIn, and the

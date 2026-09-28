@@ -291,6 +291,16 @@ linkedinRoutes.post('/intro/introducers', (req, res) => {
 
 linkedinRoutes.delete('/intro/introducers/:id', (req, res) => res.json(intro.removeIntroducer(req.params.id)));
 
+// Search for a connection again, after a lookup that found nobody.
+linkedinRoutes.post('/intro/introducers/:id/lookup', (req, res) => {
+  try {
+    const started = intro.relookup(req.params.id);
+    res.json({ started, ...intro.state() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 // A job is one connection × one term × one prompt.
 linkedinRoutes.post('/intro/jobs', (req, res) => {
   try {

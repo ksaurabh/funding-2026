@@ -19,6 +19,7 @@ import {
   findTypeaheadOptionsInPage,
   findAllFiltersButtonInPage,
   findShowResultsInPage,
+  searchPageStateInPage,
   readConnectionsSelectionInPage,
 } from './extract.js';
 import { pickBest, nameScore } from './match.js';
@@ -292,6 +293,24 @@ async function dumpHtml(tag) {
 }
 
 /**
+ * Wait for a search page to render before reading it.
+ *
+ * The URL returns a shell and fills in after; reading on arrival finds nobody
+ * and says so, which looks exactly like a search that found nobody. Ready
+ * means its own "I'm looking for" box is up, or there are results, or the page
+ * says there are none.
+ */
+async function waitForSearchPage(tries = 20) {
+  let state = null;
+  for (let attempt = 0; attempt < tries; attempt++) {
+    state = await page.evaluate(searchPageStateInPage).catch(() => null);
+    if (state?.ready) return state;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return state || { ready: false, people: 0, searchBox: false, empty: false, text: '' };
+}
+
+/**
  * Search people and read the result cards.
  *
  * Extraction is structural — every profile link is a person, the block around
@@ -301,6 +320,16 @@ async function dumpHtml(tag) {
 async function searchPeople(name, company) {
   const q = [name, company].filter(Boolean).join(' ');
   await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(q)}`);
+  const state = await waitForSearchPage();
+  // The box comes up before the results do; give those their own wait rather
+  // than reading a page that is still filling in.
+  if (state.searchBox && !state.people && !state.empty) {
+    for (let attempt = 0; attempt < 16; attempt++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const now = await page.evaluate(searchPageStateInPage).catch(() => null);
+      if (now?.people || now?.empty) break;
+    }
+  }
 
   let people = [];
   try {
@@ -864,7 +893,17 @@ export async function searchByName(name, { threshold = 0.8 } = {}) {
     htmlPath: shot?.html ? path.join(SHOTS_DIR, shot.html) : null,
   };
 
-  if (!candidates.length) return { candidates: [], best: null, accepted: false, ...evidence };
+  if (!candidates.length) {
+    const state = await page.evaluate(searchPageStateInPage).catch(() => null);
+    return {
+      candidates: [],
+      best: null,
+      accepted: false,
+      ...evidence,
+      pageReady: !!state?.ready,
+      pageText: state?.text || '',
+    };
+  }
   const { best, accepted, all } = pickBest({ name, company: '' }, candidates, threshold);
   return { candidates: all, best, accepted, ...evidence };
 }
@@ -1095,6 +1134,7 @@ async function applyConnectionsOfFilter(personName) {
 export async function searchConnectionsOf({ term, introducerName, limit = 0, onPage, shouldStop } = {}) {
   await ready();
   await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(term)}`);
+  await waitForSearchPage();
 
   const filter = await applyConnectionsOfFilter(introducerName);
   if (!filter.ok) {
@@ -1123,6 +1163,7 @@ export async function searchConnectionsOf({ term, introducerName, limit = 0, onP
       const url = new URL(startUrl);
       url.searchParams.set('page', String(pageNo));
       await visit(url.toString());
+      await waitForSearchPage();
       // Paging past the end lands back on the unfiltered search on some
       // layouts; stop rather than collect strangers.
       if (!SELECTORS.connectionFacetParam.test(page.url())) break;

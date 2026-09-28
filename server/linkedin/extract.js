@@ -508,3 +508,43 @@ export function readConnectionsSelectionInPage() {
 
   return { found: true, selected: [...new Set(names)], sectionText: clean(section.innerText).slice(0, 400) };
 }
+
+/**
+ * Whether a people-search page has actually rendered.
+ *
+ * Navigating to a search URL returns a shell that fills in afterwards, so a
+ * read taken on arrival finds nobody and reports exactly that. The page is
+ * ready once its own search box is there — the one with the "I'm looking for"
+ * placeholder — or once there are results, or once it says there are none.
+ *
+ * Runs inside the page via page.evaluate.
+ */
+export function searchPageStateInPage() {
+  const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
+  const main = document.querySelector('main') || document.body;
+
+  // Rendered, not merely present: a page part way through loading can already
+  // hold the markup with none of it on screen, and reading that finds nothing
+  // while looking like a page that is ready.
+  const shown = (n) => {
+    const r = n.getBoundingClientRect();
+    return r.width > 0 && r.height > 0;
+  };
+
+  const box = [...document.querySelectorAll('input, [role="combobox"]')].find(
+    (n) =>
+      /looking for/i.test(n.getAttribute('placeholder') || n.getAttribute('aria-label') || '') && shown(n)
+  );
+  const people = [...main.querySelectorAll('a[href*="/in/"]')].filter(shown).length;
+  const text = clean(main.innerText);
+  const empty = /no results found|couldn't find anything|no matches/i.test(text);
+
+  return {
+    ready: !!box || people > 0 || empty,
+    searchBox: !!box,
+    people,
+    empty,
+    // Enough of the page to tell a loading shell from a real empty result.
+    text: text.slice(0, 200),
+  };
+}
