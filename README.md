@@ -530,6 +530,12 @@ fetched**, a *done / running / queued / stopped* badge, and **Re-run**, **Edit
 prompt** and **Delete**. A connection that could not be matched says so on the
 card (*no 1st-degree match*) and the job stops rather than guessing.
 
+Either way the search is kept. The audit log names every result it read with
+their degree, and the card carries a **What the search for "…" found**
+disclosure holding the candidates, a link to that search on LinkedIn, and the
+screenshot and HTML of the page it read, with their paths — so a connection
+that was not matched is a conclusion you can check rather than an assertion.
+
 Clicking a card fills the table: **2nd degree connection** (with the positions
 the answer was based on), **Title** — the second line of their card on the
 results page, kept as LinkedIn showed it — **Company**, **LinkedIn profile**,
