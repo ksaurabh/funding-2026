@@ -425,14 +425,25 @@
     <h3 id="in-job-dialog-title">New fetch connection job</h3>
     <button value="close">Cancel</button>
   </form>
-  <p id="in-job-dialog-who" class="muted small"></p>
   <label class="field">
-    <span>1st degree connection</span>
-    <input id="in-job-who" type="text" placeholder="Someone you know, e.g. Dana Bridge" autocomplete="off" list="in-people-list" />
-    <datalist id="in-people-list"></datalist>
+    <span>What to search</span>
+    <select id="in-job-kind">
+      <option value="connection">One connection's network — who they can introduce me to</option>
+      <option value="company">A company — who works there, and who of mine can reach them</option>
+    </select>
+  </label>
+  <p id="in-job-dialog-who" class="muted small"></p>
+  <label class="field" id="in-job-who-field">
+    <span>Connected via</span>
+    <select id="in-job-who"></select>
+  </label>
+  <label class="field hidden" id="in-job-company-field">
+    <span>Current company</span>
+    <input id="in-job-company" type="text" placeholder="e.g. Google Ventures" autocomplete="off" list="in-company-list" />
+    <datalist id="in-company-list"></datalist>
   </label>
   <label class="field">
-    <span>Search term for 2nd degree connections</span>
+    <span id="in-job-term-label">Search term for 2nd degree connections</span>
     <input id="in-job-term" type="text" placeholder="e.g. Partner, CISO, security investor" autocomplete="off" list="in-term-list" />
     <datalist id="in-term-list"></datalist>
   </label>

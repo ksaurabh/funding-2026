@@ -4682,6 +4682,26 @@ $('#in-people-filter').addEventListener('input', (e) => {
   renderPeople();
 });
 
+const NEW_CONNECTION = '__new__';
+
+/** Show the fields the chosen kind of job actually uses. */
+function syncJobKind(job) {
+  const kind = $('#in-job-kind').value;
+  const company = kind === 'company';
+  $('#in-job-who-field').classList.toggle('hidden', company);
+  $('#in-job-company-field').classList.toggle('hidden', !company);
+  $('#in-job-term-label').textContent = company
+    ? 'Search term (optional — blank means everyone there)'
+    : 'Search term for 2nd degree connections';
+  $('#in-job-dialog-who').textContent = job
+    ? 'What it searches is fixed; change the prompt and run it again.'
+    : company
+    ? 'Everyone at that company matching the term, with whichever of your connections can reach each of them.'
+    : 'Whoever that connection can introduce you to. A name you have not used before is looked up first.';
+}
+
+$('#in-job-kind').addEventListener('change', () => syncJobKind(null));
+
 /** Which half of the tab you are looking at. */
 function showIntroTab(which) {
   intro.tab = which;
@@ -4953,11 +4973,13 @@ function renderIntroJobs() {
 
       const card = el('div', { className: 'job-card' + (intro.job === j.id ? ' on' : '') }, [
         el('div', { className: 'job-card-head' }, [
-          el('strong', { textContent: j.term || '—' }),
+          el('strong', { textContent: j.kind === 'company' ? j.company : j.term || '—' }),
           state,
         ]),
-        pair('1st degree connection', (person?.name || j.introducerName) + connectionNote(j)),
-        pair('Search term', j.term),
+        j.kind === 'company'
+          ? pair('Current company', j.company)
+          : pair('1st degree connection', (person?.name || j.introducerName) + connectionNote(j)),
+        pair('Search term', j.term || '(everyone there)'),
         pair('Qualify with Jev', j.qualify === false ? 'no — connections only' : 'yes'),
         j.qualify === false ? null : pair('Jev prompt', j.prompt, ' clamp'),
         j.picked
@@ -5028,7 +5050,11 @@ function renderIntroDetail() {
 
   $('#in-filter').classList.toggle('hidden', !job);
   renderRelevanceFilter(job);
-  $('#in-job-title').textContent = job ? `${job.term} via ${job.introducerName}` : 'No job selected';
+  $('#in-job-title').textContent = !job
+    ? 'No job selected'
+    : job.kind === 'company'
+    ? `${job.term || 'everyone'} at ${job.company}`
+    : `${job.term} via ${job.introducerName}`;
   $('#in-job-meta').textContent = job
     ? job.status === 'done'
       ? `${job.found || 0} connection${job.found === 1 ? '' : 's'}` +
@@ -5115,6 +5141,7 @@ function renderIntroRows(rows) {
       el('th', { textContent: '2nd degree connection' }),
       el('th', { textContent: 'Title' }),
       el('th', { textContent: 'Company' }),
+      el('th', { textContent: 'Connected via' }),
       el('th', { textContent: 'LinkedIn profile' }),
       el('th', { textContent: 'Jev’s category' }),
       el('th', { textContent: 'Relevance' }),
@@ -5178,6 +5205,19 @@ function renderIntroRows(rows) {
         ]),
         el('td', { textContent: r.title || r.headline || '—' }),
         el('td', { textContent: r.company || '—' }),
+        el('td', {}, [
+          // Chosen for a connection job, discovered for a company one.
+          el(
+            'div',
+            { className: 'via-list' },
+            (r.viaNames?.length ? r.viaNames : [r.introducerName].filter(Boolean)).map((name) =>
+              el('span', { className: 'via', textContent: name })
+            )
+          ),
+          !r.viaNames?.length && !r.introducerName
+            ? el('span', { className: 'muted small', textContent: 'no shared connections' })
+            : null,
+        ]),
         el('td', {}, el('a', { href: r.url, target: '_blank', rel: 'noreferrer', textContent: 'Profile' })),
         el('td', {}, [
           working
@@ -5201,7 +5241,7 @@ function renderIntroRows(rows) {
 
   if (!rows.length) {
     $('#in-table tbody').replaceChildren(
-      el('tr', {}, el('td', { colSpan: 7, className: 'muted', textContent: selectedJob() ? '' : 'No job selected.' }))
+      el('tr', {}, el('td', { colSpan: 8, className: 'muted', textContent: selectedJob() ? '' : 'No job selected.' }))
     );
   }
 }
@@ -5345,19 +5385,33 @@ function renderIntroSkips(skips) {
 
 function openJobDialog({ job = null } = {}) {
   $('#in-job-dialog-title').textContent = job ? 'Edit this job' : 'New fetch connections job';
-  $('#in-job-dialog-who').textContent = job
-    ? 'The connection and term are fixed; change the prompt and run it again.'
-    : 'Names someone you know. If they are new, they are looked up first and the job runs after that.';
 
-  $('#in-job-who').value = job ? job.introducerName : '';
+  // Either kind: through one connection, or across a company.
+  const kind = job ? job.kind || 'connection' : $('#in-job-kind').value || 'connection';
+  $('#in-job-kind').value = kind;
+  $('#in-job-kind').disabled = !!job;
+
+  // The connection is picked from the ones already known, plus whatever is
+  // typed as a new one.
+  const known = intro.introducers.map((i) => i.name);
+  $('#in-job-who').replaceChildren(
+    ...known.map((name) => el('option', { value: name, textContent: name })),
+    el('option', { value: NEW_CONNECTION, textContent: 'Someone else…' })
+  );
+  if (job) $('#in-job-who').value = job.introducerName;
+  else if (!known.length) $('#in-job-who').value = NEW_CONNECTION;
   $('#in-job-who').disabled = !!job;
-  $('#in-people-list').replaceChildren(
-    ...intro.introducers.map((i) => el('option', { value: i.name, label: i.headline || '' }))
+
+  $('#in-job-company').value = job?.company || '';
+  $('#in-job-company').disabled = !!job;
+  $('#in-company-list').replaceChildren(
+    ...[...new Set(intro.jobs.map((j) => j.company).filter(Boolean))].map((c) => el('option', { value: c }))
   );
 
   $('#in-job-term').value = job ? job.term : '';
   $('#in-job-term').disabled = !!job;
   $('#in-term-list').replaceChildren(...(intro.terms || []).map((t) => el('option', { value: t })));
+  syncJobKind(job);
 
   // An example prompt, there to be edited rather than written from scratch.
   $('#in-job-prompt-text').value = job ? job.prompt : intro.prompt || intro.defaultPrompt || '';
@@ -5381,18 +5435,37 @@ $('#in-add-job').addEventListener('click', () => openJobDialog());
 $('#in-job-save').addEventListener('click', async (e) => {
   e.preventDefault();
   const jobId = $('#in-job-dialog').dataset.jobId;
-  const connectionName = $('#in-job-who').value.trim();
+  const kind = $('#in-job-kind').value;
+  const company = $('#in-job-company').value.trim();
   const term = $('#in-job-term').value.trim();
   const prompt = $('#in-job-prompt-text').value.trim();
   const say = (msg) => ($('#in-job-error').textContent = msg);
-  if (!jobId && !connectionName) return say('Name the 1st degree connection to go through.');
-  if (!term) return say('Give a search term.');
+
+  let connectionName = $('#in-job-who').value;
+  if (!jobId && kind === 'connection' && connectionName === NEW_CONNECTION) {
+    // `prompt` is taken by Jev's prompt in this scope, hence the explicit window.
+    const typed = window.prompt('Name the connection to go through:', '') || '';
+    connectionName = typed.trim();
+    if (!connectionName) return say('Name the 1st degree connection to go through.');
+  }
+
+  if (!jobId && kind === 'company' && !company) return say('Give the company to search within.');
+  if (!jobId && kind === 'connection' && !connectionName) return say('Pick the connection to go through.');
+  // A company search can be the whole company; a connection search needs a term.
+  if (kind === 'connection' && !term) return say('Give a search term.');
   if ($('#in-job-qualify').checked && !prompt) return say('Give Jev a prompt, or turn off qualifying.');
 
   let r;
   try {
     r = jobId
       ? await post(`/api/linkedin/intro/jobs/${jobId}/run`, { prompt })
+      : kind === 'company'
+      ? await post('/api/linkedin/intro/jobs/company', {
+          term,
+          company,
+          prompt,
+          qualify: $('#in-job-qualify').checked,
+        })
       : await post('/api/linkedin/intro/jobs', {
           connectionName,
           term,

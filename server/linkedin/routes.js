@@ -311,6 +311,16 @@ linkedinRoutes.post('/intro/jobs', (req, res) => {
   }
 });
 
+// A job over a company rather than one connection's network.
+linkedinRoutes.post('/intro/jobs/company', (req, res) => {
+  try {
+    const { term, company, prompt, qualify } = req.body || {};
+    res.json({ added: intro.addCompanyJob({ term, company, prompt, qualify }), ...intro.state() });
+  } catch (err) {
+    fail(res, err);
+  }
+});
+
 linkedinRoutes.post('/intro/jobs/:id/run', (req, res) => {
   try {
     res.json({ job: intro.runJobAgain(req.params.id, req.body?.prompt), ...intro.state() });

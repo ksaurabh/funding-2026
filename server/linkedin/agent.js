@@ -437,11 +437,11 @@ async function openMutuals(mutual, onPage) {
  * stable. Stops when a page adds nobody new, and paces itself deliberately —
  * this is the part most likely to look like scraping if hurried.
  */
-async function collectAllMutuals(startUrl, onPage) {
+async function collectAllMutuals(startUrl, onPage, maxPages = MUTUAL_PAGE_LIMIT) {
   const seen = new Map();
   let pageNo = 1;
 
-  for (; pageNo <= MUTUAL_PAGE_LIMIT; pageNo++) {
+  for (; pageNo <= Math.min(maxPages, MUTUAL_PAGE_LIMIT); pageNo++) {
     let waited = 0;
     if (pageNo > 1) {
       const url = new URL(startUrl);
@@ -928,7 +928,8 @@ export async function searchByName(name, { threshold = 0.8 } = {}) {
  * for what it needs, scrolls when it does not find it, and on failure captures
  * the page — picture and markup — and says which step lost it.
  */
-async function applyConnectionsOfFilter(personName) {
+async function applyPanelFilter({ section = 'connections of', value, facet = SELECTORS.connectionFacetParam }) {
+  const personName = value;
   const fail = async (reason, detail) => {
     const shot = await capture(`Filters: ${reason}`, { fullPage: true });
     const shotPath = shot?.file ? path.join(SHOTS_DIR, shot.file) : null;
@@ -972,7 +973,7 @@ async function applyConnectionsOfFilter(personName) {
   // rather than deciding on the first frame that the section is not there.
   let found = null;
   for (let attempt = 0; attempt < 8; attempt++) {
-    found = await page.evaluate(findConnectionsFieldInPage).catch(() => null);
+    found = await page.evaluate(findConnectionsFieldInPage, section).catch(() => null);
     if (found?.found) break;
     await page.evaluate(() => {
       const panel =
@@ -987,7 +988,7 @@ async function applyConnectionsOfFilter(personName) {
   }
 
   if (!found?.found) {
-    return fail('The "All filters" panel has no "Connections of" field.', {
+    return fail(`The "All filters" panel has no "${section}" field.`, {
       why: found?.why || 'the panel never appeared',
       sectionText: found?.sectionText || null,
       panelText: found?.panelText || null,
@@ -997,13 +998,13 @@ async function applyConnectionsOfFilter(personName) {
 
   // A button reveals the typeahead on some layouts; an input takes typing.
   let field = await page.$('[data-agent-field]');
-  if (!field) return fail('Lost the "Connections of" field between finding it and using it.');
+  if (!field) return fail(`Lost the "${section}" field between finding it and using it.`);
   if (found.kind === 'button') {
     await field.click().catch(() => {});
     await wait(PACE.settle);
-    await page.evaluate(findConnectionsFieldInPage).catch(() => {});
+    await page.evaluate(findConnectionsFieldInPage, section).catch(() => {});
     field = (await page.$('[data-agent-field="input"]')) || (await page.$('[data-agent-field]'));
-    if (!field) return fail('"Add a connection" did not open a field to type into.', { sectionText: found.sectionText });
+    if (!field) return fail(`The "${section}" button did not open a field to type into.`, { sectionText: found.sectionText });
   }
 
   await field.click().catch(() => {});
@@ -1019,7 +1020,7 @@ async function applyConnectionsOfFilter(personName) {
     await new Promise((r) => setTimeout(r, 500));
   }
   if (!options.length) {
-    return fail(`No suggestions came back for "${personName}" in "Connections of".`, { sectionText: found.sectionText });
+    return fail(`No suggestions came back for "${personName}" in "${section}".`, { sectionText: found.sectionText });
   }
 
   // Score the name against the suggestion's *name*, not its headline: these
@@ -1051,7 +1052,7 @@ async function applyConnectionsOfFilter(personName) {
   // `?keywords=…&origin=FACETED_SEARCH`, whatever is selected. The panel shows
   // the chosen connection as a checked radio, so that is what to read.
   const selection = async () =>
-    (await page.evaluate(readConnectionsSelectionInPage).catch(() => null)) || { found: false, selected: [] };
+    (await page.evaluate(readConnectionsSelectionInPage, section).catch(() => null)) || { found: false, selected: [] };
 
   let picked = await selection();
   for (let attempt = 0; attempt < 6 && !picked.selected.length; attempt++) {
@@ -1074,7 +1075,7 @@ async function applyConnectionsOfFilter(personName) {
   }
 
   if (!picked.selected.length) {
-    return fail(`Picking "${options[bestAt].name}" did not select anything in "Connections of".`, {
+    return fail(`Picking "${options[bestAt].name}" did not select anything in "${section}".`, {
       sectionText: picked.sectionText || null,
       suggestions: options.slice(0, 8).map((o) => o.name),
     });
@@ -1100,13 +1101,13 @@ async function applyConnectionsOfFilter(personName) {
   await wait(PACE.settle);
 
   // The click may resolve client-side; give the URL a moment to catch up.
-  for (let attempt = 0; attempt < 8 && !SELECTORS.connectionFacetParam.test(page.url()); attempt++) {
+  for (let attempt = 0; attempt < 8 && !facet.test(page.url()); attempt++) {
     await new Promise((r) => setTimeout(r, 500));
   }
 
   // Proof, not hope: LinkedIn's facet has to be in the URL it landed on.
-  if (!SELECTORS.connectionFacetParam.test(page.url())) {
-    return fail('Pressed "Show results", but the results URL carries no connection facet.', {
+  if (!facet.test(page.url())) {
+    return fail(`Pressed "Show results", but the results URL carries no ${section} facet.`, {
       url: page.url(),
       selected: picked.selected,
       showResultsHref: apply.href || null,
@@ -1136,7 +1137,7 @@ export async function searchConnectionsOf({ term, introducerName, limit = 0, onP
   await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(term)}`);
   await waitForSearchPage();
 
-  const filter = await applyConnectionsOfFilter(introducerName);
+  const filter = await applyPanelFilter({ section: 'connections of', value: introducerName });
   if (!filter.ok) {
     return {
       people: [],
@@ -1204,6 +1205,120 @@ export async function searchConnectionsOf({ term, introducerName, limit = 0, onP
     pickedText: filter.pickedText,
     pickedAssumed: filter.assumed,
     suggestions: filter.suggestions,
+    shot,
+    searchUrl: startUrl,
+  };
+}
+
+/**
+ * People matching a term who work at a given company, with whoever of your own
+ * connections links you to each of them.
+ *
+ * Same panel, different section: Current company takes a typeahead exactly as
+ * Connections of does. The people who connect you are read from each result's
+ * own "…mutual connections" link, which LinkedIn only shows when you share
+ * some — so a result with no link is someone you have no path to.
+ */
+export async function searchByCompany({ term, company, limit = 0, onPage, shouldStop, withVia = true }) {
+  await ready();
+  await visit(`${BASE}/search/results/people/?keywords=${encodeURIComponent(term || company)}`);
+  await waitForSearchPage();
+
+  const filter = await applyPanelFilter({
+    section: 'current company',
+    value: company,
+    facet: SELECTORS.companyFacetParam,
+  });
+  if (!filter.ok) {
+    return {
+      people: [],
+      constrained: false,
+      reason: filter.reason,
+      detail: filter.detail,
+      shot: filter.shot,
+      html: filter.html,
+      shotPath: filter.shotPath,
+      htmlPath: filter.htmlPath,
+      searchUrl: page.url(),
+    };
+  }
+
+  const startUrl = page.url();
+  const seen = new Map();
+  let pages = 0;
+
+  for (let pageNo = 1; pageNo <= SEARCH_PAGE_LIMIT; pageNo++) {
+    if (pageNo > 1) {
+      const url = new URL(startUrl);
+      url.searchParams.set('page', String(pageNo));
+      await visit(url.toString());
+      await waitForSearchPage();
+      // Paging past the end drops the facet on some layouts; stop there
+      // rather than collecting everyone at every company.
+      if (!SELECTORS.companyFacetParam.test(page.url())) break;
+    }
+
+    let batch = [];
+    try {
+      batch = await page.evaluate(extractPeopleInPage);
+    } catch {
+      batch = [];
+    }
+    if (!batch.length) batch = await searchPeopleBySelector();
+
+    let added = 0;
+    for (const person of batch) {
+      const url = profileUrl(person.url);
+      if (!url || seen.has(url)) continue;
+      seen.set(url, {
+        ...person,
+        url,
+        mutual: person.mutual ? { text: person.mutual.text, url: absolute(person.mutual.url) } : null,
+      });
+      added++;
+    }
+    pages = pageNo;
+    await onPage?.({ page: pageNo, added, total: seen.size });
+    if (!added) break;
+    if (limit && seen.size >= limit) break;
+    if (shouldStop?.()) break;
+  }
+
+  const people = limit ? [...seen.values()].slice(0, limit) : [...seen.values()];
+
+  // Who links you to each of them. One extra page load per person who has a
+  // shared-connections link, so it is the caller's choice.
+  if (withVia) {
+    for (const person of people) {
+      if (shouldStop?.()) break;
+      if (!person.mutual?.url) {
+        person.via = [];
+        continue;
+      }
+      try {
+        // Go there first: collectAllMutuals reads the page it is on and only
+        // navigates for later pages, so without this it would hand back the
+        // search results it is standing on.
+        await visit(person.mutual.url);
+        await waitForSearchPage();
+        const landed = await collectAllMutuals(page.url(), null, 1);
+        person.via = landed.via
+          .filter((v) => v.url && profileUrl(v.url) !== profileUrl(person.url))
+          .map((v) => ({ name: v.name, url: profileUrl(v.url), headline: v.headline || '' }));
+      } catch {
+        person.via = [];
+      }
+      await onPage?.({ via: person.via.length, name: person.name });
+    }
+  }
+
+  const shot = await capture(`Search: ${term} at ${company}`);
+  return {
+    people,
+    pages,
+    constrained: true,
+    picked: filter.picked,
+    pickedAssumed: filter.assumed,
     shot,
     searchUrl: startUrl,
   };

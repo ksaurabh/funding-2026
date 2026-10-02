@@ -222,7 +222,8 @@ export function removeIntroducer(introducerId) {
 // A job is one connection × one term × one prompt: "find me the people matching
 // this among Dana's connections, and ask Jev this about each of them".
 
-const jobLabel = (job) => `${job.term} via ${job.introducerName}`;
+const jobLabel = (job) =>
+  job.kind === 'company' ? `${job.term || 'anyone'} at ${job.company}` : `${job.term} via ${job.introducerName}`;
 
 /** Every term used so far, for picking instead of retyping. */
 export const terms = () => [...new Set(load().jobs.map((j) => j.term))].sort();
@@ -233,6 +234,47 @@ export const terms = () => [...new Set(load().jobs.map((j) => j.term))].sort();
  * turn behind that lookup — the queue is FIFO, so by the time the job runs the
  * connection has been matched or has failed to be.
  */
+/**
+ * A job searching a company rather than one person's connections: everyone
+ * matching the term who works there, and whichever of your connections links
+ * you to each of them.
+ */
+export function addCompanyJob({ term, company, prompt, qualify = true }) {
+  const text = String(term || '').trim();
+  const firm = String(company || '').trim();
+  if (!firm) throw new Error('Give the company to search within.');
+
+  const s = load();
+  const wants = qualify !== false;
+  const ask = String(prompt || s.prompt || DEFAULT_PROMPT).trim();
+  if (wants && !ask) throw new Error('Give Jev a prompt, or turn off qualifying.');
+
+  let job = s.jobs.find(
+    (j) => j.kind === 'company' && j.company?.toLowerCase() === firm.toLowerCase() && (j.term || '') === text
+  );
+  if (job) {
+    Object.assign(job, { prompt: ask, qualify: wants, status: 'queued', error: null, skipped: null });
+  } else {
+    job = {
+      id: id(),
+      kind: 'company',
+      company: firm,
+      term: text,
+      prompt: ask,
+      qualify: wants,
+      status: 'queued',
+      createdAt: new Date().toISOString(),
+      lastRunAt: null,
+      found: 0,
+    };
+    s.jobs.push(job);
+  }
+  s.prompt = ask;
+  save(s);
+  enqueue({ kind: 'job', jobId: job.id, label: jobLabel(job) });
+  return job;
+}
+
 export function addJob({ connectionName, introducerId, term, prompt, qualify = true }) {
   const text = String(term || '').trim();
   if (!text) throw new Error('Give a search term.');
@@ -601,8 +643,10 @@ const brief = (c) => ({
 async function runJob(job) {
   const s0 = load();
   const entry = s0.jobs.find((x) => x.id === job.jobId);
-  const introducer = s0.introducers.find((i) => i.id === job.introducerId);
   if (!entry) return;
+  if (entry.kind === 'company') return runCompanyJob(job, entry);
+
+  const introducer = s0.introducers.find((i) => i.id === job.introducerId);
 
   // The connection is looked up ahead of this job in the same queue, so by now
   // it has either been matched or has a reason it was not.
@@ -825,6 +869,148 @@ async function runJob(job) {
   });
 }
 
+/**
+ * Everyone matching a term at one company, and who of yours links you to them.
+ * No introducer here: the paths are discovered per person rather than chosen
+ * up front, so a result you cannot reach is still worth knowing about.
+ */
+async function runCompanyJob(job, entry) {
+  const patchJob = (fields) => {
+    const s = load();
+    const x = s.jobs.find((y) => y.id === job.jobId);
+    if (x) Object.assign(x, fields);
+    save(s);
+  };
+
+  patchJob({ status: 'running', startedAt: new Date().toISOString() });
+  note(`Searching "${entry.term || 'anyone'}" at ${entry.company}…`);
+
+  const { people, constrained, reason, detail, shot, html, shotPath, htmlPath, pages, picked } =
+    await agent.searchByCompany({
+      term: entry.term,
+      company: entry.company,
+      shouldStop: stopRequested,
+      onPage: (ev) =>
+        ev.via === undefined
+          ? note(`Page ${ev.page} at ${entry.company}: ${ev.added} new, ${ev.total} so far.`)
+          : note(`${ev.name}: ${ev.via} of your connections can reach them.`),
+    });
+
+  if (!constrained) {
+    note(`Stopped ${jobLabel(entry)}: ${reason}`);
+    patchJob({
+      status: 'error',
+      error: reason,
+      skipped: {
+        reason,
+        detail: detail || null,
+        shot: shot?.file || null,
+        html: html || shot?.html || null,
+        shotPath: shotPath || null,
+        htmlPath: htmlPath || null,
+        at: new Date().toISOString(),
+      },
+      lastRunAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  if (picked) note(`Filtered to ${picked}.`);
+  note(`${people.length} match${people.length === 1 ? '' : 'es'} at ${entry.company} across ${pages || 1} page(s).`);
+  patchJob({ pages: pages || 1, found: people.length, picked: picked || null });
+
+  const seen = alreadyChecked(entry.id);
+  let carried = 0;
+
+  for (const target of people) {
+    if (stopRequested()) {
+      note(`Stopped ${jobLabel(entry)} — ${load().rows.filter((r) => r.jobId === entry.id).length} kept.`);
+      patchJob({ status: 'stopped', lastRunAt: new Date().toISOString() });
+      return;
+    }
+
+    const existing = load().rows.find((r) => r.jobId === entry.id && r.url === shortUrl(target.url));
+    const rowId = existing?.id || id();
+    let row = {
+      id: rowId,
+      jobId: entry.id,
+      term: entry.term,
+      // The facet is the company, by definition; the card's own second line is
+      // as likely to be a location.
+      company: entry.company,
+      // Discovered, not chosen: the connections who can introduce you.
+      viaNames: (target.via || []).map((v) => v.name).filter(Boolean),
+      name: target.name,
+      url: shortUrl(target.url),
+      title: target.headline || '',
+      headline: target.headline || '',
+      degree: target.degree || null,
+      status: 'reading',
+      at: new Date().toISOString(),
+    };
+
+    if (entry.qualify === false) {
+      upsertRow({ ...row, status: 'done', answer: '', qualified: false });
+      continue;
+    }
+
+    const before = seen.find(target.name, target.headline, shortUrl(target.url));
+    if (before) {
+      carried++;
+      upsertRow({
+        ...row,
+        title: before.title || row.title,
+        company: before.company || row.company,
+        summary: before.summary || '',
+        positions: before.positions || [],
+        answer: before.answer,
+        model: before.model,
+        prompt: before.prompt,
+        cost: 0,
+        carriedFrom: { jobId: before.jobId, introducerName: before.introducerName || '', at: before.answeredAt },
+        status: 'done',
+      });
+      note(`${row.name}: already checked — carried over.`);
+      continue;
+    }
+
+    upsertRow(row);
+    let profile;
+    try {
+      profile = await agent.readProfileDetail(target.url);
+    } catch (err) {
+      upsertRow({ ...row, status: 'error', error: `Could not read the profile: ${err.message}` });
+      continue;
+    }
+
+    row = {
+      ...row,
+      name: profile.name || row.name,
+      headline: profile.headline || row.headline,
+      company: profile.company || companyFrom(profile.headline) || row.company,
+      summary: profile.summary || '',
+      positions: profile.positions || [],
+      experienceText: profile.experienceText || '',
+      status: 'asking',
+    };
+    upsertRow(row);
+
+    const answered = await ask(row, entry.prompt);
+    upsertRow({ ...row, ...answered, prompt: entry.prompt, qualified: !answered.error, status: answered.error ? 'error' : 'done' });
+    note(`${row.name}: ${answered.error ? answered.error : firstLine(answered.answer)}`);
+  }
+
+  if (carried) note(`${carried} were already checked elsewhere and were not re-read.`);
+  patchJob({
+    status: 'done',
+    error: null,
+    skipped: null,
+    carried,
+    lastRunAt: new Date().toISOString(),
+    found: load().rows.filter((r) => r.jobId === entry.id).length,
+  });
+}
+
 /** "General Partner at Google Ventures" — the firm is what follows "at". */
 const companyFrom = (headline) => String(headline || '').split(/\bat\b/i).slice(1).join(' at ').trim();
 
@@ -991,8 +1177,11 @@ export function people() {
     if (row.status === 'reading' || row.status === 'asking') person.working = row.status;
     if (!person.answer && row.error) person.error = row.error;
 
-    const name = row.introducerName || jobs.get(row.jobId)?.introducerName;
-    if (name && !person.via.some((v) => v.name === name)) {
+    // Chosen (a job through one connection) or discovered (a company search
+    // that read each person's shared connections) — both are ways in.
+    const names = [row.introducerName || jobs.get(row.jobId)?.introducerName, ...(row.viaNames || [])].filter(Boolean);
+    for (const name of names) {
+      if (person.via.some((v) => v.name === name)) continue;
       person.via.push({ name, url: row.introducerUrl || '', term: row.term || jobs.get(row.jobId)?.term || '' });
     }
   }

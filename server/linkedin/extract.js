@@ -267,10 +267,10 @@ export function extractProfileDetailInPage() {
  *
  * Runs inside the page via page.evaluate.
  */
-export function findConnectionsFieldInPage() {
+export function findConnectionsFieldInPage(sectionName = 'connections of') {
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const HEADING = /^connections of\b/i;
-  const ADD = /add a connection|connections of/i;
+  const HEADING = new RegExp('^' + sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
+  const ADD = new RegExp('add an? |' + sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
 
   for (const el of document.querySelectorAll('[data-agent-field]')) el.removeAttribute('data-agent-field');
 
@@ -305,7 +305,7 @@ export function findConnectionsFieldInPage() {
   if (!heading) {
     return {
       found: false,
-      why: 'no heading whose text starts with "Connections of"',
+      why: `no heading whose text starts with "${sectionName}"`,
       panelText: clean(panel?.innerText || '').slice(0, 1200),
       dialogs: document.querySelectorAll('[role="dialog"]').length,
       headings: [...document.querySelectorAll('h1,h2,h3,h4,legend')].map((h) => clean(h.innerText)).filter(Boolean).slice(0, 40),
@@ -338,7 +338,7 @@ export function findConnectionsFieldInPage() {
 
   return {
     found: false,
-    why: 'found the "Connections of" heading but no field or button under it',
+    why: `found the "${sectionName}" heading but no field or button under it`,
     sectionText: clean(section.innerText).slice(0, 600),
     panelText: clean(panel?.innerText || '').slice(0, 1200),
   };
@@ -469,9 +469,9 @@ export function findShowResultsInPage() {
  *
  * Runs inside the page via page.evaluate.
  */
-export function readConnectionsSelectionInPage() {
+export function readConnectionsSelectionInPage(sectionName = 'connections of') {
   const clean = (s) => (s || '').replace(/\s+/g, ' ').trim();
-  const HEADING = /^connections of\b/i;
+  const HEADING = new RegExp('^' + sectionName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i');
 
   const headings = [...document.querySelectorAll('h1,h2,h3,h4,label,legend,span,div,p,button')].filter((n) =>
     HEADING.test(clean(n.innerText))

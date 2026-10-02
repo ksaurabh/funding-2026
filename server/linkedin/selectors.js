@@ -87,8 +87,10 @@ export const SELECTORS = {
     'a:has-text("Show results")',
     'button:has-text("Show results")',
   ],
-  // Proof the facet actually applied: LinkedIn's own parameter name.
+  // Proof the facet actually applied: LinkedIn's own parameter name, one per
+  // section of the filter panel.
   connectionFacetParam: /[?&](facetConnectionOf|connectionOf)=/,
+  companyFacetParam: /[?&](facetCurrentCompany|currentCompany)=/,
 
   sharedCard: [
     'div[data-chameleon-result-urn]',

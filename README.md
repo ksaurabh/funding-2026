@@ -509,9 +509,19 @@ Two halves, picked with the buttons at the top left: **Fetch jobs** — the jobs
 down the left, and what the selected one found on the right — and **All 2nd
 degree connections**, everyone found across every job.
 
-**+ New fetch job** asks for a **1st degree connection** by name, a **search
-term** for their 2nd-degree connections, and — if you want it — a **Jev
-prompt**. *Read each profile and ask Jev to qualify them* is a checkbox: off,
+**+ New fetch job** asks which kind of search it is:
+
+- **One connection's network** — pick the connection from the **Connected via**
+  dropdown (or *Someone else…* to name a new one), give a **search term**, and
+  it finds who they can introduce you to.
+- **A company** — give a **Current company** and an optional term, and it finds
+  everyone there matching it, then reads each one's shared connections to work
+  out **which of your connections can reach them**. Blank term means everyone
+  at that company. The paths are discovered per person rather than chosen up
+  front, so each row carries its own *Connected via*, and somebody nobody can
+  reach is still listed, marked *no shared connections*.
+
+Both kinds then take — if you want it — a **Jev prompt**. *Read each profile and ask Jev to qualify them* is a checkbox: off,
 the job just collects the connections (name, title, profile link), which costs
 no profile loads and nothing to the model, and any row can still be qualified
 later with the **Qualify** button on it. The
