@@ -785,17 +785,27 @@ function editableCell(row, column, field) {
   sel.addEventListener('click', (e) => e.stopPropagation()); // don't open the detail pane
   sel.addEventListener('change', async () => {
     let value = sel.value;
+    let isNew = false;
     if (value === '\u0000new') {
       value = (prompt(`New value for "${column}"`) || '').trim();
       if (!value) {
         sel.value = current;
         return;
       }
+      // Typed once, offered everywhere: a value added on one row belongs to
+      // the column, so every other row's dropdown and the filter bar get it.
+      isNew = !field.values.some((v) => v.toLowerCase() === value.toLowerCase());
+      if (!isNew) value = field.values.find((v) => v.toLowerCase() === value.toLowerCase());
     }
     try {
       await saveCell(row.__id, column, value);
       row[column] = value;
       applyCellLocally(row.__id, column, value);
+      if (isNew) {
+        await patchField(column, { values: [...field.values, value], type: 'enum' });
+        toast(`"${value}" added to ${column}`, 'good');
+        return; // patchField reloads and repaints
+      }
       renderFilters();
       renderTable();
     } catch (err) {
@@ -1382,7 +1392,10 @@ async function renderColumnConfig() {
       [name]: {
         editable: true,
         type: newType.value,
-        values: newType.value === 'enum' ? newValues.value.split(',') : [],
+        values:
+          newType.value === 'enum'
+            ? [...new Set(newValues.value.split(',').map((v) => v.trim()).filter(Boolean))]
+            : [],
         custom: true,
         show: true,
       },

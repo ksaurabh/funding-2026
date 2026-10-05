@@ -79,7 +79,12 @@ in. Per column you can:
   Double-click that edge to go back to the default, or **Reset all widths** in
   **Columns…** to clear every one. Widths are saved with the list.
 - **Add** a column of your own, free text or dropdown. Added columns are
-  editable from the start.
+  editable from the start, and a dropdown can start with no choices at all:
+  each cell's picker ends with **+ New value…**, and what you type there joins
+  the column — every other row is offered it, and it appears on the filter bar
+  with its count. Matching is case- and space-insensitive, so *leads SEED* on
+  one row is the same choice as *Leads seed* on another rather than a second
+  one.
 
 Cell values are stored separately from the imported rows, so `investors.json`
 stays exactly as imported and a re-import keeps your values for every row that
